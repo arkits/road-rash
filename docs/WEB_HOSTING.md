@@ -141,7 +141,13 @@ the server's matching local bounds/public IPv4 and publishes that port one-to-on
 Old/new generations coexist on different ports while ordinary startup health
 checks stay enabled. Failure restores the previous options/config; identical
 archive replay forces a rebuild if necessary. Existing TCP loopback/TLS routes
-are unchanged. UFW adds only an IPv4 UDP rule to 5.161.142.20:40000–40099.
+are unchanged. UFW adds an IPv4 UDP input rule to 5.161.142.20:40000–40099. The existing
+Docker forwarding policy also needs a `DOCKER-USER` exception on eth0 matching
+UDP original destination 5.161.142.20:40000–40099 before its public-interface
+drop. It is persisted in `/etc/ufw/after.rules`, syntax-checked with
+`iptables-restore --test`, and inserted into the live chain without a global
+reload. Other published ports keep their existing policy. See deploy README
+for the exact rule/removal; backup `after.rules.pre-rr-net-20261027-86791`.
 The authorized_keys backup before wrapper selection is
 `/root/.ssh/authorized_keys.pre-rtc-20261027-86791`. No private key was recreated.
 

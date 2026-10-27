@@ -91,6 +91,23 @@ and `RR_NETD_UDP_END` to that port; `RR_NETD_UDP_PUBLISHED` records the managed
 mapping. libjuice UDP mux lets every client peer share that socket. Bare-metal
 server deployments can configure a wider local UDP range using the same env.
 
+The host also filters published Docker ports in `DOCKER-USER`, before UFW's
+input rules. Its existing public-interface drop remains; immediately before
+that drop `/etc/ufw/after.rules` contains only this approved exception:
+
+```sh
+-A DOCKER-USER -i eth0 -p udp -m conntrack --ctorigdst 5.161.142.20 --ctorigdstport 40000:40099 -m comment --comment road-rash-net-WebRTC -j RETURN
+```
+
+Original-destination matching survives Docker DNAT and follows generation
+ports without allowing other published services. Validate persistence syntax
+with `iptables-restore --test < /etc/ufw/after.rules`; insert the same rule into
+the live chain before its drop without reloading unrelated firewall rules.
+Backup: `/etc/ufw/after.rules.pre-rr-net-20261027-86791`. To remove this access,
+delete this exact rule from the file and live chain (`iptables -D DOCKER-USER`
+with the arguments after the chain name above), then remove the matching UFW
+input allow if UDP is being retired. Keep all other firewall rules intact.
+
 Old and new generations use different ports, so ordinary rolling startup
 health checks remain enabled. No fixed-range bind collision, skipped checks,
 STUN mapping service or change to other apps is needed. On a failed deploy the

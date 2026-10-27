@@ -7,6 +7,7 @@ on:
       - 'server/**'
       - 'src/net/**'
       - 'cmake/net.cmake'
+      - 'tools/net_bots.cpp'
       - 'deploy/road-rash-net/**'
       - '.github/workflows/net-deploy.yml'
   workflow_dispatch:
