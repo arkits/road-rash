@@ -83,8 +83,8 @@ int main(int argc, char** argv) {
         for (auto& client : clients) client->set_automatic_results(false);
         std::string code;
         bool created = false;
-        std::vector<bool> joined(size_t(count), false), ready(size_t(count), false),
-            reported(size_t(count), false), official(size_t(count), false);
+        std::vector<bool> joined(size_t(count), false), selected(size_t(count), false),
+            ready(size_t(count), false), reported(size_t(count), false), official(size_t(count), false);
         std::optional<uint64_t> final_hash;
         const uint64_t begin = steady_ms();
         while (steady_ms() - begin < uint64_t(timeout) * 1000) {
@@ -123,17 +123,25 @@ int main(int argc, char** argv) {
                             int(std::count_if(s->seats.begin(), s->seats.end(),
                                               [](const SeatInfo& seat) { return seat.occupied; }));
                         // Wait for the complete roster before readying any seat.
-                        if (occupied == count && !ready[size_t(k)]) {
+                        if (occupied == count && !selected[size_t(k)]) {
                             c.send(PickCharacter{uint8_t(k + 1)});
                             c.send(VoteCourse{4});
-                            c.send(Ready{});
-                            ready[size_t(k)] = true;
+                            selected[size_t(k)] = true;
                         }
                     }
                     if (auto o = std::get_if<Official>(&*m)) {
                         if (!o->agreed || o->rows.size() != size_t(count))
                             throw std::runtime_error("unofficial or incomplete result");
                         official[size_t(k)] = true;
+                    }
+                }
+                if (selected[size_t(k)] && !ready[size_t(k)]) {
+                    const auto transport = transports[size_t(k)]->transport_stats();
+                    // The shared bot process builds races synchronously. Finish
+                    // signalling before Ready so asset loading cannot starve it.
+                    if (!rtc || transport.rtc_open || transport.fallbacks || now - begin > 6000) {
+                        c.send(Ready{});
+                        ready[size_t(k)] = true;
                     }
                 }
                 if (c.failed()) throw std::runtime_error("server rejection, desync or client queue overflow");
@@ -162,21 +170,25 @@ int main(int argc, char** argv) {
                     return depths.empty() ? 0 : depths[size_t(p * double(depths.size() - 1))];
                 };
                 uint64_t sent = 0, received = 0, fallbacks = 0;
+                bool missing_rtc = false;
+                size_t transport_index = 0;
                 for (auto* channel : transports) {
                     auto stats = channel->transport_stats();
-                    if (require_rtc && (!stats.rtc_sent || !stats.rtc_received))
-                        throw std::runtime_error("every client must exchange DataChannel race traffic");
+                    std::cout << "client " << transport_index++ << " rtc_sent=" << stats.rtc_sent
+                              << " rtc_received=" << stats.rtc_received << " fallbacks=" << stats.fallbacks
+                              << "\n";
+                    missing_rtc |= !stats.rtc_sent || !stats.rtc_received;
                     sent += stats.rtc_sent;
                     received += stats.rtc_received;
                     fallbacks += stats.fallbacks;
                 }
-                if (require_rtc && (!sent || !received))
-                    throw std::runtime_error("DataChannel required but no race traffic crossed it");
                 std::cout << "transport rtc_sent=" << sent << " rtc_received=" << received
                           << " fallbacks=" << fallbacks << " rollback_p50=" << percentile(.5)
                           << " rollback_p95=" << percentile(.95) << " rollback_p99=" << percentile(.99)
                           << " late=" << late << " live_late=" << late_total << " live_inputs=" << input_total
                           << " stalls=" << max_stalls << "\n";
+                if (require_rtc && missing_rtc)
+                    throw std::runtime_error("DataChannel required but no race traffic crossed it");
                 std::cout << "net-bots OK: official cutoff results in room " << code << "\n";
                 return 0;
             }
