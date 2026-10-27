@@ -34,6 +34,8 @@ Server::ConnId Server::add_connection(std::unique_ptr<net::Channel> ch, uint64_t
     c.connected_ms = c.last_rx_ms = now;
     c.bucket.tokens = cfg_.rate_burst;
     c.bucket.last_ms = now;
+    c.fanout.tokens = cfg_.fanout_burst;
+    c.fanout.last_ms = now;
     ++counters_.connections;
     if (int(conns_.size()) > cfg_.max_connections) reject(c, net::RejectReason::server_full);
     return id;
@@ -63,7 +65,9 @@ std::string Server::health_json(uint64_t) const {
       << ",\"races_started\":" << counters_.races_started
       << ",\"races_finished\":" << counters_.races_finished << ",\"late_inputs\":" << counters_.late_inputs
       << ",\"desyncs\":" << counters_.desyncs << ",\"malformed\":" << counters_.malformed
-      << ",\"rate_limited\":" << counters_.rate_limited << ",\"reconnects\":" << counters_.reconnects << "}";
+      << ",\"rate_limited\":" << counters_.rate_limited << ",\"reconnects\":" << counters_.reconnects
+      << ",\"invalid\":" << counters_.invalid << ",\"fanout_limited\":" << counters_.fanout_limited
+      << ",\"wrong_seat_inputs\":" << counters_.wrong_seat_inputs << "}";
     return o.str();
 }
 
@@ -138,6 +142,18 @@ bool Server::allow(Conn& c, uint64_t now) {
     }
     // A flood (a full burst dropped within one second) closes at once.
     if (++b.dropped_in_window > int(cfg_.rate_burst)) reject(c, net::RejectReason::rate_limited);
+    return false;
+}
+
+bool Server::allow_fanout(Conn& c, uint64_t now) {
+    RateBucket& b = c.fanout;
+    b.tokens = std::min(cfg_.fanout_burst, b.tokens + double(now - b.last_ms) * cfg_.fanout_per_s / 1000.0);
+    b.last_ms = now;
+    if (b.tokens >= 1.0) {
+        b.tokens -= 1.0;
+        return true;
+    }
+    ++counters_.fanout_limited;
     return false;
 }
 
@@ -233,6 +249,20 @@ void Server::handle(Conn& c, const net::Message& m, uint64_t now) {
         c.closing = true;
         return;
     }
+    // Server-to-client types are never valid from a client.
+    if (std::holds_alternative<net::Welcome>(m) || std::holds_alternative<net::Reject>(m) ||
+        std::holds_alternative<net::RoomListReply>(m) || std::holds_alternative<net::RoomState>(m) ||
+        std::holds_alternative<net::ChatRelay>(m) || std::holds_alternative<net::Start>(m) ||
+        std::holds_alternative<net::Frames>(m) || std::holds_alternative<net::Desync>(m) ||
+        std::holds_alternative<net::Official>(m) || std::holds_alternative<net::LogChunk>(m)) {
+        ++counters_.invalid;
+        return;
+    }
+    if ((std::holds_alternative<net::Chat>(m) || std::holds_alternative<net::PickCharacter>(m) ||
+         std::holds_alternative<net::VoteCourse>(m) || std::holds_alternative<net::Ready>(m) ||
+         std::holds_alternative<net::RoomCreate>(m) || std::holds_alternative<net::RoomJoin>(m)) &&
+        !allow_fanout(c, now))
+        return;
     if (const auto* p = std::get_if<net::Ping>(&m)) {
         Room* r = room_of(c);
         const int32_t tick = r && r->race ? int32_t(ticks_at(now) - ticks_at(r->race->tick0_ms)) : 0;
@@ -265,7 +295,11 @@ void Server::handle(Conn& c, const net::Message& m, uint64_t now) {
     }
     if (std::holds_alternative<net::RoomLeave>(m)) return on_leave(c, now);
     Room* r = room_of(c);
-    if (!r) return;
+    if (!r) {
+        if (std::holds_alternative<net::Input>(m)) ++counters_.wrong_seat_inputs;
+        else if (std::holds_alternative<net::Hash>(m) || std::holds_alternative<net::Result>(m)) ++counters_.invalid;
+        return;
+    }
     if (const auto* x = std::get_if<net::Chat>(&m)) return on_chat(c, *x);
     if (const auto* x = std::get_if<net::Input>(&m)) return on_input(c, *x);
     if (const auto* x = std::get_if<net::Ack>(&m)) {
@@ -365,6 +399,7 @@ void Server::on_join(Conn& c, const net::RoomJoin& m, uint64_t now) {
     if (r.sim_fingerprint != c.info.sim_fingerprint) return reject(c, net::RejectReason::fingerprint);
     if (r.digest != c.info.data_digest) return reject(c, net::RejectReason::data_digest);
     if (m.spectate) {
+        if (int(r.spectators.size()) >= cfg_.max_spectators) return reject(c, net::RejectReason::room_full);
         c.room = r.code;
         c.seat = -1;
         r.spectators.push_back(c.id);
@@ -465,8 +500,17 @@ void Server::on_input(Conn& c, const net::Input& m) {
 void Server::on_hash(Conn& c, const net::Hash& m) {
     Room* r = room_of(c);
     const int slot = r ? race_slot(*r, c.seat) : -1;
-    if (slot < 0 || m.tick > r->race->sealer->sealed_tick()) return;
-    auto& at = r->race->record.hashes[m.tick];
+    if (slot < 0) return;
+    // Only the client's check ticks, already sealed and not yet decided: a
+    // replayed or off-cadence hash cannot grow the record or re-trigger a
+    // desync (each of which sends the whole log).
+    auto& hashes = r->race->record.hashes;
+    if (m.tick < 0 || m.tick > r->race->sealer->sealed_tick() || (m.tick + 1) % cfg_.hash_every != 0 ||
+        (hashes.count(m.tick) && hashes[m.tick].count(-1))) {
+        ++counters_.invalid;
+        return;
+    }
+    auto& at = hashes[m.tick];
     at[slot] = m.h;
     int expected = 0;
     for (int s : r->race->seat_of_slot) expected += r->seats[size_t(s)].conn != 0;
@@ -477,14 +521,21 @@ void Server::on_hash(Conn& c, const net::Hash& m) {
     // Majority hash wins (ties: the lowest slot's value). Minority clients
     // are told and fast-forwarded from the log; a desync is always a bug.
     uint64_t majority = at.begin()->second;
-    int best = 0;
-    for (const auto& [h, n] : votes)
-        if (n > best || (n == best && h == at.begin()->second)) best = n, majority = h;
+    int best = 0, ties = 0;
+    for (const auto& [h, n] : votes) {
+        if (n > best || (n == best && h == at.begin()->second)) majority = h;
+        if (n > best) best = n, ties = 1;
+        else if (n == best) ++ties;
+    }
     ++counters_.desyncs;
     r->race->record.desync_ticks.push_back(m.tick);
-    emit("desync", "\"room\":\"" + r->code + "\",\"tick\":" + std::to_string(m.tick));
+    emit("desync", "\"room\":\"" + r->code + "\",\"tick\":" + std::to_string(m.tick) +
+                       ",\"strict_majority\":" + (ties == 1 ? "true" : "false"));
     for (const auto& [s, h] : at) {
-        if (h == majority) continue;
+        // Without a strict majority nobody can be shown wrong; telling one
+        // side would let a lying seat (e.g. slot 0 in a duel) end an honest
+        // client's race. The record and log keep the evidence.
+        if (h == majority || ties > 1) continue;
         const int seat = r->race->seat_of_slot[size_t(s)];
         if (auto it = conns_.find(r->seats[size_t(seat)].conn); it != conns_.end()) {
             send(it->second, net::Desync{m.tick});
@@ -500,11 +551,17 @@ void Server::on_result(Conn& c, const net::Result& m, uint64_t now) {
     Room* r = room_of(c);
     const int slot = r ? race_slot(*r, c.seat) : -1;
     if (slot < 0 || r->race->finished) return;
+    // A result names a confirmed tick; a future one is a lie that would start
+    // the finish timeout for everyone.
+    if (m.tick < 0 || m.tick > r->race->sealer->sealed_tick()) {
+        ++counters_.invalid;
+        return;
+    }
     Seat& seat = r->seats[size_t(c.seat)];
     if (seat.result) return;
     seat.result = m;
     seat.outcome = m.outcome;
-    if (!r->race->first_result_ms) r->race->first_result_ms = now;
+    (void)now; // the finish timeout starts in step_race once enough seats reported
 }
 
 void Server::maybe_start(Room& r, uint64_t now) {
@@ -628,6 +685,16 @@ void Server::step_race(Room& r, uint64_t now) {
     }
     const bool any_connected = std::any_of(race.seat_of_slot.begin(), race.seat_of_slot.end(),
                                            [&](int s) { return r.seats[size_t(s)].conn != 0; });
+    // Honest clients report the same terminal tick, so the timeout only waits
+    // for stragglers: it starts once at least half the connected seats have
+    // reported, so one lying seat in a room of three or more cannot end the race.
+    int connected = 0, reported = 0;
+    for (int s : race.seat_of_slot) {
+        const Seat& seat = r.seats[size_t(s)];
+        connected += seat.conn != 0;
+        reported += seat.conn != 0 && seat.result.has_value();
+    }
+    if (!race.first_result_ms && reported > 0 && 2 * reported >= connected) race.first_result_ms = now;
     counters_.late_inputs = race.sealer->counters().late;
     if ((all && (race.first_result_ms || !any_connected)) ||
         (race.first_result_ms && now - race.first_result_ms > cfg_.finish_timeout_ms))
@@ -649,6 +716,8 @@ void Server::finish_race(Room& r, uint64_t now) {
             const std::pair<int32_t, uint64_t> key{seat.result->tick, seat.result->h};
             if (agreed_on && *agreed_on != key) off.agreed = false;
             agreed_on = key;
+        } else if (seat.conn) {
+            off.agreed = false; // a seat still racing never confirmed this table
         }
         off.rows.push_back(row);
     }

@@ -33,6 +33,13 @@ struct ServerConfig {
     double rate_burst = 480;
     int rate_strikes = 3;               // throttled seconds before the connection is closed
     uint64_t finish_timeout_ms = 60000; // results wait for missing reports
+    // Messages every other seat sees (chat, pick, vote, ready, create/join):
+    // a separate, tighter bucket so one connection cannot flood the others'
+    // bounded event queues (net::Client fails at 128 queued events).
+    double fanout_per_s = 4;
+    double fanout_burst = 8;
+    int max_spectators = 16; // per room
+    int hash_every = 60;     // Hash cadence; matches net::Rollback's default
     uint64_t seed = 0;                  // 0: seed from std::random_device
 };
 
@@ -40,6 +47,8 @@ struct Counters {
     uint64_t connections = 0, rooms_created = 0, races_started = 0, races_finished = 0;
     uint64_t malformed = 0, rate_limited = 0, rejected = 0, desyncs = 0, late_inputs = 0;
     uint64_t reconnects = 0, wrong_seat_inputs = 0;
+    uint64_t invalid = 0;        // well-formed but impossible here (tick range, cadence, direction)
+    uint64_t fanout_limited = 0; // fan-out messages dropped by their own bucket
 };
 
 // A finished race's complete record (Start + sealed timeline + hashes), for
@@ -91,6 +100,7 @@ class Server {
         std::string room; // code, empty when not in a room
         int seat = -1;    // -1 spectator / none
         RateBucket bucket;
+        RateBucket fanout; // tokens/last_ms only
         int32_t acked = -1; // highest contiguous sealed tick the client holds
         uint64_t next_rtc_send_ms = 0;
         int32_t sent_upto = -1; // reliable stream: highest tick already sent
@@ -151,6 +161,7 @@ class Server {
     void vacate(Room&, int seat, uint64_t now);
     void disconnect_seat(Room&, int seat, uint64_t now);
     bool allow(Conn&, uint64_t now);
+    bool allow_fanout(Conn&, uint64_t now);
     std::string new_code();
     net::SeatToken new_token();
     Room* room_of(const Conn&);

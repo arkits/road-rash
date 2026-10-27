@@ -264,18 +264,19 @@ int main() {
     for (const Frames& f : a.all<Frames>()) back.insert(back.end(), f.frames.begin(), f.frames.end());
     check(!back.empty() && (back.back().present & 2) != 0, "reconnected player takes the rider back");
 
-    // Desync: a different hash for the same tick is detected.
-    a.send(Hash{60, 0xaaaa});
-    b3.send(Hash{60, 0xbbbb});
+    // Desync: a different hash for the same check tick is detected. Two seats
+    // tie, so neither is told (server_hostile covers the strict minority).
+    a.send(Hash{59, 0xaaaa});
+    b3.send(Hash{59, 0xbbbb});
     run(s, 10);
     check(s.counters().desyncs == 1, "desync counted");
-    check(a.last<Desync>() || b3.last<Desync>(), "minority told about the desync");
+    check(!a.last<Desync>() && !b3.last<Desync>(), "a tie names no minority");
 
     // Results: matching end hash -> official.
     rr::netd::RaceRecord record;
     s.on_race_finished = [&](const rr::netd::RaceRecord& r) { record = r; };
-    a.send(Result{900, Outcome::won, 0, 0x42});
-    b3.send(Result{900, Outcome::finished, 1, 0x42});
+    a.send(Result{90, Outcome::won, 0, 0x42}); // results name a sealed tick
+    b3.send(Result{90, Outcome::finished, 1, 0x42});
     run(s, 10);
     const auto off = a.last<Official>();
     check(off && off->agreed && off->rows.size() == 2 && off->rows[0].outcome == Outcome::won,

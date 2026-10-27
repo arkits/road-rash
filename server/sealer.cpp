@@ -13,16 +13,17 @@ void Sealer::input(int seat, int32_t first_tick, std::span<const uint16_t> words
     if (seat < 0 || seat >= humans_) return;
     auto& pending = pending_[size_t(seat)];
     for (size_t i = 0; i < words.size(); ++i) {
-        const int32_t tick = first_tick + int32_t(i);
+        // 64-bit: a hostile first_tick near INT32_MAX must not overflow.
+        const int64_t tick = int64_t(first_tick) + int64_t(i);
         if (tick <= sealed_tick()) {
             ++counters_.dropped_old;
             continue;
         }
-        if (tick > sealed_tick() + max_ahead) {
+        if (tick > int64_t(sealed_tick()) + max_ahead) {
             ++counters_.dropped_ahead;
             continue;
         }
-        pending.emplace(tick, words[i]); // keeps the first word for a tick
+        pending.emplace(int32_t(tick), words[i]); // keeps the first word for a tick
     }
 }
 

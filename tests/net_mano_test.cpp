@@ -203,7 +203,10 @@ int main() {
     guest.client.resume(guest.client.release_channel());
     link.client.resume(link.client.release_channel());
     // Results from every seat make the table official; the room survives for
-    // a rematch with votes cleared and characters kept.
+    // a rematch with votes cleared and characters kept. A result names a
+    // sealed tick (rr-netd refuses future ones), so let the race clock pass it.
+    run(s, cfg.load_ms + 2000, 50);
+    pump(s, host, guest, link);
     host.client.send_result(100, Outcome::won, 1, 0xabcdef);
     guest.client.send_result(100, Outcome::finished, 2, 0xabcdef);
     link.client.send_result(100, Outcome::finished, 3, 0xabcdef);
