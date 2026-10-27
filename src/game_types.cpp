@@ -1,5 +1,6 @@
 // Plan 28 Task 4: Game methods (moved unchanged from game_main.cpp).
 #include "game_types.hpp"
+#include <cstdlib>
 #include "lifecycle.hpp"
 #include "raster_rgb.hpp"
 #include "view_state.hpp"

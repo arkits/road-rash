@@ -1,6 +1,7 @@
 // Plan 28 Task 4: race sprite cache + course canvas (moved from game_main.cpp).
 #pragma once
 #include <SDL3/SDL.h>
+#include <cstdlib>
 #include <cstdint>
 #include <memory>
 #include <optional>

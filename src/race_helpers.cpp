@@ -1,5 +1,6 @@
 // Plan 28 Task 4: shared race helpers (moved unchanged from game_main.cpp).
 #include "race_helpers.hpp"
+#include <cstdlib>
 #include "course_scene.hpp"
 #include "hud.hpp"
 #include "pe_strings.hpp"

@@ -2,6 +2,7 @@
 #include "texture.hpp"
 #include <algorithm>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <mutex>

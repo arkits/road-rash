@@ -1,4 +1,5 @@
 #include "hud.hpp"
+#include <cstdlib>
 #include "exe_tables.hpp"
 #include <algorithm>
 #include <cstdio>

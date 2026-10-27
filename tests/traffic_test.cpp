@@ -1,4 +1,5 @@
 #include "traffic.hpp"
+#include <cstdlib>
 #include "race.hpp"
 #include "assets.hpp"
 #include "course.hpp"

@@ -1,5 +1,6 @@
 // Plan 21 Task 4: RGB raster implementation.
 #include "raster_rgb.hpp"
+#include <cstdlib>
 #include "fog.hpp"
 #include <cstring>
 #include "texture.hpp"

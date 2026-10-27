@@ -1,4 +1,5 @@
 #include "traffic.hpp"
+#include <cstdlib>
 #include "actor_render.hpp"
 #include "exe_tables.hpp"
 #include "crash.hpp"
