@@ -85,14 +85,37 @@ def container_id():
         r'name=^/road-rash-net\.web\.1$', '--format', '{{.ID}}'], text=True).strip()
 
 
-def publish_archive(path, current=container_id, invoke=subprocess.run):
+def stream_command(args, *, stdin=None, cwd='/', check=False):
+    # Preserve live build output without retaining an unbounded log in memory.
+    tail=''
+    with subprocess.Popen(args, stdin=stdin, cwd=cwd, text=True, errors='replace',
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as child:
+        while chunk:=child.stdout.read(4096):
+            print(chunk,end='',flush=True)
+            tail=(tail+chunk)[-4096:]
+        result=subprocess.CompletedProcess(args,child.wait(),stdout=tail)
+    if check:
+        result.check_returncode()
+    return result
+
+
+def publish_archive(path, current=container_id, invoke=stream_command):
     before=current()
     with open(path, 'rb') as archive:
-        invoke(['/usr/bin/dokku', 'git:from-archive', APP, '--'], stdin=archive, check=True)
-    # from-archive skips identical trees; the newly selected UDP mapping still
-    # needs a generation. Preserve startup checks by rebuilding through Dokku.
-    if current()==before:
-        invoke(['/usr/bin/dokku', 'ps:rebuild', APP], check=True)
+        result=invoke(['/usr/bin/dokku', 'git:from-archive', APP, '--'], stdin=archive,
+                      cwd='/')
+    unchanged=current()==before
+    # Dokku 0.38.25 returns 1 for its explicit identical-tree skip. Accept only
+    # that exact outcome, with the old generation still running; real errors
+    # must propagate and restore the previous configuration.
+    skipped=(result.returncode==1 and unchanged
+             and 'No changes detected, skipping git commit' in result.stdout
+             and "Call 'ps:rebuild' on app to rebuild the app from existing source" in result.stdout)
+    if result.returncode and not skipped:
+        result.check_returncode()
+    # Even a successful no-op needs a new container for the selected UDP port.
+    if unchanged:
+        invoke(['/usr/bin/dokku', 'ps:rebuild', APP], cwd='/', check=True)
 
 
 def deploy(path, run=command, reserve=reserve_port, publish=None):

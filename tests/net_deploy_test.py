@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -97,14 +98,40 @@ class Tests(unittest.TestCase):
 
     def test_identical_archive_still_applies_new_port(self):
         calls=[]
-        module.publish_archive(self.path, current=lambda:'old', invoke=lambda args,**kwargs:calls.append(args))
+        module.publish_archive(self.path, current=lambda:'old', invoke=lambda args,**kwargs:(calls.append(args) or subprocess.CompletedProcess(args,0,stdout='')))
         self.assertEqual([c[1] for c in calls],['git:from-archive','ps:rebuild'])
         self.assertTrue(all(module.APP in c for c in calls))
 
     def test_changed_generation_does_not_rebuild_twice(self):
         ids=iter(('old','new'));calls=[]
-        module.publish_archive(self.path, current=lambda:next(ids), invoke=lambda args,**kwargs:calls.append(args))
+        module.publish_archive(self.path, current=lambda:next(ids), invoke=lambda args,**kwargs:(calls.append(args) or subprocess.CompletedProcess(args,0,stdout='')))
         self.assertEqual([c[1] for c in calls],['git:from-archive'])
+
+    def test_dokku_identical_archive_exit_one_rebuilds(self):
+        calls=[]
+        def invoke(args,**kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args,1,stdout=
+                "No changes detected, skipping git commit\nCall 'ps:rebuild' on app to rebuild the app from existing source")
+        module.publish_archive(self.path,current=lambda:'old',invoke=invoke)
+        self.assertEqual([c[1] for c in calls],['git:from-archive','ps:rebuild'])
+
+    def test_other_failure_does_not_rebuild_old_source(self):
+        calls=[]
+        def invoke(args,**kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args,1,stdout='build failed')
+        with self.assertRaises(subprocess.CalledProcessError):
+            module.publish_archive(self.path,current=lambda:'old',invoke=invoke)
+        self.assertEqual(len(calls),1)
+
+    def test_skip_marker_with_changed_container_is_not_ignored(self):
+        ids=iter(('old','new'))
+        def invoke(args,**kwargs):
+            return subprocess.CompletedProcess(args,1,stdout=
+                "No changes detected, skipping git commit\nCall 'ps:rebuild' on app to rebuild the app from existing source")
+        with self.assertRaises(subprocess.CalledProcessError):
+            module.publish_archive(self.path,current=lambda:next(ids),invoke=invoke)
 
     def test_links_rejected_before_mutation(self):
         extra = tarfile.TarInfo('./escape'); extra.type = tarfile.SYMTYPE; extra.linkname = '/etc/passwd'
