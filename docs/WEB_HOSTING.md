@@ -155,3 +155,20 @@ Clients remain WS by default after mixed loss measurements; use native `--rtc`,
 browser `?rtc=1`, or bot `--require-rtc` to opt in. `--no-udp` (browser
 `?rtc=1&udp=off`) forces TCP. See VERIFICATION.md for loss metrics and the RTC
 handoff for live acceptance.
+
+
+Public RTC/fallback acceptance passed in production CI 40575802077: every
+client exchanges DataChannel traffic, UDP-disabled clients agree over WS,
+and mid-race close resumes WS with agreed results. Identical archive replay
+rotated UDP 40001->40000 through startup checks; 62 public health samples had
+zero failures. The helper handles Dokku's explicit exit 1 no-change outcome,
+then rebuilds; other failures restore prior config. See VERIFICATION.md and
+the RTC handoff for receipts, source revisions and the final deployment.
+
+
+Final source `3eb22dcaeb18c9c44e4a4dbb41b066283cfc2ff8` also passed
+[CI 40576936619](https://github.com/arkits/road-rash/actions/runs/40576936619)
+with the Welcome/choice ordering fixes: all three strict cases agreed on
+results, with positive traffic on every required-RTC peer and zero live late
+inputs/stalls. Health reports three finished races, zero desyncs, malformed
+messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.

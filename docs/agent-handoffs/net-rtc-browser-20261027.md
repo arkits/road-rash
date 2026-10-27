@@ -81,3 +81,13 @@ Owner86791; own main/wire/deploy/browser claims held until completion.
 Production service intentionally running. Root SSH usable after owner unlock.
 No local server/container left. Main checkout frontend claim untouched; retain
 pre-existing analysis symlinks. Live CI receipt appended below when verified.
+
+
+## Completed
+
+Integrated into main; Task 8 UDP and Task 9 live acceptance complete. See
+[final RTC receipt](net-rtc-20261027.md) for source 3eb22dc, production CI
+40576936619, browser CI 40572423797, real archive replay and cleanup. Ten
+isolated deploy tests pass after the Dokku no-op status correction. All four
+claims/owner86791 are released/stopped after the final handoff push. No local
+test process remains; only the intended production service stays running.

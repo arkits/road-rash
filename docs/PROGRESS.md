@@ -2485,3 +2485,34 @@ and rebuilds identical archive replays when necessary. Host wrapper/key
 restriction installed; one scoped IPv4 UFW rule added after confirming the
 range unused. Production code/UDP acceptance receipt follows the RTC handoff.
 No other app/global proxy/firewall rule was changed.
+
+
+## October 27, 2026 — plan 34 public RTC deployment acceptance
+
+Task 8 Step 3 and Task 9 live acceptance passed.
+[Production CI 40575802077](https://github.com/arkits/road-rash/actions/runs/40575802077)
+requires DataChannel traffic on every client, then tests UDP-disabled WS and
+mid-race RTC close. All pairs agreed on official 480-tick cutoff results with
+zero measured live stalls/late inputs. Browser CI 40572423797 also passed.
+
+The existing Docker public-interface drop needed an exception matching only
+UDP original destination 5.161.142.20:40000–40099, persisted and syntax-checked.
+The deploy helper handles Dokku's explicit identical-tree exit 1 by rebuilding
+through startup checks, while other failures restore prior config. Actual
+replay rotated UDP 40001 to 40000 and passed 62 public health samples. Ten
+isolated deploy tests pass. Bots wait for each Welcome before joining and for
+transport negotiation before final choices. The updated eight-client, one-port
+run agreed with positive traffic on every peer and zero live stalls/late inputs.
+
+Full receipts and retained failed attempts are in VERIFICATION.md and the RTC
+handoff. WebSocket remains default after mixed loss measurements. Task 10
+platform/device/cross-play and Task 11 soak acceptance remain open; adb lists
+no attached MANGMI, so no new hardware observation is claimed.
+
+
+Final source `3eb22dcaeb18c9c44e4a4dbb41b066283cfc2ff8` also passed
+[CI 40576936619](https://github.com/arkits/road-rash/actions/runs/40576936619)
+with the Welcome/choice ordering fixes: all three strict cases agreed on
+results, with positive traffic on every required-RTC peer and zero live late
+inputs/stalls. Health reports three finished races, zero desyncs, malformed
+messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.

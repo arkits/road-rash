@@ -3303,3 +3303,55 @@ and rebuilds identical archive replays when necessary. Host wrapper/key
 restriction installed; one scoped IPv4 UFW rule added after confirming the
 range unused. Production code/UDP acceptance receipt follows the RTC handoff.
 No other app/global proxy/firewall rule was changed.
+
+
+## October 27, 2026 — plan 34 public RTC deployment acceptance
+
+[Production CI 40575802077](https://github.com/arkits/road-rash/actions/runs/40575802077)
+passed exact-revision health, required RTC on every client, UDP-disabled WS,
+and forced RTC close at tick 390. Each pair agreed on its 480-tick cutoff and
+received official results, with zero measured live stalls and no live late
+inputs. Required RTC counters were 1293/475 and 1289/475 (sent/received), zero
+fallbacks; forced-close 1108/385 and 1103/384, one fallback per client. This is
+transport/determinism evidence, not course completion or platform cross-play.
+[Browser CI 40572423797](https://github.com/arkits/road-rash/actions/runs/40572423797)
+passed browser RTC fixtures, deployment and existing live gameplay checks.
+
+Public UDP initially failed because DOCKER-USER dropped new eth0 forwarding
+before UFW input rules. Added only the approved UDP original-destination
+5.161.142.20:40000–40099 RETURN exception before that drop, live and persisted
+in /etc/ufw/after.rules; iptables-restore --test passed. Other services/policy
+unchanged. Initial Mac peers could use Tailnet candidates; outside Docker
+clients and GitHub Linux runners establish public-path acceptance. The failed
+CI receipts are retained in the RTC handoff, with the exact firewall rule,
+backup and removal in the deployment README.
+
+Actual identical ebbe66b archive replay exercised Dokku's exit1 skip, forced
+ps:rebuild with startup checks, changed CID 11aa8493f5ed->b071abd179cd and UDP
+40001->40000. 62 public curl health samples passed with zero failures during
+the replay; disabled/skipped checks both none. The initial urllib-only probe
+was blocked 403 by Cloudflare, so it supplies no continuity evidence. Root
+helper SHA256 matches checked-in deploy.py; ten isolated deployment tests pass.
+
+The multi-client driver now waits for each guest's Welcome before joining,
+and delays final character/course choices until RTC open/fallback/bounded 6 s;
+final votes trigger Start on the current server. Timeout diagnostics include
+handshake/lobby/per-client counters. Latest native eight-client one-UDP-port
+480-tick run agreed hash 14453031911657472735, 9459 sent/3785 received, no fallback,
+zero live late inputs/stalls. Updated Linux public RTC/noUDP/close pairs also
+passed. Full 119-test Debug/Release and focused sanitizer/browser gates above
+remain applicable; follow-ups changed the driver/deployment helper, not src.
+
+Evidence: /tmp/rr-rtc-final-*, /tmp/rr-rtc-ebbe-ci-complete.log and
+/Users/archit/Dev/rr/.plan34-logs/rtc-20261027/identical-replay-ebbe.log.
+Task 8 Step 3 and Task 9 complete. RTC remains opt-in after mixed loss metrics.
+Task 10 device/signed-package/interactive cross-play and Task 11 soak acceptance
+remain open. adb devices lists no attached MANGMI; no hardware evidence added.
+
+
+Final source `3eb22dcaeb18c9c44e4a4dbb41b066283cfc2ff8` also passed
+[CI 40576936619](https://github.com/arkits/road-rash/actions/runs/40576936619)
+with the Welcome/choice ordering fixes: all three strict cases agreed on
+results, with positive traffic on every required-RTC peer and zero live late
+inputs/stalls. Health reports three finished races, zero desyncs, malformed
+messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.

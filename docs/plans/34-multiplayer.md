@@ -485,9 +485,11 @@ Nginx ports and exact-revision checks are installed. Native public bots passed;
 passed two Linux clients with matching hashes/agreed results. Existing web
 health/assets and TLS deploy-hook validation passed. See
 [live handoff](../agent-handoffs/net-live-20261027.md).
-Step 3 stays open until Task 9 provides actual peers/negotiation/fallback;
-WebSocket-only results do not establish UDP acceptance. No unused UDP range
-was published/opened, and no other app/global proxy/firewall setting changed.
+Task 9 closed Step 3: public Linux clients require positive DataChannel race
+traffic on every client, and UDP-disabled/mid-race-close runs agree over WS.
+[Production CI 40576936619](https://github.com/arkits/road-rash/actions/runs/40576936619)
+passed all three. Only the approved IPv4 UDP range and its Docker forwarding
+exception were added; other published services retain their policy.
 
 **Owner-approved scope on `agnee`:**
 - a new Dokku app `road-rash-net`;
@@ -501,7 +503,7 @@ Nothing else on the server changes.
 
 - [x] **Step 1: Deploy workflow.** Build `rr-netd` (Linux x86-64 release) on pushes to `main` that touch `server/` or `src/net/`. Deploy with `dokku git:from-archive`, as the web app does. Health-check `/net/health` and check the exact Git revision.
 - [x] **Step 2: Nginx route.** WebSocket upgrade headers, a long read timeout and a body size limit. Cloudflare passes WebSockets on the proxied hostname. Confirm the TLS renewal hook still validates.
-- [ ] **Step 3: WebRTC UDP.**
+- [x] **Step 3: WebRTC UDP.**
   - Publish the port range and advertise `5.161.142.20` as the server's host candidate (configurable).
   - Confirm from an outside network that a DataChannel connects.
   - Confirm that the WebSocket fallback works when UDP is blocked; test from a network that blocks UDP, or with a client flag that blocks it.
@@ -521,7 +523,7 @@ Nothing else on the server changes.
 
 ---
 
-October 27: local implementation/gates complete; RTC remains opt-in after mixed 5% loss measurements (fewer stalls/late inputs, no p99 improvement, ~2.8x bytes). Native/browser peers, timeout/close fallback, one-port UDP mux and rolling port allocation verified. Live UDP receipt is recorded in [RTC handoff](../agent-handoffs/net-rtc-20261027.md).
+October 27: implementation and live UDP/fallback acceptance complete; RTC remains opt-in after mixed 5% loss measurements (fewer stalls/late inputs, no p99 improvement, ~2.8x bytes). Native/browser peers, timeout/close fallback, one-port UDP mux and rolling port allocation verified. Live UDP receipt is recorded in [RTC handoff](../agent-handoffs/net-rtc-20261027.md).
 
 ### Task 10: Platforms
 
