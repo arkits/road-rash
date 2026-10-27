@@ -514,12 +514,14 @@ Nothing else on the server changes.
 
 **Files:** Create `src/net/rtc_channel.cpp`, `src/net/rtc_channel_web.cpp`, `web/net_glue.js` (or `datachannel-wasm`). Modify `server/` for the server-side peer, and `src/net/client.cpp` for upgrade and fallback.
 
-- [ ] **Step 1: Server peer.** For each client, the server creates a peer connection with one unreliable, unordered DataChannel. Signalling goes over the client's WebSocket. Port range and public IP come from configuration.
-- [ ] **Step 2: Clients.** Native clients use libdatachannel; the browser uses `RTCPeerConnection` through JS glue. Race traffic moves to the DataChannel once it is open. If it fails within 5 s, or closes mid-race, traffic falls back to the WebSocket without a race-visible event beyond a rollback.
-- [ ] **Step 3: Measure.** At 5% loss, compare WebSocket and DataChannel on rollback depth p50/p95/p99, late-input rate and stalls. Record the result in VERIFICATION.md. The DataChannel stays default only if it measurably helps.
-- [ ] **Step 4:** Commit: `net: WebRTC DataChannel race transport`.
+- [x] **Step 1: Server peer.** For each client, the server creates a peer connection with one unreliable, unordered DataChannel. Signalling goes over the client's WebSocket. Port range and public IP come from configuration.
+- [x] **Step 2: Clients.** Native clients use libdatachannel; the browser uses `RTCPeerConnection` through JS glue. Race traffic moves to the DataChannel once it is open. If it fails within 5 s, or closes mid-race, traffic falls back to the WebSocket without a race-visible event beyond a rollback.
+- [x] **Step 3: Measure.** At 5% loss, compare WebSocket and DataChannel on rollback depth p50/p95/p99, late-input rate and stalls. Record the result in VERIFICATION.md. The DataChannel stays default only if it measurably helps.
+- [x] **Step 4:** Commit: `net: WebRTC DataChannel race transport`.
 
 ---
+
+October 27: local implementation/gates complete; RTC remains opt-in after mixed 5% loss measurements (fewer stalls/late inputs, no p99 improvement, ~2.8x bytes). Native/browser peers, timeout/close fallback, one-port UDP mux and rolling port allocation verified. Live UDP receipt is recorded in [RTC handoff](../agent-handoffs/net-rtc-20261027.md).
 
 ### Task 10: Platforms
 

@@ -3,6 +3,7 @@
 #include "net/ws_channel.hpp"
 
 #include "net/protocol.hpp"
+#include "net/rtc_channel.hpp"
 
 #include <rtc/websocket.hpp>
 
@@ -101,6 +102,10 @@ std::unique_ptr<Channel> make_ws_channel(std::shared_ptr<rtc::WebSocket> ws, siz
 }
 
 std::unique_ptr<Channel> ws_connect(const std::string& url) {
+    return ws_connect(url, {});
+}
+
+std::unique_ptr<Channel> ws_connect(const std::string& url, RtcOptions options) {
     rtc::WebSocket::Configuration config;
     config.maxMessageSize = max_message_bytes;
     config.connectionTimeout = std::chrono::milliseconds(10000);
@@ -112,7 +117,7 @@ std::unique_ptr<Channel> ws_connect(const std::string& url) {
     } catch (...) {
         return std::make_unique<FailedChannel>(); // malformed URL or no transport
     }
-    return channel;
+    return negotiate_rtc(std::move(channel), std::move(options));
 }
 
 } // namespace rr::net

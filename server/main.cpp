@@ -10,6 +10,7 @@
 #include "room.hpp"
 
 #include "net/ws_channel.hpp"
+#include "net/rtc_channel.hpp"
 
 #include <rtc/websocketserver.hpp>
 
@@ -91,9 +92,10 @@ class Health {
             std::string req(buf, size_t(got > 0 ? got : 0));
             const bool health = req.rfind("GET /net/health", 0) == 0 || req.rfind("GET /health", 0) == 0;
             const std::string payload = health ? body : "{\"error\":\"not found\"}";
-            const std::string resp = std::string("HTTP/1.0 ") + (health ? "200 OK" : "404 Not Found") +
-                                     "\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: " +
-                                     std::to_string(payload.size()) + "\r\n\r\n" + payload;
+            const std::string resp =
+                std::string("HTTP/1.0 ") + (health ? "200 OK" : "404 Not Found") +
+                "\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: " +
+                std::to_string(payload.size()) + "\r\n\r\n" + payload;
             (void)::send(c, resp.data(), resp.size(), 0);
             ::close(c);
         }
@@ -106,7 +108,8 @@ class Health {
 void write_record(const std::filesystem::path& dir, const rr::netd::RaceRecord& r) {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    const auto path = dir / ("race-" + std::to_string(wall_ms()) + "-" + std::to_string(r.start.race_id) + ".rrlog");
+    const auto path =
+        dir / ("race-" + std::to_string(wall_ms()) + "-" + std::to_string(r.start.race_id) + ".rrlog");
     std::ofstream out(path, std::ios::binary);
     // Format: protocol-encoded Start, then LogChunks of the sealed frames,
     // then Hash messages for every reported tick/slot and the Official table;
@@ -125,7 +128,8 @@ void write_record(const std::filesystem::path& dir, const rr::netd::RaceRecord& 
         c.frames.first_tick = int32_t(first);
         c.frames.humans = uint8_t(r.start.humans.size());
         const size_t end = std::min(r.frames.size(), first + rr::net::max_log_chunk);
-        c.frames.frames.assign(r.frames.begin() + std::ptrdiff_t(first), r.frames.begin() + std::ptrdiff_t(end));
+        c.frames.frames.assign(r.frames.begin() + std::ptrdiff_t(first),
+                               r.frames.begin() + std::ptrdiff_t(end));
         c.last = end == r.frames.size();
         put(c);
     }
@@ -141,7 +145,8 @@ void prune_logs(const std::filesystem::path& dir) {
     std::error_code ec;
     const auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 7);
     for (const auto& e : std::filesystem::directory_iterator(dir, ec))
-        if (e.path().extension() == ".rrlog" && e.last_write_time(ec) < cutoff) std::filesystem::remove(e.path(), ec);
+        if (e.path().extension() == ".rrlog" && e.last_write_time(ec) < cutoff)
+            std::filesystem::remove(e.path(), ec);
 }
 
 } // namespace
@@ -154,8 +159,23 @@ int main() {
     rr::netd::ServerConfig cfg;
     cfg.max_rooms = env_int("RR_NETD_MAX_ROOMS", cfg.max_rooms);
     cfg.min_humans = env_int("RR_NETD_MIN_HUMANS", cfg.min_humans);
+    cfg.seed = uint32_t(env_int("RR_NETD_SEED", 0));
     const std::string bind = env_str("RR_NETD_BIND", "0.0.0.0");
     const std::filesystem::path log_dir = env_str("RR_NETD_LOG_DIR", "race-logs");
+    rr::net::RtcOptions rtc_options;
+    rtc_options.enabled = env_int("RR_NETD_RTC", 0) != 0;
+    rtc_options.server = true;
+    rtc_options.public_ip = env_str("RR_NETD_PUBLIC_IP", "");
+    const int port_begin = env_int("RR_NETD_UDP_BEGIN", 40000), port_end = env_int("RR_NETD_UDP_END", 40099);
+    in_addr public_address{};
+    if (port_begin < 1024 || port_end > 65535 || port_begin > port_end ||
+        (!rtc_options.public_ip.empty() &&
+         inet_pton(AF_INET, rtc_options.public_ip.c_str(), &public_address) != 1)) {
+        std::cerr << "invalid RTC public IPv4 or UDP range\n";
+        return 2;
+    }
+    rtc_options.port_begin = uint16_t(port_begin);
+    rtc_options.port_end = uint16_t(port_end);
     rr::netd::Server server(cfg);
     server.log = log_line;
     server.on_race_finished = [&](const rr::netd::RaceRecord& r) { write_record(log_dir, r); };
@@ -183,7 +203,8 @@ int main() {
             uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count());
         {
             std::lock_guard lock(mu);
-            for (auto& c : incoming) server.add_connection(rr::net::make_ws_channel(c), now);
+            for (auto& c : incoming)
+                server.add_connection(rr::net::negotiate_rtc(rr::net::make_ws_channel(c), rtc_options), now);
             incoming.clear();
         }
         server.step(now);

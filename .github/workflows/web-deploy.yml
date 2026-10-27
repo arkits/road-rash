@@ -16,6 +16,9 @@ on:
       - 'tests/web_bundle_cache.cjs'
       - 'tests/web_hosted_smoke.cjs'
       - 'tests/web_recovery.cjs'
+      - 'tests/net_rtc_browser.cjs'
+      - 'tests/net_rtc_test.cpp'
+      - 'tests/net_transport_test.cpp'
       - '.github/workflows/web-deploy.yml'
   workflow_dispatch:
 
@@ -51,6 +54,7 @@ jobs:
         run: |
           source .tools/emsdk/emsdk_env.sh
           tools/build_web.sh
+          cmake --build build-agent-browser --target net_rtc-web net_transport-web --parallel
           node --check web/app.js
       - name: Package code only
         run: |
@@ -67,6 +71,7 @@ jobs:
         env:
           NODE_PATH: ${{ github.workspace }}/.tools/browser-tests/node_modules
         run: |
+          RR_RTC_BUILD=build-agent-browser node tests/net_rtc_browser.cjs
           node tests/web_bundle_cache.cjs
           node tests/web_telemetry.cjs
           node tests/web_recovery.cjs

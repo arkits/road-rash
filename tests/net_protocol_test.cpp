@@ -108,6 +108,7 @@ std::vector<std::pair<std::string, Message>> samples() {
         {"official", official},
         {"log_chunk", log},
         {"ready", Ready{true}},
+        {"rtc_close", RtcClose{}},
     };
 }
 
@@ -189,7 +190,9 @@ int main() {
     check(rejects({10, 0}) && rejects({10, 9}), "character byte out of range");
     check(rejects({11, 0}) && rejects({11, 6}), "course byte out of range");
     check(rejects({4, 0, 0, 2, 0}), "boolean byte 2 rejected");
-    check(rejects({0}) && rejects({29}) && rejects({0xff}) && rejects({}), "unknown or empty type rejected");
+    check(rejects({0}) && rejects({uint8_t(std::variant_size_v<Message> + 1)}) && rejects({0xff}) &&
+              rejects({}),
+          "unknown or empty type rejected");
     {
         Hello h = std::get<Hello>(all[0].second);
         h.alias = std::string("bad\x01name");

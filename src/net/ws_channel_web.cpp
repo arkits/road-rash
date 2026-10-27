@@ -1,6 +1,7 @@
 // Browser WebSocket implementation of the same main-thread Channel contract.
 #include "net/channel.hpp"
 #include "net/protocol.hpp"
+#include "net/rtc_channel.hpp"
 #include <emscripten.h>
 
 // clang-format off
@@ -40,6 +41,10 @@ EM_JS(void, rr_ws_close, (int id), {
     const state = Module.rrSockets.get(id);
     if (state) { state.status = 2; state.ws?.close(); Module.rrSockets.delete(id); }
 });
+EM_JS(int, rr_ws_rtc_optin, (), {
+    const p = new URLSearchParams(globalThis.location.search);
+    return p.get("rtc") === "1" && p.get("udp") !== "off";
+});
 // clang-format on
 namespace rr::net {
 namespace {
@@ -71,6 +76,10 @@ class BrowserSocket final : public Channel {
 };
 } // namespace
 std::unique_ptr<Channel> ws_connect(const std::string& url) {
-    return std::make_unique<BrowserSocket>(url);
+    return ws_connect(url, {});
+}
+std::unique_ptr<Channel> ws_connect(const std::string& url, RtcOptions options) {
+    options.enabled = options.enabled || rr_ws_rtc_optin();
+    return negotiate_rtc(std::make_unique<BrowserSocket>(url), std::move(options));
 }
 } // namespace rr::net

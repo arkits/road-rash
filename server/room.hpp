@@ -21,15 +21,15 @@ namespace rr::netd {
 struct ServerConfig {
     int max_rooms = 500;
     int max_connections = 4000;
-    int min_humans = 2;                 // humans needed to start a race
-    uint64_t hello_timeout_ms = 10000;  // connection must say Hello
-    uint64_t idle_timeout_ms = 30000;   // no message at all
+    int min_humans = 2;                // humans needed to start a race
+    uint64_t hello_timeout_ms = 10000; // connection must say Hello
+    uint64_t idle_timeout_ms = 30000;  // no message at all
     uint64_t lobby_timeout_ms = 30 * 60 * 1000;
     uint64_t reconnect_window_ms = 60000;
-    uint64_t load_ms = 3000;            // Start -> race tick 0
-    int seal_delay_ticks = 3;           // a tick is sealed this many ticks after its time
+    uint64_t load_ms = 3000;  // Start -> race tick 0
+    int seal_delay_ticks = 3; // a tick is sealed this many ticks after its time
     int frames_per_packet = 32;
-    double rate_per_s = 240;            // token bucket refill, messages per second
+    double rate_per_s = 240; // token bucket refill, messages per second
     double rate_burst = 480;
     int rate_strikes = 3;               // throttled seconds before the connection is closed
     uint64_t finish_timeout_ms = 60000; // results wait for missing reports
@@ -91,7 +91,8 @@ class Server {
         std::string room; // code, empty when not in a room
         int seat = -1;    // -1 spectator / none
         RateBucket bucket;
-        int32_t acked = -1;     // highest contiguous sealed tick the client holds
+        int32_t acked = -1; // highest contiguous sealed tick the client holds
+        uint64_t next_rtc_send_ms = 0;
         int32_t sent_upto = -1; // reliable stream: highest tick already sent
         uint16_t rtt_ms = 0;
         uint64_t next_ping_ms = 0; // server Ping (clients answer Pong) for the roster ping column

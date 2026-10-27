@@ -130,3 +130,22 @@ Existing web health/revision/341-file manifest were checked, and the renewal
 deploy hook successfully validated/reloaded Nginx (no certificate renewal was
 attempted). UDP publishing/firewall/candidate/DataChannel acceptance stays open
 until Task 9 implements that transport; no unused UDP range was opened.
+
+
+## WebRTC generation ports (plan 34 Task 9)
+
+The dedicated key now forces `/usr/local/sbin/road-rash-net-deploy`, installed
+from `deploy/road-rash-net/deploy.py`. It still targets only `road-rash-net`.
+The helper chooses one free UDP port per generation in 40000–40099, configures
+the server's matching local bounds/public IPv4 and publishes that port one-to-one.
+Old/new generations coexist on different ports while ordinary startup health
+checks stay enabled. Failure restores the previous options/config; identical
+archive replay forces a rebuild if necessary. Existing TCP loopback/TLS routes
+are unchanged. UFW adds only an IPv4 UDP rule to 5.161.142.20:40000–40099.
+The authorized_keys backup before wrapper selection is
+`/root/.ssh/authorized_keys.pre-rtc-20261027-86791`. No private key was recreated.
+
+Clients remain WS by default after mixed loss measurements; use native `--rtc`,
+browser `?rtc=1`, or bot `--require-rtc` to opt in. `--no-udp` (browser
+`?rtc=1&udp=off`) forces TCP. See VERIFICATION.md for loss metrics and the RTC
+handoff for live acceptance.

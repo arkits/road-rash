@@ -73,7 +73,11 @@ jobs:
         run: |
           python3 deploy/road-rash-net/fetch-smoke-data.py "$RUNNER_TEMP/rr-net-disc"
           docker run --rm -v "$RUNNER_TEMP/rr-net-disc:/game-data:ro" rr-net-smoke \
-            --disc /game-data --url wss://road-rash.archit.xyz/net --clients 2 --ticks 420 --timeout 90
+            --disc /game-data --url wss://road-rash.archit.xyz/net --clients 2 --ticks 480 --timeout 90 --require-rtc
+          docker run --rm -v "$RUNNER_TEMP/rr-net-disc:/game-data:ro" rr-net-smoke \
+            --disc /game-data --url wss://road-rash.archit.xyz/net --clients 2 --ticks 480 --timeout 90 --no-udp
+          docker run --rm -v "$RUNNER_TEMP/rr-net-disc:/game-data:ro" rr-net-smoke \
+            --disc /game-data --url wss://road-rash.archit.xyz/net --clients 2 --ticks 480 --timeout 90 --require-rtc --rtc-close-tick 390
       - name: Remove temporary credentials and data
         if: always()
         run: |

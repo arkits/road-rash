@@ -538,6 +538,8 @@ std::optional<Message> decode_body(uint8_t type, Reader& r) {
     }
     case 28:
         return Ready{r.boolean()};
+    case 29:
+        return RtcClose{};
     default:
         return std::nullopt;
     }

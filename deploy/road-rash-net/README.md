@@ -4,7 +4,8 @@ Status (October 27, 2026): `road-rash-net` is provisioned on agnee and serves
 `wss://road-rash.archit.xyz/net` plus HTTPS `/net/health`. Native production
 bots passed a 420-tick agreed cutoff. The dedicated restricted deploy key and
 `RR_NET_DEPLOY_ENABLED=true` are installed; the enabled CI production run is
-recorded in the live handoff. WebRTC/UDP acceptance still requires Task 9.
+recorded in the live handoff. WebRTC is implemented as an opt-in transport (`--rtc`, browser `?rtc=1`).
+The Task 9 live UDP acceptance receipt is recorded in its handoff.
 
 ## Package and workflow
 
@@ -20,10 +21,12 @@ The deploy credential is a separate `DOKKU_ROAD_RASH_NET_KEY`. Its root
 existing web deployment's restrictions:
 
 ```
-restrict,command="/usr/bin/dokku git:from-archive road-rash-net --" ssh-ed25519 PUBLIC_KEY road-rash-net-ci
+restrict,command="/usr/local/sbin/road-rash-net-deploy" ssh-ed25519 PUBLIC_KEY road-rash-net-ci
 ```
 
-Confirm the Dokku executable path on the host before installing this entry.
+Install the root-owned `deploy.py` as `/usr/local/sbin/road-rash-net-deploy`
+(mode 755) before installing this entry. The helper targets only this app,
+validates a bounded code archive and retains Dokku startup checks.
 Keep the private key out of logs/Git; feed its file to `gh secret set
 DOKKU_ROAD_RASH_NET_KEY --repo arkits/road-rash < KEY_FILE`. The workflow
 uses the already authenticated `DOKKU_ROAD_RASH_KNOWN_HOSTS` variable. No host-key
@@ -80,14 +83,37 @@ image nor uploaded artifact and is removed in the always-run cleanup step.
 
 ## UDP and Task 9
 
-The daemon currently has WebSocket transport only. Do not advertise a working
-DataChannel or open an unused firewall range. Task 8's outside-network UDP and
-blocked-UDP acceptance depends on Task 9's actual server peer, candidate IP,
-port-range configuration, negotiation and fallback. Once that implementation
-is ready, publish only 40000–40099/udp for this app and open the same range in
-the host firewall, advertising configurable public IP `5.161.142.20`. Measure
-both the DataChannel and explicit UDP-disabled fallback before checking off
-Task 8 Step 3. No UDP/firewall change has been made by this slice.
+Only IPv4 UDP 40000–40099 to 5.161.142.20 is allowed for this app. The deploy
+helper chooses one free port in that range per generation and publishes it
+one-to-one using `--publish=5.161.142.20:PORT:PORT/udp`. It sets
+`RR_NETD_RTC=1`, `RR_NETD_PUBLIC_IP=5.161.142.20` and both `RR_NETD_UDP_BEGIN`
+and `RR_NETD_UDP_END` to that port; `RR_NETD_UDP_PUBLISHED` records the managed
+mapping. libjuice UDP mux lets every client peer share that socket. Bare-metal
+server deployments can configure a wider local UDP range using the same env.
+
+Old and new generations use different ports, so ordinary rolling startup
+health checks remain enabled. No fixed-range bind collision, skipped checks,
+STUN mapping service or change to other apps is needed. On a failed deploy the
+helper restores the previous future-container options/config; the old healthy
+container keeps its original live mapping. Replaying an identical archive
+forces `ps:rebuild` if `git:from-archive` otherwise skips it, ensuring the new
+mapping is actually applied. Seven isolated tests cover failure restoration,
+first deploy, archive rejection and replay/changed-generation behavior.
+
+Race Input/Ack/Frames use unordered, zero-retransmit DataChannel when open.
+Controls, logs and results retain WebSocket. After 5 seconds without opening,
+or on channel close/error, a reliable type-29 `RtcClose` message makes both
+ends permanently resume WebSocket on that connection. Lobby/race/rematch all
+keep the same wrapper/peer. Existing wire IDs are unchanged; old WS-only peers
+can ignore this additive transport control.
+
+Native clients opt in with `--rtc`; bots `--require-rtc` additionally require
+positive send/receive counters for every client. `--no-udp` forces WebSocket;
+`--rtc-close-tick N` exercises mid-race failure. Browser `?rtc=1` opts in,
+`?rtc=1&udp=off` disables it. Native and browser fixtures test real peers plus
+cross-engine traffic. The default remains WebSocket: at real 5% netem loss,
+DataChannel cut late inputs/stalls but did not improve p99 rollback and used
+about 2.8x outgoing bytes. Full measurements are in VERIFICATION.md.
 
 ## Rollback
 

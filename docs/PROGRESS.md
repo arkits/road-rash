@@ -2423,3 +2423,57 @@ with matching hashes and agreed official results. Public counters reported
 one finished race and zero desyncs after the run. Game assets remain outside
 Git, images and artifacts. Task 8 Steps 1/2/4/5 complete; Step 3 remains for
 Task 9's DataChannel implementation and measurements.
+
+
+## October 27, 2026 — plan 34 Task 9 DataChannel and loss measurements
+
+Implemented native libdatachannel and browser RTCPeerConnection peers, with
+shared WebSocket negotiation/upgrade/fallback wrapper. It starts only after
+Welcome, carries Input/Ack/Frames on unordered zero-retransmit SCTP when open,
+keeps controls/logs/results reliable, bounds queues/signals, and uses an
+explicit reliable additive `RtcClose` (type 29, existing bytes unchanged) for
+permanent fallback. Startup negotiation times out at 5 seconds. Server public
+IPv4/UDP bounds are validated config; UDP mux supports eight peers on one port.
+
+Validation: real native 2/8-client 480-tick agreed results; UDP-disabled and
+forced-close variants; strict every-client DataChannel counters; eight clients
+on only UDP 40000; browser-browser and browser-native codec transport fixtures.
+Debug and Release full suites each passed 119/119 (435.44s / 39.68s). Focused
+ASan/UBSan passed 4/4. The pinned libjuice picohash C callback casts trigger
+UBSan function-type checks: only `juice-static` excludes `-fsanitize=function`;
+ASan and other UBSan checks, including all first-party code, remain enabled.
+A formatter split JS strict equality inside EM_ASM; the query is now in a
+format-protected EM_JS block, and browser game/fixtures rebuilt successfully.
+Deployment helper passed seven isolated failure/replay/archive tests.
+
+Actual Linux `tc netem` server-eth0 egress: 20ms delay, 5% packet loss; Release
+native clients, two humans, full AI, fixed server seed 42, 1800-tick cutoff.
+Prediction-depth samples cover live advances/corrections after countdown;
+late/input counts include the sealed live timeline at sampling (2–4 extra
+sealed ticks during result acknowledgement in this initial measurement).
+Stalls are client update observations, not a duration. All runs agreed with
+matching within-run hashes; cross-run hashes are not goldens.
+
+| Mode / repetition | rollback p50 / p95 / p99 | live late / inputs | max client live stalls | egress bytes | netem dropped |
+| --- | --- | --- | --- | --- | --- |
+| WebSocket 1 | 0 / 0 / 6 | 9 / 2882 | 46 | 329740 | 202 |
+| DataChannel 1 | 0 / 0 / 7 | 2 / 2884 | 1 | 922150 | 433 |
+| WebSocket 2 | 0 / 0 / 6 | 15 / 2884 | 47 | 329162 | 222 |
+| DataChannel 2 | 0 / 0 / 6 | 2 / 2884 | 0 | 916015 | 373 |
+
+DataChannel improved late substitutions/stalls here, but p99 was unchanged or
+worse and bytes were about 2.8x higher. Keep WebSocket default; RTC is opt-in
+via native `--rtc` / browser `?rtc=1`. These are server-egress loss fixtures,
+not all WAN/mobile networks. Reproduce using a private Linux daemon container
+with NET_ADMIN: `tc qdisc add dev eth0 root netem delay 20ms loss 5%`; run
+Release `net-bots --clients 2 --ticks 1800 --require-rtc`, then `--no-udp`,
+capturing `tc -s qdisc show dev eth0`. Logs `/tmp/rr-rtc-*`, retained outside
+Git at `/Users/archit/Dev/rr/.plan34-logs/rtc-20261027/`.
+
+Rolling deployment helper assigns each generation a distinct, one-to-one UDP
+port from the approved range, preserving startup checks. It validates the
+bounded code archive, restores future-container config/options on failure,
+and rebuilds identical archive replays when necessary. Host wrapper/key
+restriction installed; one scoped IPv4 UFW rule added after confirming the
+range unused. Production code/UDP acceptance receipt follows the RTC handoff.
+No other app/global proxy/firewall rule was changed.

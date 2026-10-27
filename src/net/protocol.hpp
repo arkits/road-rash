@@ -246,10 +246,15 @@ struct Ready {
     bool operator==(const Ready&) const = default;
 };
 
+// Additive transport control: a reliable, permanent fallback for this connection.
+struct RtcClose {
+    bool operator==(const RtcClose&) const = default;
+};
+
 using Message =
     std::variant<Hello, Welcome, Reject, RoomCreate, RoomJoin, RoomList, RoomListReply, RoomLeave, RoomState,
                  PickCharacter, VoteCourse, Chat, ChatRelay, Start, RtcOffer, RtcAnswer, RtcCandidate, Input,
-                 Frames, Ack, Ping, Pong, Hash, Desync, Result, Official, LogChunk, Ready>;
+                 Frames, Ack, Ping, Pong, Hash, Desync, Result, Official, LogChunk, Ready, RtcClose>;
 
 // Message type byte = variant index + 1 (0 is never valid on the wire).
 inline uint8_t message_type(const Message& m) {

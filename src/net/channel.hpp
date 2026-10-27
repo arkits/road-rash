@@ -17,9 +17,16 @@ namespace rr::net {
 
 enum class ChannelStatus : uint8_t { connecting, open, closed, failed };
 
+struct TransportStats {
+    uint64_t rtc_sent = 0, rtc_received = 0, ws_race_sent = 0, fallbacks = 0;
+    bool rtc_open = false;
+};
+
 class Channel {
   public:
     virtual bool reliable() const = 0;
+    virtual TransportStats transport_stats() const { return {}; }
+    virtual void disable_rtc() {}
     virtual void send(std::span<const uint8_t>) = 0;
     virtual std::optional<std::vector<uint8_t>> poll() = 0; // non-blocking
     virtual ChannelStatus status() const = 0;

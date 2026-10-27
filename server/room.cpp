@@ -7,7 +7,9 @@
 namespace rr::netd {
 namespace {
 
-constexpr int32_t ticks_at(uint64_t ms) { return int32_t(ms * 60 / 1000); }
+constexpr int32_t ticks_at(uint64_t ms) {
+    return int32_t(ms * 60 / 1000);
+}
 
 std::string json_escape(const std::string& s) {
     std::string o;
@@ -53,9 +55,12 @@ void Server::emit(const std::string& event, const std::string& fields) {
 }
 
 std::string Server::health_json(uint64_t) const {
+    size_t rtc_open = 0;
+    for (const auto& [id, c] : conns_) rtc_open += c.reliable->transport_stats().rtc_open;
     std::ostringstream o;
-    o << "{\"ok\":true,\"rooms\":" << rooms_.size() << ",\"connections\":" << conns_.size()
-      << ",\"players\":" << player_count() << ",\"races_started\":" << counters_.races_started
+    o << "{\"rtc_connections\":" << rtc_open << ",\"ok\":true,\"rooms\":" << rooms_.size()
+      << ",\"connections\":" << conns_.size() << ",\"players\":" << player_count()
+      << ",\"races_started\":" << counters_.races_started
       << ",\"races_finished\":" << counters_.races_finished << ",\"late_inputs\":" << counters_.late_inputs
       << ",\"desyncs\":" << counters_.desyncs << ",\"malformed\":" << counters_.malformed
       << ",\"rate_limited\":" << counters_.rate_limited << ",\"reconnects\":" << counters_.reconnects << "}";
@@ -112,7 +117,8 @@ void Server::reject(Conn& c, net::RejectReason why) {
     send(c, net::Reject{why});
     ++counters_.rejected;
     if (why == net::RejectReason::protocol || why == net::RejectReason::rate_limited ||
-        why == net::RejectReason::server_full || why == net::RejectReason::timeout || why == net::RejectReason::kicked)
+        why == net::RejectReason::server_full || why == net::RejectReason::timeout ||
+        why == net::RejectReason::kicked)
         c.closing = true;
 }
 
@@ -193,11 +199,13 @@ void Server::step(uint64_t now) {
         Room& r = it->second;
         for (int s = 0; s < net::max_seats; ++s) {
             Seat& seat = r.seats[size_t(s)];
-            if (seat.occupied && seat.conn == 0 && !r.race && now - seat.disconnected_ms > cfg_.reconnect_window_ms)
+            if (seat.occupied && seat.conn == 0 && !r.race &&
+                now - seat.disconnected_ms > cfg_.reconnect_window_ms)
                 vacate(r, s, now);
         }
         if (r.race) step_race(r, now);
-        const bool empty = std::none_of(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; });
+        const bool empty =
+            std::none_of(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; });
         if (empty && r.spectators.empty()) {
             emit("room_closed", "\"room\":\"" + r.code + "\"");
             it = rooms_.erase(it);
@@ -206,7 +214,8 @@ void Server::step(uint64_t now) {
         if (!r.race && now - r.lobby_since_ms > cfg_.lobby_timeout_ms) {
             for (Seat& s : r.seats)
                 if (s.conn)
-                    if (auto c = conns_.find(s.conn); c != conns_.end()) reject(c->second, net::RejectReason::timeout);
+                    if (auto c = conns_.find(s.conn); c != conns_.end())
+                        reject(c->second, net::RejectReason::timeout);
             emit("room_timeout", "\"room\":\"" + r.code + "\"");
             for (auto& [id, c] : conns_)
                 if (c.room == r.code) c.room.clear();
@@ -245,7 +254,8 @@ void Server::handle(Conn& c, const net::Message& m, uint64_t now) {
             e.code = code;
             e.host = r.seats[size_t(r.host)].alias;
             e.level = r.options.level;
-            e.humans = uint8_t(std::count_if(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; }));
+            e.humans = uint8_t(
+                std::count_if(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; }));
             e.status = r.race ? net::RoomStatus::racing
                               : (e.humans >= net::max_seats ? net::RoomStatus::full : net::RoomStatus::lobby);
             reply.rooms.push_back(e);
@@ -292,7 +302,8 @@ void Server::on_hello(Conn& c, const net::Hello& h, uint64_t now) {
         for (auto& [code, r] : rooms_) {
             for (int s = 0; s < net::max_seats; ++s) {
                 Seat& seat = r.seats[size_t(s)];
-                if (!seat.occupied || seat.token != *h.seat_token || seat.outcome == net::Outcome::left) continue;
+                if (!seat.occupied || seat.token != *h.seat_token || seat.outcome == net::Outcome::left)
+                    continue;
                 if (r.sim_fingerprint != h.sim_fingerprint || r.digest != h.data_digest) continue;
                 if (seat.conn)
                     if (auto old = conns_.find(seat.conn); old != conns_.end()) {
@@ -589,10 +600,13 @@ void Server::step_race(Room& r, uint64_t now) {
     }
     const int32_t sealed = race.sealer->sealed_tick();
     auto feed = [&](Conn& c) {
-        const bool rtc = c.unreliable && c.unreliable->status() == net::ChannelStatus::open;
+        const bool rtc = (c.unreliable && c.unreliable->status() == net::ChannelStatus::open) ||
+                         c.reliable->transport_stats().rtc_open;
         if (rtc) { // repeat everything unacknowledged
-            if (sealed > c.acked)
-                send_race(c, race.sealer->frames(c.acked + 1, cfg_.frames_per_packet));
+            c.sent_upto = std::max(c.sent_upto, c.acked);
+            if (now < c.next_rtc_send_ms) return;
+            c.next_rtc_send_ms = now + 16;
+            if (sealed > c.acked) send_race(c, race.sealer->frames(c.acked + 1, cfg_.frames_per_packet));
             return;
         }
         while (c.sent_upto < sealed) { // reliable: each frame once
@@ -683,10 +697,13 @@ void Server::broadcast_state(Room& r) {
         info.character = seat.character;
         info.vote = seat.vote;
         info.alias = seat.alias;
-        if (auto it = conns_.find(seat.conn); seat.conn && it != conns_.end()) info.ping_ms = it->second.rtt_ms;
+        if (auto it = conns_.find(seat.conn); seat.conn && it != conns_.end())
+            info.ping_ms = it->second.rtt_ms;
         humans += seat.occupied;
     }
-    st.status = r.race ? net::RoomStatus::racing : humans >= net::max_seats ? net::RoomStatus::full : net::RoomStatus::lobby;
+    st.status = r.race                     ? net::RoomStatus::racing
+                : humans >= net::max_seats ? net::RoomStatus::full
+                                           : net::RoomStatus::lobby;
     st.host_seat = uint8_t(r.host);
     for (int s = 0; s < net::max_seats; ++s) {
         const Seat& seat = r.seats[size_t(s)];

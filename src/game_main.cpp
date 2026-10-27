@@ -1,6 +1,7 @@
 #include "rr_build_info.hpp"
 #include "net/client.hpp"
 #include "net/compat.hpp"
+#include "net/rtc_channel.hpp"
 // Shared native/Android frontend and playable race().
 #include <SDL3/SDL.h>
 #include "race_actions.hpp"
@@ -321,7 +322,7 @@ rr::RaceEnd run_race(rr::Game& g, SDL_Renderer* renderer, const rr::RaceOptions&
 int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* renderer, rr::Game& g,
              const std::vector<uint8_t>& exe, const std::string& screenshot, long menu_frames,
              const CliDisplayOverride& cli, const std::string& menu_script, const std::string& net_invite,
-             const std::string& net_server) {
+             const std::string& net_server, bool rtc) {
     const std::string pref = rr::pref_directory();
     const std::string settings_path = (std::filesystem::path(pref) / "settings.txt").string();
     rr::Settings settings = rr::load_settings(settings_path);
@@ -360,7 +361,11 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
 #endif
             return rr::net::make_hello(settings.alias, platform, rr::net::verified_data_digest(assets));
         });
-        fe.net_attach([&settings] { return rr::net::ws_connect(settings.net_server); }, hello);
+        fe.net_attach(
+            [&settings, rtc] {
+                return rr::net::ws_connect(settings.net_server, rr::net::RtcOptions{.enabled = rtc});
+            },
+            hello);
     } catch (const std::exception& error) {
         SDL_Log("Multiplayer unavailable: %s", error.what());
     }
@@ -874,6 +879,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     std::string root, screenshot, video, net_invite, net_server;
+    bool rtc = false;
     int course = 0, bike = 0, level = 0, opponents = 14;
     long run_ticks = -1, menu_frames = -1;
     bool auto_drive = false, into_traffic = false, start_paused = false, first_run_smoke = false,
@@ -888,7 +894,11 @@ int main(int argc, char** argv) {
     CliDisplayOverride cli;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
-        if (a == "--room" && i + 1 < argc)
+        if (a == "--rtc")
+            rtc = true;
+        else if (a == "--no-udp")
+            rtc = false;
+        else if (a == "--room" && i + 1 < argc)
             net_invite = argv[++i];
         else if (a == "--net-server" && i + 1 < argc)
             net_server = argv[++i];
@@ -1053,7 +1063,7 @@ int main(int argc, char** argv) {
         if (!quick_race) {
             boot.apply(480);
             result = run_game(assets, window, renderer, g, exe, screenshot, menu_frames, cli, menu_script,
-                              net_invite, net_server);
+                              net_invite, net_server, rtc);
         } else {
             g.course_name = course_names[course];
             {

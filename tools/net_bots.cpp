@@ -5,7 +5,9 @@
 #include "assets.hpp"
 #include "net/client.hpp"
 #include "net/compat.hpp"
+#include "net/rtc_channel.hpp"
 #include <chrono>
+#include <bit>
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
@@ -15,13 +17,27 @@ int main(int argc, char** argv) {
     try {
         std::string url = "ws://127.0.0.1:8080/net";
         std::string root = std::string(RR_SOURCE_DIR) + "/../cdrom/ROADRASH";
-        int count = 2, ticks = 600, timeout = 90;
+        int count = 2, ticks = 600, timeout = 90, close_tick = -1;
+        bool rtc = false, require_rtc = false;
         for (int i = 1; i < argc; ++i) {
             std::string a = argv[i];
             if (a == "--help") {
                 std::cout << "net-bots [--url ws://host/net] [--disc ROADRASH] [--clients 2..8] [--ticks N] "
-                             "[--timeout seconds]\n";
+                             "[--timeout seconds] [--rtc|--no-udp] [--require-rtc] [--rtc-close-tick N]\n";
                 return 0;
+            }
+            if (a == "--rtc") {
+                rtc = true;
+                continue;
+            }
+            if (a == "--no-udp") {
+                rtc = false;
+                continue;
+            }
+            if (a == "--require-rtc") {
+                rtc = true;
+                require_rtc = true;
+                continue;
             }
             if (i + 1 == argc) throw std::runtime_error("missing option value");
             std::string v = argv[++i];
@@ -33,6 +49,8 @@ int main(int argc, char** argv) {
                 count = std::stoi(v);
             else if (a == "--ticks")
                 ticks = std::stoi(v);
+            else if (a == "--rtc-close-tick")
+                close_tick = std::stoi(v);
             else if (a == "--timeout")
                 timeout = std::stoi(v);
             else
@@ -51,9 +69,16 @@ int main(int argc, char** argv) {
         // simulation fingerprint, so staging smoke exercises the real gate.
         auto hello = make_hello("Bot", Platform::bot, verified_data_digest(assets));
         std::vector<std::unique_ptr<Client>> clients;
+        std::vector<Channel*> transports;
+        std::vector<int> depths;
+        uint64_t max_stalls = 0, late = 0, late_total = 0, input_total = 0;
+        std::vector<int32_t> measured_tick(size_t(count), -1);
+        std::vector<uint64_t> base_stalls(size_t(count), 0);
         for (int k = 0; k < count; ++k) {
             hello.alias = "Bot" + std::to_string(k + 1);
-            clients.push_back(std::make_unique<Client>(ws_connect(url), hello, factory));
+            auto channel = ws_connect(url, RtcOptions{.enabled = rtc});
+            transports.push_back(channel.get());
+            clients.push_back(std::make_unique<Client>(std::move(channel), hello, factory));
         }
         for (auto& client : clients) client->set_automatic_results(false);
         std::string code;
@@ -73,6 +98,20 @@ int main(int argc, char** argv) {
                                         ((t / (43 + 7 * k)) % 3 == 1 ? rr::control_left : 0));
                     },
                     ticks);
+                if (c.rollback()) {
+                    const auto tick = c.rollback()->current_tick();
+                    if (tick < 360)
+                        base_stalls[size_t(k)] = c.stats().stalls;
+                    else {
+                        if (tick != measured_tick[size_t(k)] || c.stats().rollback_depth > 0)
+                            depths.push_back(c.stats().rollback_depth);
+                        measured_tick[size_t(k)] = tick;
+                        max_stalls = std::max(max_stalls, c.stats().stalls - base_stalls[size_t(k)]);
+                    }
+                    late = std::max(late, c.stats().late);
+                    if (close_tick >= 0 && c.rollback()->confirmed_tick() >= close_tick)
+                        transports[size_t(k)]->disable_rtc();
+                }
                 while (auto m = c.poll_event()) {
                     if (std::holds_alternative<Welcome>(*m) && k == 0 && !created) {
                         c.send(RoomCreate{RoomOptions{0, 2, true, false}});
@@ -113,6 +152,31 @@ int main(int argc, char** argv) {
                 }
             }
             if (std::all_of(official.begin(), official.end(), [](bool b) { return b; })) {
+                if (auto r = clients.front()->rollback())
+                    for (size_t t = 360; t < std::min(r->frames().size(), size_t(ticks)); ++t) {
+                        late_total += std::popcount(r->frames()[t].late);
+                        input_total += r->frames()[t].words.size();
+                    }
+                std::sort(depths.begin(), depths.end());
+                auto percentile = [&](double p) {
+                    return depths.empty() ? 0 : depths[size_t(p * double(depths.size() - 1))];
+                };
+                uint64_t sent = 0, received = 0, fallbacks = 0;
+                for (auto* channel : transports) {
+                    auto stats = channel->transport_stats();
+                    if (require_rtc && (!stats.rtc_sent || !stats.rtc_received))
+                        throw std::runtime_error("every client must exchange DataChannel race traffic");
+                    sent += stats.rtc_sent;
+                    received += stats.rtc_received;
+                    fallbacks += stats.fallbacks;
+                }
+                if (require_rtc && (!sent || !received))
+                    throw std::runtime_error("DataChannel required but no race traffic crossed it");
+                std::cout << "transport rtc_sent=" << sent << " rtc_received=" << received
+                          << " fallbacks=" << fallbacks << " rollback_p50=" << percentile(.5)
+                          << " rollback_p95=" << percentile(.95) << " rollback_p99=" << percentile(.99)
+                          << " late=" << late << " live_late=" << late_total << " live_inputs=" << input_total
+                          << " stalls=" << max_stalls << "\n";
                 std::cout << "net-bots OK: official cutoff results in room " << code << "\n";
                 return 0;
             }
