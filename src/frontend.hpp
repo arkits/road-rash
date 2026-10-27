@@ -143,9 +143,13 @@ class Frontend {
         display_w_ = w;
         display_h_ = h;
     }
-    // Test-only pin for the Restroom/Rest1..6 variant (plan 13 Task 6 Step 2):
-    // the RNG stream still advances once per background_for call.
+    // Test-only pins (plan 13 Task 6 Step 2): the RNG stream still advances
+    // the same draws as without them.
     void set_rest_picture_for_test(int n) { rest_picture_override_ = n; }
+    void set_schmooze_for_test(int rider, int attitude) {
+        schmooze_rider_override_ = rider;
+        schmooze_attitude_override_ = attitude;
+    }
 
   private:
     struct Dialog {
@@ -215,7 +219,9 @@ class Frontend {
     int schmooze_target_ = 0x19, schmooze_count_ = 0;       // 0x00469e1c, 0x0046ab40
     uint8_t schmooze_used_ = 0;                             // 0x00485ce4
     int rest_picture_ = 1;                                  // 0x00485ce8
-    int rest_picture_override_ = 0; // test-only pin for background_for (plan 13 Task 6 Step 2)
+    int rest_picture_override_ = 0;       // test-only pin for background_for (plan 13 Task 6 Step 2)
+    int schmooze_rider_override_ = -1;    // test-only rider 0..7 for prepare_schmooze
+    int schmooze_attitude_override_ = -1; // test-only attitude 0..2 (FNH) for prepare_schmooze
     RgbImage background_, dark_;
     std::string background_name_;
     int display_w_ = 0, display_h_ = 0;
@@ -228,6 +234,8 @@ class Frontend {
     uint32_t desc_format_ = 0, desc_flags_ = 0;
     bool desc_fill_ = false;    // 0x00420470 repaints the dark box only for flags & 8 items
     std::string length_footer_; // course Length line for the showroom footer (stale = faithful)
+    std::string player_footer_; // 0x4208d0 bh&8 player line, centered at y=380 (masked in tests)
+    std::string price_footer_;  // 0x4208d0 bh&1 bike line, centered at y=380 (masked in tests)
     std::string price_text_;
     bool qualified_overlay_ = false;
     bool dark_screen_ = false; // standings: the darkened copy fills the screen

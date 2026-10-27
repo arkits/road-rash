@@ -552,7 +552,8 @@ The course screens share one item array; the sixth item is copied from `0x004691
 - LOGFONTs (sole `CreateFontA` site `0x004488e3`, menu table `0x004239e5`): positive cell heights (72/42/36/32/24/20/18/16/15), lfWidth 0, weight 0 (FW_DONTCARE — boldness lives in the FUTB file) except New Courier Bold 700, OUT_TT_ONLY_PRECIS, DEFAULT_QUALITY.
 - ppem rule (292/292 TEXTMETRIC heights 8..80, all four faces): `ppem = round(H*upm/cell)`, then step down once when `round(cell*ppem/upm) > H`. tmAscent/tmDescent = rounded scaled win metrics; tmHeight = their sum (e.g. 33 at 32px FUTR — the old multiline drift). tmExternalLeading is 0 everywhere.
 - Advances = `round(design*ppem/upm)` (380/380 ASCII vs GetCharABCWidthsA; hdmx is NOT used). Multiline DrawText pitch = tmHeight. Bitmaps stay unhinted in the port (remaining fringe).
-- Remaining GDI deltas (open): hinted bitmap shapes (1-bit scan conversion), a ~3px right-aligned pen offset on Demi-24 descs (CALCRECT vs draw width nuance under investigation), `>=0x80` cp1252 bytes (GDI has real default-char widths; the port uses .notdef advance).
+- DrawText CALCRECT returns the measured wrapped width even under maxw (probe: 296/293/269/156 vs input 300); the port's old wordbreak carve-out pinned boxes to maxw and shifted right-aligned text. Fixed.
+- Remaining GDI deltas (open): hinted bitmap shapes (1-bit scan conversion); `>=0x80` cp1252 bytes differ (GDI has real default-char widths; the port uses .notdef advance).
 
 **Colours** (`0x0041fc90`): normal `#DEFFF0`, focused `#E1E180` with a Wingdings arrow, disabled/dimmed `#A0A0A0`, skipped `#FF6432`, titles `#FF6432`. All text has a 2-pixel black shadow.
 
@@ -563,6 +564,23 @@ The course screens share one item array; the sixth item is copied from `0x004691
 - Description dark-box repaint (October 26, 2026; static disassembly of `0x00420470` + pixel evidence): the fill/`0x41fb90` invalidate is gated on the item-flags bit 3. Pixel-verified across goldens: restroom/jukebox/graphics (`0xc`) fill; characters (`0x5`), course (`0x4815`) and showroom (`0x184`) bios draw text on the photo. Net rule: fill iff `flags & 8` (the 0x4208d0 dynamic path's `or ebx,0xc` does not force it — showroom proves the negative).
 - Standings (`0x22`): rows, title and the darkened fill are populated by the `0x00421290` results handler (per-row flags `0x8040` shown vs `0x8000`), not on screen entry: direct `0x00421df0` entry shows the bare photo (traced golden) with only the dynamic-slot result line as a footer in the last row's rect. The port mirrors this (rows/title/darken gated on handler state).
 - Footers (traced positions, masked): course Length at (8, y367) is the desc's line 8; the showroom draws the blurb only and a separate Demi-24 Length footer at (right, y301); results footers are the wide item caption (dynamic slot, masked y>=370). Price (`0x46b058`) and player (`0x46b09c`) footers at y380 are real-play draws whose content mapping (0x4208d0 bh&1/bh&8 arg slots) is recovered but not yet ported — masked in acceptance, open for real-play fidelity.
+- Footer content mapping (October 26, 2026; byte-exact formats + golden-verified):
+  player `0x46b09c` = `"     %s     %s     %s%s  $%u     "` with
+  (player_name, str(91+level), str(29) "Cash", str(504) ":", cash);
+  bike `0x46b058` = `"  %s     %s%s%s%s $%u   %s%s %s  "` with
+  (player_name, str(29), str(505) "+", str(30) "Trade", str(504) ":",
+  cash+bike_price/2, str(31) "Bike", str(504) ":", str(bike_slot)).
+  Runtime table `0x475378` is slot-indexed (`+0x74`=slot 29, `+0x7e0`=slot
+  504, `+0x7e4`=slot 505). Bike-name slots via `0x420aa0` (jumptable at
+  `0x420b0c`: bike 0→0x70, 1..14→0x71,0x72,0x74,0x73,0x7a,0x7d,0x7b,0x7e,
+  0x7c,0x75,0x78,0x76,0x79,0x77). Trade-in = `bike_price[bike]>>1`
+  (`0x468fc0`, confirmed `$2748 = 1000 + 3497>>1` for Cydney). Both footers
+  centered in 640, Regular 32 (caller-0x4208d0 desc face/height); Length
+  footer is Demi 24. Player footer gated on focused-item `flags & 0x800`
+  (raw high byte bh&8 — verified on street/thrash/bulletin/panzer goldens,
+  including a masked street footer); price footer on the showroom screen.
+  The `[0x4b8a12]` level-string index is assumed to track career level
+  (slot 91+level; golden has 0 there).
 - Screen pictures with no `0x0041d970` case keep the previous background: jukebox (`0x11`) and Graphics Options (`0x13`) inherit the restroom photo (acceptance trace cache 1 holds `Restroom/Rest3` through restroom/jukebox/controls/graphics). Characters entry shows the focused rider's `Chars/<name>-N` full-screen via the focus-image swap (`0x0041dbc0`); the `-F` variant is the race-loading picture.
 - Configure Input (`0x12`) key labels live in string slots 160-168, shared with the character bios: the acceptance `enter 18` golden shows stale `Height: ...` bios because the script bypasses the restroom-row handler (`0x0040fd90`) that refreshes them in real play. The port refreshes labels on every `0x12` entry, which matches all reachable play paths; the stale-label pixels sit inside masked item rects.
 

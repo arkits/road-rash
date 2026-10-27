@@ -529,6 +529,20 @@ void Frontend::describe(const MenuItem& m) {
     // text on the photo. (Caller 0x4208d0 forces `or ebx,0xc` for its dynamic
     // descs, but the fill follows the item flags.)
     desc_fill_ = (m.flags & 0x8u) != 0;
+    // 0x00421290/0x00420b50-style footers (0x4208d0 bh&8 player line and bh&1
+    // bike line): centered at y=380, drawn on focus. Masked in acceptance
+    // (y>=370) but visible in real play; content formats 0x46b09c/0x46b058.
+    if (m.flags & 0x800u) {
+        const std::string level = str(91 + career_.state.level);
+        if (career_.mode == GameMode::big_game)
+            player_footer_ =
+                format_c("     %s     %s     %s%s  $%u     ",
+                         {A(player_name()), A(level), A(str(29)), A(str(504)), A(long(career_.state.cash))});
+        else
+            player_footer_ = format_c("     %s              %s      ", {A(player_name()), A(level)});
+    } else {
+        player_footer_.clear();
+    }
 }
 
 void Frontend::set_focus(size_t index) {
@@ -550,6 +564,24 @@ void Frontend::set_focus(size_t index) {
     else if (!(m.flags & item_flag::popup_item)) {
         desc_slot_ = 0;
         desc_fill_ = false;
+        player_footer_.clear();
+    }
+    // Showroom price footer (0x4208d0 bh&1 bike branch, format 0x46b058):
+    // recomputed per focus from career state; cleared elsewhere so it never
+    // leaks onto other screens. Masked in acceptance (y>=370) but visible
+    // in real play; golden-verified content ("Cash+Trade: $2748 ...").
+    if (screen_ == 0x18) {
+        static constexpr int bike_name_slot[14] = {0x71, 0x72, 0x74, 0x73, 0x7a, 0x7d, 0x7b,
+                                                   0x7e, 0x7c, 0x75, 0x78, 0x76, 0x79, 0x77};
+        const int bike = career_.state.bike;
+        const int name_slot = bike >= 1 && bike <= 14 ? bike_name_slot[bike - 1] : 0x70;
+        const long trade = long(tables_.bike_price.at(size_t(std::min(bike, 14)))) / 2;
+        price_footer_ = format_c("  %s     %s%s%s%s $%u   %s%s %s  ",
+                                 {A(player_name()), A(str(29)), A(str(505)), A(str(30)), A(str(504)),
+                                  A(long(career_.state.cash) + trade), A(str(31)), A(str(504)),
+                                  A(str(size_t(name_slot)))});
+    } else {
+        price_footer_.clear();
     }
 }
 
@@ -621,6 +653,7 @@ void Frontend::prepare_schmooze(int previous) {
     do r = int(next_random() & 7);
     while (schmooze_used_ & (1u << r));
     schmooze_used_ |= uint8_t(1u << r);
+    if (schmooze_rider_override_ >= 0 && schmooze_rider_override_ < 8) r = schmooze_rider_override_;
     const int level = career_.state.level;
     int32_t value = 0;
     if (character < 10) {
@@ -633,7 +666,9 @@ void Frontend::prepare_schmooze(int previous) {
         c = 1;
     else
         c = value >= (16 - penalty) * 2000 - level * 3000 ? 3 : 2;
-    const int att = data_.attitude[size_t(c)] % 3;
+    const int att = schmooze_attitude_override_ >= 0 && schmooze_attitude_override_ < 3
+                        ? schmooze_attitude_override_
+                        : data_.attitude[size_t(c)] % 3;
     const auto& row = data_.schmooze[size_t(level * 8 + r)];
     std::vector<int> choices = {row[size_t(att)], row[size_t(3 + att)]};
     if (row[12] == character) choices.push_back(row[size_t(6 + att)]);
@@ -2134,6 +2169,14 @@ void Frontend::draw_scale1(RgbImage& out) const {
         draw_text_box(out, {621 - w, 300, 621, 332}, Face::futura_demi, 24, length_footer_,
                       dt::right | dt::singleline, colour_light);
     }
+    // Caller-0x4208d0 footers: player line (bh&8) and bike price line (bh&1),
+    // centered at y=380. Masked in acceptance but visible in real play.
+    if (!player_footer_.empty())
+        draw_text_box(out, {0, 380, 640, 420}, Face::futura_regular, 32, player_footer_,
+                      dt::center | dt::singleline, colour_light);
+    if (!price_footer_.empty())
+        draw_text_box(out, {0, 380, 640, 420}, Face::futura_regular, 32, price_footer_,
+                      dt::center | dt::singleline, colour_light);
     if (!price_text_.empty()) {
         TextRect box{0x10, 0x154, 0x10 + 0xf0 + 16, 0x154 + 30 + 16};
         fill_from(out, dark_, box.left, box.top, box.right - box.left, box.bottom - box.top);
@@ -2385,6 +2428,12 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
         textbox({621 - w, 300, 621, 332}, Face::futura_demi, 24, length_footer_, dt::right | dt::singleline,
                 colour_light);
     }
+    if (!player_footer_.empty())
+        textbox({0, 380, 640, 420}, Face::futura_regular, 32, player_footer_, dt::center | dt::singleline,
+                colour_light);
+    if (!price_footer_.empty())
+        textbox({0, 380, 640, 420}, Face::futura_regular, 32, price_footer_, dt::center | dt::singleline,
+                colour_light);
     if (!price_text_.empty()) {
         TextRect box{0x10, 0x154, 0x10 + 0xf0 + 16, 0x154 + 30 + 16};
         fill(box.left, box.top, box.right - box.left, box.bottom - box.top);

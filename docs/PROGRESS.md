@@ -81,26 +81,31 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
   against 292/292 TEXTMETRIC points and 380/380 ASCII advances:
   `ppem = round(H*upm/cell)`, step down once when the rounded scaled cell
   exceeds H; advance = `round(design*ppem/upm)`; multiline pitch = tmHeight
-  (e.g. 33 at 32px Futura Regular — the characters/graphics drift source).
-  `src/text.cpp` implements the ppem pitch + advances (bitmaps stay unhinted
-  stb); pins tighten to characters 0.80/0.08 (was 0.70/0.15) and graphics to
-  the standard 0.12/0.05 (was 0.65/0.10).
+  (e.g. 33 at 32px Futura Regular — the characters/graphics drift source);
+  CALCRECT returns measured width under maxw (fixed a wordbreak carve-out
+  that pinned boxes to maxw). `src/text.cpp` implements ppem pitch,
+  advances and CALCRECT (bitmaps stay unhinted stb); pins tighten to
+  characters 0.80/0.08 (was 0.70/0.15), graphics and showroom to standard
+  (were 0.65/0.10 and 0.85/0.08).
 - Two Wine acceptance runs (`analysis/frontend/acceptance-20261027/`,
   new scripts, same harness) capture the remaining scripted screens:
   thrash, loading, olleys, showroom, panzer, bulletin (run 1) and
   wrecked/busted/won/lost/penalty/standings (run 2, variants read from the
-  trace: Wreck4/Bust4/Win4/Lose1). All pinned in `frontend_test` with the
+  trace: Wreck4/Bust4/Win4/Lose1) plus schmooze (run 3: Pearl-N via a
+  rider/attitude test override). All pinned in `frontend_test` with the
   item-rect mask: thrash/bulletin/panzer/olleys/loading/wrecked/busted/won/
   lost at standard pins (98-100% exact, 0% big), penalty 100%/0%,
-  standings 100%/0% (cover 0.95), showroom 93%/5% (pin 0.85/0.08).
+  standings 100%/0% (cover 0.95), showroom 93%/4% (standard),
+  schmooze 100%/0%.
 - Fidelity fixes from the goldens: `0x00420470` desc fill follows raw
   `flags & 8` (characters/course/showroom bios draw on the photo; verified
   per-pixel); standings rows/title/darken move to the 0x00421290 handler
   with a bare-screen direct entry, footer from the dynamic slot at the last
-  row; showroom Length footer (Demi 24, y=301) with blurb-only desc.
-  Open (masked, documented): price/player footers content mapping
-  (0x4208d0 bh&1/bh&8 branches, formats 0x46b058/0x46b09c) and exact
-  hinted bitmaps.
+  row; showroom Length footer (Demi 24, y=301) with blurb-only desc; player
+  footer (0x46b09c) and price footer (0x46b058, trade = price/2, bike names
+  via 0x420aa0) centered at y=380, content-mapped and visually verified
+  (masked in tests). Open (documented): exact hinted bitmaps; `>=0x80`
+  bytes; native-only screens.
 - `race_cache_test` RGB baselines (scale 2/4) re-recorded: the GDI advance
   rule shifts HUD glyphs by whole pixels; scene bytes
   (`original_scene` hashes) are unchanged. Full gate 106/106 in

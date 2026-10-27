@@ -184,7 +184,11 @@ int TextRenderer::draw_box(RgbImage* image, Face face, int height, TextRect& rec
     if (flags & dt::calcrect) {
         int w = 0;
         for (const auto& l : lines) w = std::max(w, width(face, height, l));
-        if (!(flags & dt::wordbreak) || w > max_width || max_width <= 0) rect.right = rect.left + w;
+        // GDI returns the measured width even under maxw (textprobe
+        // CALCRECT rights 296/293/269/156 vs input 300); the old
+        // wordbreak carve-out pinned boxes to maxw and shifted
+        // right-aligned text.
+        if (max_width > 0) rect.right = rect.left + w;
         rect.bottom = rect.top + total;
         return total;
     }
