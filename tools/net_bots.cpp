@@ -83,8 +83,9 @@ int main(int argc, char** argv) {
         for (auto& client : clients) client->set_automatic_results(false);
         std::string code;
         bool created = false;
-        std::vector<bool> joined(size_t(count), false), selected(size_t(count), false),
-            ready(size_t(count), false), reported(size_t(count), false), official(size_t(count), false);
+        std::vector<bool> welcomed(size_t(count), false), joined(size_t(count), false),
+            full_roster(size_t(count), false), ready(size_t(count), false), reported(size_t(count), false),
+            official(size_t(count), false);
         std::optional<uint64_t> final_hash;
         const uint64_t begin = steady_ms();
         while (steady_ms() - begin < uint64_t(timeout) * 1000) {
@@ -113,21 +114,19 @@ int main(int argc, char** argv) {
                         transports[size_t(k)]->disable_rtc();
                 }
                 while (auto m = c.poll_event()) {
-                    if (std::holds_alternative<Welcome>(*m) && k == 0 && !created) {
-                        c.send(RoomCreate{RoomOptions{0, 2, true, false}});
-                        created = true;
+                    if (std::holds_alternative<Welcome>(*m)) {
+                        welcomed[size_t(k)] = true;
+                        if (k == 0 && !created) {
+                            c.send(RoomCreate{RoomOptions{0, 2, true, false}});
+                            created = true;
+                        }
                     }
                     if (auto s = std::get_if<RoomState>(&*m)) {
                         if (k == 0) code = s->code;
                         const int occupied =
                             int(std::count_if(s->seats.begin(), s->seats.end(),
                                               [](const SeatInfo& seat) { return seat.occupied; }));
-                        // Wait for the complete roster before readying any seat.
-                        if (occupied == count && !selected[size_t(k)]) {
-                            c.send(PickCharacter{uint8_t(k + 1)});
-                            c.send(VoteCourse{4});
-                            selected[size_t(k)] = true;
-                        }
+                        full_roster[size_t(k)] = occupied == count;
                     }
                     if (auto o = std::get_if<Official>(&*m)) {
                         if (!o->agreed || o->rows.size() != size_t(count))
@@ -135,17 +134,21 @@ int main(int argc, char** argv) {
                         official[size_t(k)] = true;
                     }
                 }
-                if (selected[size_t(k)] && !ready[size_t(k)]) {
+                if (full_roster[size_t(k)] && !ready[size_t(k)]) {
                     const auto transport = transports[size_t(k)]->transport_stats();
                     // The shared bot process builds races synchronously. Finish
                     // signalling before Ready so asset loading cannot starve it.
                     if (!rtc || transport.rtc_open || transport.fallbacks || now - begin > 6000) {
+                        // Final votes trigger Start on the server, so delay the
+                        // choices too, rather than only the redundant Ready.
+                        c.send(PickCharacter{uint8_t(k + 1)});
+                        c.send(VoteCourse{4});
                         c.send(Ready{});
                         ready[size_t(k)] = true;
                     }
                 }
                 if (c.failed()) throw std::runtime_error("server rejection, desync or client queue overflow");
-                if (k && !code.empty() && !joined[size_t(k)]) {
+                if (k && welcomed[size_t(k)] && !code.empty() && !joined[size_t(k)]) {
                     c.send(RoomJoin{code, false});
                     joined[size_t(k)] = true;
                 }
@@ -193,6 +196,13 @@ int main(int argc, char** argv) {
                 return 0;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        }
+        for (size_t k = 0; k < clients.size(); ++k) {
+            const auto stats = transports[k]->transport_stats();
+            std::cerr << "client " << k << " welcomed=" << welcomed[k] << " joined=" << joined[k]
+                      << " full_roster=" << full_roster[k] << " selected=" << ready[k]
+                      << " rtc_open=" << stats.rtc_open << " fallbacks=" << stats.fallbacks
+                      << " rtc_sent=" << stats.rtc_sent << " rtc_received=" << stats.rtc_received << "\n";
         }
         throw std::runtime_error("timed out waiting for official cutoff results");
     } catch (const std::exception& e) {
