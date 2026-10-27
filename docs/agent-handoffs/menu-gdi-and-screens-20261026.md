@@ -21,20 +21,25 @@ entries), `frontend_test.cpp` (append-only blocks), `frontend.cpp/hpp`,
 
 ## Changed files (mine — safe to commit with explicit paths)
 
-- `src/text.cpp`, `src/text.hpp`: GDI ppem rule + tmHeight pitch; advance =
-  `round(design*ppem/upm)`; `line_height()` returns tmHeight; `draw_box`
-  steps by pitch. Bitmaps stay unhinted stb (documented).
+- `src/text.cpp`, `src/text.hpp`: GDI ppem rule + tmHeight pitch +
+  measured-width CALCRECT; advance = `round(design*ppem/upm)`;
+  `line_height()` returns tmHeight; `draw_box` steps by pitch. Bitmaps stay
+  unhinted stb (documented).
 - `src/frontend.cpp`, `src/frontend.hpp`: desc fill gate corrected to raw
   `flags & 8`; standings rows/title/darken moved to the 0x00421290 handler
   (`standings_ready_` gate; bare direct entry); standings footer from the
   dynamic slot in the last row's rect, disabled 0x22 rows skipped in paint;
-  showroom blurb-only desc + Demi-24 Length footer (`length_footer_`).
-- `tests/frontend_test.cpp`: 12 new screens pinned (thrash/loading/olleys/
-  showroom/panzer/bulletin/wrecked/busted/won/lost/penalty/standings);
-  characters 0.80/0.08, graphics standard, showroom 0.85/0.08,
+  showroom blurb-only desc + Demi-24 Length footer (`length_footer_`);
+  player/price footers centered at y=380 (`player_footer_` on `flags & 0x800`
+  focus with 0x46b09c content, `price_footer_` on showroom with 0x46b058
+  content, trade = price/2, bike names via 0x420aa0); schmooze
+  rider/attitude test override.
+- `tests/frontend_test.cpp`: 13 new screens pinned (thrash/loading/olleys/
+  showroom/panzer/schmooze/bulletin/wrecked/busted/won/lost/penalty/
+  standings); characters 0.80/0.08, everything else standard except
   standings/controls cover 0.95.
 - `tests/race_cache_test.cpp`: scale-2/scale-4 RGB baselines re-recorded
-  (HUD glyphs move with the advance rule; scene hashes unchanged).
+  (HUD glyphs move with the advance rule; scene hashes intact).
 - `tools/textprobe.c`: Wine-GDI ground-truth probe (i686 mingw, headless).
 - Docs: `docs/PROGRESS.md`, `docs/VERIFICATION.md`,
   `docs/REVERSE_ENGINEERING.md` ("GDI text metrics", fill-gate correction,
@@ -77,17 +82,15 @@ entries), `frontend_test.cpp` (append-only blocks), `frontend.cpp/hpp`,
 
 ## Open (all masked or documented; none block the gate)
 
-1. Price/player footers (y380, masked): formats 0x46b058/0x46b09c and arg
-   slots mapped in the handoff/RE; runtime string-table args + y-positions
-   need one more disassembly pass + a race-path golden to verify.
-2. Schmooze golden: nondeterministic rider/attitude; needs RNG control or
-   a handler-driven capture.
-3. Exact hinted bitmaps (FreeType vendoring decision) + the ~3px
-   right-aligned pen offset.
+1. ~~Price/player footers~~ DONE this session: formats byte-exact
+   (0x46b058/0x46b09c), args mapped (slots 29/30/31/504/505, level slot
+   91+level, cash, trade = price/2, 0x420aa0 bike names), centered y=380,
+   visually verified vs goldens. `[0x4b8a12]` level index is an assumption.
+2. ~~Schmooze golden~~ DONE: run-3 capture (Pearl-N) pinned 100%/0% via
+   rider/attitude override; the random line stays masked.
+3. Exact hinted bitmaps (FreeType vendoring decision — project-level call).
 4. Native dialogs/pause/pages have no original — never pinnable.
-5. `tools/textprobe.c` is new/untracked; `/tmp` holds the analysis
-   scripts (adv_cmp, wrap, bear, shape, dump_* — reproducible from the
-   handoff description).
+5. `tools/textprobe.c` committed; `/tmp` holds ephemeral analysis tools.
 
 ## File claims / coordination
 

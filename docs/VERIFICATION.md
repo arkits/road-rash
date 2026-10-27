@@ -137,22 +137,24 @@ with ORDER).
   renderer: characters 86%/6% (pin 0.80/0.08), graphics 77%/4% (standard
   pins now). Bitmaps stay unhinted stb: remaining fringe is GDI-shape
   residual, documented open.
-- New: the test replays both 20261027 acceptance runs and pins twelve more
-  goldens with the same item-rect-driven mask, all at standard pins unless
-  noted: `fe-thrash`/`fe-bulletin` 98%/0%, `fe-olleys`/`fe-panzer` 98%/0%,
-  `fe-loading` 94%/0%, `fe-wrecked` 93%/0%, `fe-busted` 96%/0%,
-  `fe-won` 97%/0%, `fe-lost` 96%/0%, `fe-penalty` 100%/0%,
-  `fe-standings` 100%/0% (mask 94%, ceiling 0.95),
-  `fe-showroom` 93%/5% (pin 0.85/0.08: Length footer ported, price footer
-  and a ~3px right-aligned pen offset remain open, both masked/documented).
+- New: the test replays all three 20261027 acceptance runs and pins
+  thirteen more goldens with the same item-rect-driven mask, all at
+  standard pins unless noted: `fe-thrash`/`fe-bulletin` 98%/0%,
+  `fe-olleys`/`fe-panzer` 98%/0%, `fe-loading` 94%/0%,
+  `fe-wrecked` 93%/0%, `fe-busted` 96%/0%, `fe-won` 97%/0%,
+  `fe-lost` 96%/0%, `fe-penalty` 100%/0%, `fe-standings` 100%/0%
+  (mask 94%, ceiling 0.95), `fe-schmooze` 100%/0% (Pearl-N via override),
+  `fe-showroom` 93%/4% (standard).
   Result variants (Wreck4/Bust4/Win4/Lose1) come from the run-2 trace and
   the test override; jukebox/graphics inheritance re-verified.
 - Fidelity fixes behind the pins: desc fill gated on raw `flags & 8`
   (course/showroom/characters bios have no box); standings rows/title move
   to the 0x00421290 handler with conditional darken (bare direct entry,
   footer from the dynamic slot); showroom blurb-only desc + Demi-24 Length
-  footer at the traced y=301. Disassembly evidence in
-  REVERSE_ENGINEERING.md "Front end".
+  footer at the traced y=301; player/price footers centered at y=380 with
+  fully mapped content (formats, slots 29/30/31/504/505, trade = price/2,
+  0x420aa0 bike names), visually verified (masked in tests).
+  Disassembly evidence in REVERSE_ENGINEERING.md "Front end".
 - `race_cache_test`: scale-2/scale-4 RGB baselines re-recorded after the
   advance rule (HUD glyphs move by whole pixels); `original_scene` scene
   hashes unchanged, all downstream pixel/allocation checks pass.

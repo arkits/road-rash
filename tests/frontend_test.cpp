@@ -1121,6 +1121,8 @@ int main(int argc, char** argv) {
             RR_SOURCE_DIR "/analysis/frontend/acceptance-20261027/40c6e154036a4fac89e4101116bc7ed0/");
         const std::string acc3 = std::string(
             RR_SOURCE_DIR "/analysis/frontend/acceptance-20261027/6fc8190a10464dc39bd7af9feb32cfe3/");
+        const std::string acc4 = std::string(
+            RR_SOURCE_DIR "/analysis/frontend/acceptance-20261027/3e66c5e3d33d4f39b4732dad8805686c/");
         fe2.enter(0x0a);
         check(fe2.screen() == 0x0a, "acceptance replay reaches Thrash courses");
         snap2("acc-thrash");
@@ -1136,14 +1138,18 @@ int main(int argc, char** argv) {
         fe2.enter(0x18);
         check(fe2.screen() == 0x18, "acceptance replay reaches the showroom");
         snap2("acc-showroom");
-        // Length footer + desc truncation are pinned, but a ~3px GDI pen
-        // offset in the right-aligned desc block remains (unhinted shapes):
-        // characterization pin.
-        masked_compare_items("fe-showroom", acc2 + "fe-showroom.bmp", img2, fe2.items(), 0.85, 0.08);
+        masked_compare_items("fe-showroom", acc2 + "fe-showroom.bmp", img2, fe2.items());
         fe2.enter(0x19);
         check(fe2.screen() == 0x19, "acceptance replay reaches Der Panzer Klub");
         snap2("acc-panzer");
         masked_compare_items("fe-panzer", acc2 + "fe-panzer.bmp", img2, fe2.items());
+        // Schmooze: the run-3 golden shows Pearl at attitude N (FNH[1]).
+        // The choice line stays random (masked); the portrait is pinned.
+        fe2.set_schmooze_for_test(4, 1);
+        fe2.enter(0x1a);
+        check(fe2.screen() == 0x1a, "acceptance replay reaches the schmooze screen");
+        snap2("acc-schmooze");
+        masked_compare_items("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, fe2.items());
         fe2.enter(0x1b);
         check(fe2.screen() == 0x1b, "acceptance replay reaches the bulletin board");
         snap2("acc-bulletin");
