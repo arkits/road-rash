@@ -2,7 +2,18 @@
 
 These plans take the port from its current state to a **100% complete, feature-complete native game**: macOS ARM64 first, then Android ARM64, Linux and Windows. Each plan is implemented in full; do not defer tasks to later. Read this file first. It holds the current status, the review findings, the order of the remaining plans, and the conventions every plan assumes.
 
-Last reviewed: **October 14, 2026**: plans 25–31 landed (review fixes, one factory, field proxy, race shell, render performance, test/build tooling, this docs pass); plans 21–22 added October 12; plan 21 gained Task 10 (wide menus). See [../PROGRESS.md](../PROGRESS.md) for the per-session timeline.
+Last reviewed: **October 26, 2026** (status update below); full review October 14, 2026: plans 25–31 landed (review fixes, one factory, field proxy, race shell, render performance, test/build tooling, this docs pass); plans 21–22 added October 12; plan 21 gained Task 10 (wide menus). See [../PROGRESS.md](../PROGRESS.md) for the per-session timeline.
+
+## Update (October 26, 2026)
+
+The October 14 snapshot below is historical. [../CURRENT_STATUS.md](../CURRENT_STATUS.md) holds the current evidence. Since then:
+
+- **Simulation:** the full Napa level-1 field matches the original for 2400/2400 ticks and a human-input capture for 1431/1431 ticks, with one RNG anchor. Other levels, courses and scenarios remain open (plan 10).
+- **Police:** live (periodic and DZHR spawns, chase, siren, arrest, BUSTED flow) and native-tested; comparison with an original capture is open.
+- **Crashes:** walls `0x0043a610` and the crash/remount family `0x00403d60` are ported; rider, car and pedestrian contact are ported.
+- **Sound:** race MIDI, sirens and car engines play; exact AWE/MIDI timbre is open.
+- **Front end:** jukebox, sound mix and controls are implemented; driven-career saves round-trip. Mano-a-mano stays disabled until plan 34.
+- **Still not started:** Android hardware validation, Linux/Windows (plan 33) and online multiplayer (plan 34).
 
 ## Where things stand (October 14, 2026)
 
