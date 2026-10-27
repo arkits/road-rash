@@ -1,6 +1,7 @@
 #include "world_renderer.hpp"
 #include "texture.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 namespace rr {

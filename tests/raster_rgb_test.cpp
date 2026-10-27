@@ -7,6 +7,7 @@
 // - Trilinear: quad shrinking across a mip boundary: no brightness step > 8
 //   between adjacent rows.
 #include "cel.hpp"
+#include <cstdlib>
 #include "framebuffer_rgb.hpp"
 #include "texture.hpp"
 #include "golden.hpp"

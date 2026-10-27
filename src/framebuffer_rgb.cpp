@@ -1,4 +1,5 @@
 #include "framebuffer_rgb.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace rr {

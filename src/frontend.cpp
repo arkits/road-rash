@@ -1,4 +1,5 @@
 #include "atomic_file.hpp"
+#include <cstdlib>
 #include "frontend.hpp"
 #include "byte_reader.hpp"
 #include <SDL3/SDL_scancode.h>

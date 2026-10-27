@@ -5,6 +5,7 @@
 // Thin far-slice geometry must cover >=s pixels at scale s. Sweep: all Napa
 // sweep views render at s=4 with no raster exception.
 #include "course_scene.hpp"
+#include <cstdlib>
 #include "golden.hpp"
 #include "rider_sprites.hpp"
 #include "scene_dump.hpp"

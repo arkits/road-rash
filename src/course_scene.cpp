@@ -1,4 +1,5 @@
 #include "course_scene.hpp"
+#include <cstdlib>
 #include <cstdio>
 #include "upscale_import.hpp"
 #include "exe_tables.hpp"

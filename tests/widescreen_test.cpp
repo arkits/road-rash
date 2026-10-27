@@ -9,6 +9,7 @@
 // The golden replay (centre-crop identity + side-content) is the PASS
 // criterion after the fix and is kept in this file below.
 #include "actor_render.hpp"
+#include <cstdlib>
 #include "animation.hpp"
 #include "bike.hpp"
 #include "course.hpp"

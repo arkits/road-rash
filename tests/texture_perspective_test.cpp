@@ -5,6 +5,7 @@
 //   differs measurably from the affine sample (documents the original warp).
 // - Fill rule: the trapezoid covers exactly the pixels the affine version covers.
 #include "texture.hpp"
+#include <cstdlib>
 #include "cel.hpp"
 #include "framebuffer.hpp"
 #include <cmath>

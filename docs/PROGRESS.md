@@ -266,6 +266,14 @@ while City AI RNG stays open). Sanitizer trees clean.
   terrain type 3); `SoundSystem::update` reads it instead of forcing false,
   so the player engine selects slot 2 (`EngTunne`) in tunnels. Pinned in
   `sound_test`; Debug and ASan/UBSan trees pass.
+### October 26, 2026: explicit `<cstdlib>`/`<algorithm>` includes (issue #1)
+
+- Twelve sources used `std::abs`/`std::fill` through transitive includes that
+  libc++ 23 (Homebrew LLVM) and MSYS2 clang64 no longer provide, breaking the
+  build (GitHub issue #1). Each now includes its own header; no behaviour change.
+- Gate: `rr-game` builds with MSYS2 clang64 on Windows (`build-win`, a local
+  plan 33 probe); MSVC still fails on `__int128` (plan 33). The full CTest
+  suite was not run on this machine.
 
 ### October 26, 2026: gameplay and frontend open items closed (police live, car engines, driven saves, menu layout)
 

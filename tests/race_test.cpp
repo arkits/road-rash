@@ -1,4 +1,5 @@
 #include "race.hpp"
+#include <cstdlib>
 #include "track_ring.hpp"
 #include "animation.hpp"
 #include <memory>
