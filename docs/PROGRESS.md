@@ -2516,3 +2516,15 @@ with the Welcome/choice ordering fixes: all three strict cases agreed on
 results, with positive traffic on every required-RTC peer and zero live late
 inputs/stalls. Health reports three finished races, zero desyncs, malformed
 messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
+
+## 2026-10-27 — simple import screen
+
+- `src/import_ui.cpp`: replaced the arcade-styled first-run import screen
+  (checkered flags, stripes, animated dashes, NATIVE plate, blinking outline,
+  "FULL THROTTLE" footer) with a plain centered layout: yellow title, one
+  instruction line, a yellow "Choose ISO" button and, off Android, a grey
+  "Choose folder" button, then status/progress/error text. Button rects are
+  shared by painting and hit testing (they moved from y=200 to y=264, centered).
+  Keys are unchanged (I/Enter ISO, F folder, Esc/Back/Q quit).
+- Remaining: the Android layout was compiled out in the desktop build only;
+  not yet seen on a device.

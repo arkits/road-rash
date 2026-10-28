@@ -3355,3 +3355,14 @@ with the Welcome/choice ordering fixes: all three strict cases agreed on
 results, with positive traffic on every required-RTC peer and zero live late
 inputs/stalls. Health reports three finished races, zero desyncs, malformed
 messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
+
+## 2026-10-27 — simple import screen
+
+- Build: `cmake -S . -B build-agent-import-ui-20261027 -DCMAKE_BUILD_TYPE=Debug`,
+  `cmake --build build-agent-import-ui-20261027 --parallel`: pass.
+- `ctest --test-dir build-agent-import-ui-20261027 --output-on-failure`:
+  106/106 passed (722 s).
+- Visual: `rr-game --assets <empty dir> --screenshot import.bmp` renders the
+  new desktop layout (checked by eye, 2560x1920 window capture).
+- Not run: Android assembly/device, live file-picker import, progress and
+  error states on screen (code paths compiled only).
