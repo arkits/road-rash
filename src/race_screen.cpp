@@ -85,12 +85,51 @@ RaceScreen::RaceScreen(Game& g, SDL_Renderer* r, const RaceOptions& opt, Display
     canvas_.scale = display_.config.texture_scale;
     if (opt_.start_paused) lifecycle_.state.pause();
     touch_.set_left_handed(opt_.left_handed);
+    touch_.set_phone_controls(kMobileDisplay);
     pad_ = open_first_gamepad();
     if (opt_.show_fps && opt_.assets) fps_ = std::make_unique<FpsOverlay>(*opt_.assets);
     // 0x004163d0: a fresh race (timer still at its start value) fades in.
     if (!opt_.capture && g_.countdown == countdown_ticks) fade_ = Fade::in;
     display_.frame = 0;
     display_.apply(480);
+}
+
+// Redraw the current presentation without advancing simulation. Phone pause
+// captures exclude the controls so the menu does not bake in ghost buttons.
+RgbImage RaceScreen::pause_frame() {
+    if (kMobileDisplay) draw_scene(nullptr);
+    return capture_race_frame(renderer_);
+}
+
+void RaceScreen::draw_scene(FrameProfile* prof) {
+    SDL_SetRenderDrawColor(renderer_, 15, 18, 22, 255);
+    SDL_RenderClear(renderer_);
+    int dw = 0, dh = 0;
+    if (display_.window) SDL_GetWindowSize(display_.window, &dw, &dh);
+    const int race_scale = (opt_.menu || opt_.render_scale == 0) && opt_.settings
+                               ? effective_render_scale(*opt_.settings, dw, dh, kMobileDisplay)
+                               : opt_.render_scale;
+    if (opt_.settings) {
+        g_.widescreen = opt_.settings->widescreen;
+        g_.display_w = dw;
+        g_.display_h = dh;
+        g_.enhancements = opt_.settings->enhancements;
+        g_.texture_detail = opt_.settings->texture_detail;
+    }
+    // Road slices centre on the same logical width as the scene builders
+    // (synced above), so road, terrain, scenery and actors line up.
+    const auto slices = project_road(g_.race().route(), g_.blend_camera_position(), g_.blend_camera(),
+                                     g_.depth, g_.logical_width());
+    if (g_.scene())
+        canvas_.draw(renderer_, g_, slices, race_scale, display_.render_threads);
+    else
+        draw_road(renderer_, slices);
+    ProfileScope sprites_scope(prof, FrameProfile::sprites_hud);
+    draw_opponents(renderer_, g_, sprites_, slices);
+    draw_bike(renderer_, g_, sprites_, slices);
+    draw_hud(renderer_, g_);
+    if (!g_.banner_message.empty() && (!g_.scene() || !g_.assets.hud))
+        draw_quit_prompt(renderer_, g_.banner_message); // asset-less fallback
 }
 
 RaceActionContext RaceScreen::ctx_now() const {
@@ -178,7 +217,13 @@ void RaceScreen::event(const SDL_Event& e) {
     if (!lifecycle_event(e.type)) lifecycle_.state.handle(e);
     if (g_.mixer && !g_.mixer->handle(e)) SDL_Log("Audio reopen failed: %s", SDL_GetError());
     const RaceActionContext act_ctx = ctx_now();
-    const RaceAction act = race_action(e, act_ctx);
+    RaceAction act = race_action(e, act_ctx);
+    if (kMobileDisplay && !act_ctx.demo && !act_ctx.menu_open && !act_ctx.paused && !act_ctx.pause_message &&
+        e.type == SDL_EVENT_FINGER_DOWN) {
+        for (const auto& button : phone_buttons(display_.settings->left_handed))
+            if (button.action == TouchAction::pause && touch_contains(button, e.tfinger.x, e.tfinger.y))
+                act = act_ctx.has_menu ? RaceAction::open_pause : RaceAction::toggle_pause;
+    }
     if (act == RaceAction::demo_exit) {
         running_ = false;
         return;
@@ -193,10 +238,12 @@ void RaceScreen::event(const SDL_Event& e) {
         result_.quit_app = true;
         return;
     case RaceAction::open_pause:
-        opt_.menu->open_pause(capture_race_frame(renderer_));
+        touch_.clear();
+        opt_.menu->open_pause(pause_frame());
         lifecycle_.state.resume();
         return;
     case RaceAction::toggle_pause:
+        touch_.clear();
         if (!opt_.online) lifecycle_.state.paused() ? lifecycle_.state.resume() : lifecycle_.state.pause();
         return;
     case RaceAction::resume:
@@ -241,7 +288,10 @@ void RaceScreen::event(const SDL_Event& e) {
     }
     if (e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION ||
         e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED) {
-        if (act == RaceAction::none) touch_.handle(e);
+        if (act == RaceAction::none) {
+            touch_.set_left_handed(display_.settings->left_handed);
+            touch_.handle(e);
+        }
     }
     // Consume lifecycle resets in iterate(), using its frame timestamp.
 }
@@ -338,7 +388,7 @@ bool RaceScreen::iterate(uint64_t now_ns) {
     // pad removal) opens the pause menu instead of the old PAUSED text.
     if (!opt_.online && opt_.menu && !opt_.menu->pause_open() && lifecycle_.state.paused() &&
         !lifecycle_.state.background()) {
-        opt_.menu->open_pause(capture_race_frame(renderer_));
+        opt_.menu->open_pause(pause_frame());
         lifecycle_.state.resume();
     }
     // A menu input may close pause_open() while queuing resume/quit. Drain
@@ -480,34 +530,7 @@ bool RaceScreen::iterate(uint64_t now_ns) {
             !SDL_RenderTexture(renderer_, pause_tex_.get(), nullptr, nullptr))
             throw std::runtime_error(SDL_GetError());
     } else {
-        SDL_SetRenderDrawColor(renderer_, 15, 18, 22, 255);
-        SDL_RenderClear(renderer_);
-        int dw = 0, dh = 0;
-        if (display_.window) SDL_GetWindowSize(display_.window, &dw, &dh);
-        const int race_scale = (opt_.menu || opt_.render_scale == 0) && opt_.settings
-                                   ? effective_render_scale(*opt_.settings, dw, dh, kMobileDisplay)
-                                   : opt_.render_scale;
-        if (opt_.settings) {
-            g_.widescreen = opt_.settings->widescreen;
-            g_.display_w = dw;
-            g_.display_h = dh;
-            g_.enhancements = opt_.settings->enhancements;
-            g_.texture_detail = opt_.settings->texture_detail;
-        }
-        // Road slices centre on the same logical width as the scene builders
-        // (synced above), so road, terrain, scenery and actors line up.
-        const auto slices = project_road(g_.race().route(), g_.blend_camera_position(), g_.blend_camera(),
-                                         g_.depth, g_.logical_width());
-        if (g_.scene())
-            canvas_.draw(renderer_, g_, slices, race_scale, display_.render_threads);
-        else
-            draw_road(renderer_, slices);
-        ProfileScope sprites_scope(prof, FrameProfile::sprites_hud);
-        draw_opponents(renderer_, g_, sprites_, slices);
-        draw_bike(renderer_, g_, sprites_, slices);
-        draw_hud(renderer_, g_);
-        if (!g_.banner_message.empty() && (!g_.scene() || !g_.assets.hud))
-            draw_quit_prompt(renderer_, g_.banner_message); // asset-less fallback
+        draw_scene(prof);
     }
     // Plan 18 Task 9: FPS + simulation ticks/sec, top-right, Futura Bold 24
     // #DEFFF0 with a 2-pixel black shadow like all original text, twice a second.
@@ -517,6 +540,10 @@ bool RaceScreen::iterate(uint64_t now_ns) {
             renderer_,
             (opt_.settings ? opt_.settings->network_hud : opt_.network_hud) ? &opt_.online->stats() : nullptr,
             g_.logical_width());
+    if (kMobileDisplay && !opt_.demo && !opt_.capture && !menu_pause && !lifecycle_.state.paused() &&
+        !g_.quitting && !g_.pause_message)
+        draw_phone_controls(renderer_, touch_.current(), display_.settings->left_handed,
+                            display_.settings->touch_opacity);
     if (!opt_.screenshot.empty()) {
         SurfacePtr capture(SDL_RenderReadPixels(renderer_, nullptr));
         if (!capture || !SDL_SaveBMP(capture.get(), opt_.screenshot.c_str()))

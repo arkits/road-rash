@@ -1,4 +1,5 @@
 #include "input.hpp"
+#include "race_overlay.hpp"
 #include <iostream>
 
 int main() {
@@ -66,6 +67,81 @@ int main() {
     check(touches.current().right && !touches.current().left, "motion updates same finger");
     touches.clear();
     check(rr::controls_from(touches.current()) == 0, "pause clears all touch controls");
+    // Phone controls must work together without hidden auto-throttle, and the
+    // visible layout must be the hit-test layout in either handedness.
+    for (bool mirrored : {false, true}) {
+        for (const auto& button : rr::phone_buttons(mirrored)) {
+            auto intent = rr::phone_touch_input((button.x + button.w / 2) / 1000,
+                                                (button.y + button.h / 2) / 450, mirrored);
+            const auto bits = rr::controls_from(intent);
+            uint32_t expected = 0;
+            switch (button.action) {
+            case rr::TouchAction::left:
+                expected = rr::control_left;
+                break;
+            case rr::TouchAction::right:
+                expected = rr::control_right;
+                break;
+            case rr::TouchAction::accelerate:
+                expected = rr::control_accelerate;
+                break;
+            case rr::TouchAction::brake:
+                expected = rr::control_brake;
+                break;
+            case rr::TouchAction::punch:
+                expected = rr::control_punch;
+                break;
+            case rr::TouchAction::kick:
+                expected = rr::control_kick;
+                break;
+            case rr::TouchAction::backhand:
+                expected = rr::control_backhand;
+                break;
+            case rr::TouchAction::pause:
+                break;
+            }
+            check(bits == expected, "phone button activates only its labeled action");
+        }
+    }
+    check(rr::controls_from(rr::phone_touch_input(.5f, .5f, false)) == 0,
+          "touch outside phone buttons does not accelerate or attack");
+    touches.set_phone_controls(true);
+    finger(SDL_EVENT_FINGER_DOWN, 1, 1, .91f, .84f); // gas
+    finger(SDL_EVENT_FINGER_DOWN, 1, 2, .07f, .84f); // left
+    finger(SDL_EVENT_FINGER_DOWN, 1, 3, .91f, .66f); // punch
+    check(touches.current().accelerate && touches.current().left && touches.current().punch,
+          "phone gas, steering and combat work simultaneously");
+    finger(SDL_EVENT_FINGER_DOWN, 1, 4, .81f, .84f); // brake
+    check(touches.current().brake && !touches.current().accelerate, "phone brake overrides held gas");
+    finger(SDL_EVENT_FINGER_CANCELED, 1, 4, .81f, .84f);
+    check(touches.current().accelerate, "canceling brake restores separately held gas");
+    finger(SDL_EVENT_FINGER_MOTION, 1, 1, .5f, .5f);
+    check(!touches.current().accelerate && touches.current().left && touches.current().punch,
+          "dragging off gas releases it without releasing other fingers");
+    touches.clear();
+    check(rr::controls_from(touches.current()) == 0, "phone pause clears all held fingers");
+    // The controls must remain visible in the side margins of a 4:3 scene,
+    // without leaking their presentation/blend state into the next frame.
+    auto* surface = SDL_CreateSurface(1000, 450, SDL_PIXELFORMAT_RGBA8888);
+    auto* renderer = surface ? SDL_CreateSoftwareRenderer(surface) : nullptr;
+    check(renderer != nullptr, "phone overlay software renderer");
+    if (renderer) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_SetRenderLogicalPresentation(renderer, 640, 480, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+        rr::draw_phone_controls(renderer, {}, false, 75);
+        SDL_RenderPresent(renderer);
+        Uint8 r = 0, g = 0, b = 0, a = 0;
+        SDL_ReadSurfacePixel(surface, 30, 345, &r, &g, &b, &a);
+        check(r > 0 && g > 0, "phone controls render outside the 4:3 scene viewport");
+        int w = 0, h = 0;
+        SDL_RendererLogicalPresentation mode;
+        SDL_GetRenderLogicalPresentation(renderer, &w, &h, &mode);
+        check(w == 640 && h == 480 && mode == SDL_LOGICAL_PRESENTATION_LETTERBOX,
+              "phone overlay restores race presentation");
+        SDL_DestroyRenderer(renderer);
+    }
+    SDL_DestroySurface(surface);
     rr::MenuStickInput menu;
     auto idle = [](const rr::MenuDirections& d) { return !d.left && !d.right && !d.up && !d.down; };
     check(idle(menu.update(12000, -12000, 0)), "menu stick activation dead zone");

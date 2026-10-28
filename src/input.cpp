@@ -114,12 +114,66 @@ PlayerInput touch_input(float x, float y, float width, float height, bool left_h
     return in;
 }
 
+std::array<TouchButton, 8> phone_buttons(bool left_handed) {
+    std::array<TouchButton, 8> buttons{{
+        {TouchAction::left, 30, 345, 85, 65, "LEFT"},
+        {TouchAction::right, 130, 345, 85, 65, "RIGHT"},
+        {TouchAction::accelerate, 870, 345, 85, 65, "GAS"},
+        {TouchAction::brake, 770, 345, 85, 65, "BRAKE"},
+        {TouchAction::punch, 870, 265, 85, 65, "PUNCH"},
+        {TouchAction::kick, 770, 265, 85, 65, "KICK"},
+        {TouchAction::backhand, 670, 265, 85, 65, "BACKHAND"},
+        {TouchAction::pause, 880, 20, 75, 40, "PAUSE"},
+    }};
+    if (left_handed)
+        for (auto& b : buttons) b.x = 1000 - b.x - b.w;
+    return buttons;
+}
+
+bool touch_contains(const TouchButton& b, float x, float y) {
+    return x * 1000 >= b.x && x * 1000 < b.x + b.w && y * 450 >= b.y && y * 450 < b.y + b.h;
+}
+
+PlayerInput phone_touch_input(float x, float y, bool left_handed) {
+    PlayerInput in;
+    for (const auto& b : phone_buttons(left_handed)) {
+        if (!touch_contains(b, x, y)) continue;
+        switch (b.action) {
+        case TouchAction::left:
+            in.left = true;
+            break;
+        case TouchAction::right:
+            in.right = true;
+            break;
+        case TouchAction::accelerate:
+            in.accelerate = true;
+            break;
+        case TouchAction::brake:
+            in.brake = true;
+            break;
+        case TouchAction::punch:
+            in.punch = true;
+            break;
+        case TouchAction::kick:
+            in.kick = true;
+            break;
+        case TouchAction::backhand:
+            in.backhand = true;
+            break;
+        case TouchAction::pause:
+            break;
+        }
+    }
+    return in;
+}
+
 void TouchInput::handle(const SDL_Event& e) {
     const auto id = std::make_pair(e.tfinger.touchID, e.tfinger.fingerID);
     if (e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED)
         fingers_.erase(id);
     else if (e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION)
-        fingers_[id] = touch_input(e.tfinger.x, e.tfinger.y, 1.f, 1.f, left_handed_);
+        fingers_[id] = phone_controls_ ? phone_touch_input(e.tfinger.x, e.tfinger.y, left_handed_)
+                                       : touch_input(e.tfinger.x, e.tfinger.y, 1.f, 1.f, left_handed_);
 }
 
 PlayerInput TouchInput::current() const {

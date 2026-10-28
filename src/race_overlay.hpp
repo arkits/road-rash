@@ -1,5 +1,6 @@
 // Plan 28 Task 3: FPS overlay + quit prompt as units (verbatim move).
 #pragma once
+#include "input.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
 #include <memory>
@@ -51,4 +52,5 @@ class NetworkOverlay {
     int painted_width_ = 0;
 };
 void draw_quit_prompt(SDL_Renderer*, const std::string& prompt_cp1252); // the g.quitting block
+void draw_phone_controls(SDL_Renderer*, const PlayerInput&, bool left_handed, int opacity);
 } // namespace rr

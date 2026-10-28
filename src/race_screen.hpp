@@ -69,5 +69,7 @@ class RaceScreen {
     void reset_clock(uint64_t now_ns);
     void step_sim(uint64_t now);
     void render(uint64_t now);
+    void draw_scene(FrameProfile*);
+    RgbImage pause_frame();
 };
 } // namespace rr

@@ -68,8 +68,12 @@ picker/import flow still needs device validation.
 | Restart after finish | Enter | South button |
 | Quit desktop | Q | — |
 
-Touch uses screen zones, with independent fingers for steering and attacking.
-Braking takes priority over touch auto-throttle. A tap resumes while paused
+Android stays in landscape in either direction. Visible race buttons provide
+LEFT/RIGHT steering, GAS, BRAKE, PUNCH, KICK, BACKHAND and PAUSE. Hold GAS
+with one finger and steer or attack with others; steering does not automatically
+accelerate. BRAKE takes priority over GAS. Slide off a button to release it.
+The Touch settings page adjusts opacity and mirrors the layout for left-handed
+play. Other touch platforms use screen zones. A tap resumes while paused
 or restarts after a finish. Android Back pauses. Background/focus loss or
 controller disconnect pauses; returning requires explicit resume.
 

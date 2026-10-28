@@ -1,9 +1,64 @@
 // Plan 28 Task 3: verbatim move of the run_race FPS + quit-prompt blocks.
 #include "race_overlay.hpp"
 #include "pe_strings.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace rr {
+void draw_phone_controls(SDL_Renderer* renderer, const PlayerInput& in, bool left_handed, int opacity) {
+    if (opacity <= 0) return;
+    int lw = 0, lh = 0;
+    SDL_RendererLogicalPresentation mode;
+    SDL_GetRenderLogicalPresentation(renderer, &lw, &lh, &mode);
+    SDL_BlendMode blend;
+    SDL_GetRenderDrawBlendMode(renderer, &blend);
+    Uint8 r, g, b, a;
+    SDL_GetRenderDrawColor(renderer, &r, &g, &b, &a);
+    // Full screen, independent of the original 4:3 scene and render scale.
+    SDL_SetRenderLogicalPresentation(renderer, 1000, 450, SDL_LOGICAL_PRESENTATION_STRETCH);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (const auto& button : phone_buttons(left_handed)) {
+        bool pressed = false;
+        switch (button.action) {
+        case TouchAction::left:
+            pressed = in.left;
+            break;
+        case TouchAction::right:
+            pressed = in.right;
+            break;
+        case TouchAction::accelerate:
+            pressed = in.accelerate;
+            break;
+        case TouchAction::brake:
+            pressed = in.brake;
+            break;
+        case TouchAction::punch:
+            pressed = in.punch;
+            break;
+        case TouchAction::kick:
+            pressed = in.kick;
+            break;
+        case TouchAction::backhand:
+            pressed = in.backhand;
+            break;
+        case TouchAction::pause:
+            break;
+        }
+        const SDL_FRect rect{button.x, button.y, button.w, button.h};
+        const Uint8 alpha = Uint8(std::min(100, opacity) * 255 / 100);
+        SDL_SetRenderDrawColor(renderer, pressed ? 220 : 12, pressed ? 155 : 18, 24, alpha);
+        SDL_RenderFillRect(renderer, &rect);
+        SDL_SetRenderDrawColor(renderer, 255, 216, 100, alpha);
+        SDL_RenderRect(renderer, &rect);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 235, 255);
+        SDL_RenderDebugText(renderer, button.x + (button.w - 8 * SDL_strlen(button.label)) / 2,
+                            button.y + (button.h - 8) / 2, button.label);
+    }
+    SDL_SetRenderLogicalPresentation(renderer, lw, lh, mode);
+    SDL_SetRenderDrawBlendMode(renderer, blend);
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+}
+
 FpsOverlay::FpsOverlay(const Assets& assets) : assets_(assets) {}
 
 void FpsOverlay::frame(SDL_Renderer* renderer, uint64_t now, int ticks_this_frame) {

@@ -43,16 +43,32 @@ uint32_t controls_from(const PlayerInput&, int dead_zone = steer_dead_zone);
 uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, const bool* down);
 // One touch point on a width x height window (mirrored zones when left_handed).
 PlayerInput touch_input(float x, float y, float width, float height, bool left_handed = false);
+// Phone buttons use full-window normalized coordinates, including letterbox
+// margins. Rendering and hit testing share this layout (1000 x 450 units).
+enum class TouchAction { left, right, accelerate, brake, punch, kick, backhand, pause };
+struct TouchButton {
+    TouchAction action;
+    float x, y, w, h;
+    const char* label;
+};
+std::array<TouchButton, 8> phone_buttons(bool left_handed);
+bool touch_contains(const TouchButton&, float normalized_x, float normalized_y);
+PlayerInput phone_touch_input(float x, float y, bool left_handed);
 // Each finger keeps its own intent; releasing one cannot release another.
 class TouchInput {
   public:
     void handle(const SDL_Event&);
     void clear() { fingers_.clear(); }
     void set_left_handed(bool v) { left_handed_ = v; }
+    void set_phone_controls(bool v) {
+        phone_controls_ = v;
+        clear();
+    }
     PlayerInput current() const;
 
   private:
     std::map<std::pair<SDL_TouchID, SDL_FingerID>, PlayerInput> fingers_;
     bool left_handed_ = false;
+    bool phone_controls_ = false;
 };
 } // namespace rr
