@@ -147,6 +147,54 @@ After a pause, video or race, release the stick to neutral before navigating
 again. This prevents a held race steering input from moving menu focus.
 Physical controls on the MANGMI AIR X still require device validation.
 
+## Online mano a mano
+
+Two to eight players race each other over the internet through the port's
+server (`rr-netd`, [plan 34](plans/34-multiplayer.md)). Everyone needs the
+same game build and the same original disc data; a different build gets
+"version mismatch". Online races never change your career save.
+
+**In the browser** (road-rash.archit.xyz) the launcher's **Multiplayer**
+panel shows the server status and the open public rooms, refreshed every few
+seconds:
+
+- **Host a room** starts the game on the Host popup: pick a level, AI riders,
+  cars and Public/Unlisted. Then choose a character and wait in the roster.
+- **Join with a code** takes the six-character code (`ABC-DEF`) or a pasted
+  invite link. Tick **Watch as a spectator** to watch without a seat.
+- A public room's **Join** button takes a seat; a full or racing room offers
+  **Watch** instead.
+- **Browse in game** opens the in-game room list.
+- An invite link (`https://road-rash.archit.xyz/?room=ABCDEF`) shows a
+  **You're invited** banner with **Join race** and **Watch**. Start Game and
+  Quick Race keep their normal meaning on an invite link.
+
+**In the game** (any platform) choose **Mano a Mano** on the main menu:
+**Host** creates a room, **Join** lists public rooms or takes a code or link,
+**Bulletin Board** votes for the course, **Chat Messages** edits the eight
+phrases sent with F1–F8, and **Disconnect** leaves the room. The room code can
+be copied from the roster to share. The race starts once at least two
+players are seated and every seated player has a character and a course vote
+(most votes wins; ties favour the host's vote). Escape during an online
+race opens the quit prompt without pausing. After the results the room stays
+open for a rematch.
+
+Native clients also accept `--room CODE` or an invite link on the command
+line, and `--net-server ws://host:port/net` for a private server.
+
+**Troubleshooting**
+
+- *Server offline* in the launcher: the page cannot reach `/net/health`. A
+  locally served bundle has no server unless you run one (see
+  [WEB.md](WEB.md)). Hosting and joining in game will report the same error.
+- *Version mismatch*: reload the page (or update the app) so every player runs
+  the same build.
+- *Room full*: eight seats and sixteen spectators per room. Watch instead, or
+  host another room.
+- *Disconnected after switching tabs*: browsers stop a hidden tab's game loop,
+  so the server times the seat out after about 30 seconds. Keep the game tab
+  visible while in a room. The server holds your seat for 60 seconds.
+
 ## Developer commands
 
 ```sh

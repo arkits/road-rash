@@ -119,6 +119,13 @@ int main() {
               list->rooms[0].status == RoomStatus::lobby,
           "public room listed with host/level/avail/status");
     check(other.last<RoomListReply>()->rooms.empty(), "rooms of another build are not listed");
+    // The web launcher reads the same public entries from /net/health.
+    const std::string health = s.health_json(now);
+    check(
+        health.find("\"public_rooms\":[{\"code\":\"" + code +
+                    "\",\"host\":\"Natasha\",\"level\":1,\"humans\":2,\"seats\":8,\"status\":\"lobby\"}]") !=
+            std::string::npos,
+        "health JSON lists public rooms only");
 
     // Rejections.
     other.send(RoomJoin{code, false});

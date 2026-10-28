@@ -67,8 +67,33 @@ std::string Server::health_json(uint64_t) const {
       << ",\"desyncs\":" << counters_.desyncs << ",\"malformed\":" << counters_.malformed
       << ",\"rate_limited\":" << counters_.rate_limited << ",\"reconnects\":" << counters_.reconnects
       << ",\"invalid\":" << counters_.invalid << ",\"fanout_limited\":" << counters_.fanout_limited
-      << ",\"wrong_seat_inputs\":" << counters_.wrong_seat_inputs << "}";
+      << ",\"wrong_seat_inputs\":" << counters_.wrong_seat_inputs;
+    // Public rooms for the web launcher, which does not speak the binary
+    // protocol. Same entries a RoomList gets, without the build filter, so
+    // nothing here is more than any connected client can already list.
+    o << ",\"public_rooms\":[";
+    int listed = 0;
+    for (const auto& [code, r] : rooms_) {
+        if (!r.options.is_public || listed >= net::max_room_list) continue;
+        static constexpr const char* status[] = {"lobby", "full", "racing"};
+        const net::RoomListEntry e = list_entry(code, r);
+        o << (listed++ ? "," : "") << "{\"code\":\"" << e.code << "\",\"host\":\"" << json_escape(e.host)
+          << "\",\"level\":" << int(e.level) << ",\"humans\":" << int(e.humans)
+          << ",\"seats\":" << net::max_seats << ",\"status\":\"" << status[int(e.status)] << "\"}";
+    }
+    o << "]}";
     return o.str();
+}
+
+net::RoomListEntry Server::list_entry(const std::string& code, const Room& r) const {
+    net::RoomListEntry e;
+    e.code = code;
+    e.host = r.seats[size_t(r.host)].alias;
+    e.level = r.options.level;
+    e.humans = uint8_t(std::count_if(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; }));
+    e.status = r.race ? net::RoomStatus::racing
+                      : (e.humans >= net::max_seats ? net::RoomStatus::full : net::RoomStatus::lobby);
+    return e;
 }
 
 std::string Server::new_code() {
@@ -280,15 +305,7 @@ void Server::handle(Conn& c, const net::Message& m, uint64_t now) {
         for (const auto& [code, r] : rooms_) {
             if (!r.options.is_public || int(reply.rooms.size()) >= net::max_room_list) continue;
             if (r.sim_fingerprint != c.info.sim_fingerprint || r.digest != c.info.data_digest) continue;
-            net::RoomListEntry e;
-            e.code = code;
-            e.host = r.seats[size_t(r.host)].alias;
-            e.level = r.options.level;
-            e.humans = uint8_t(
-                std::count_if(r.seats.begin(), r.seats.end(), [](const Seat& s) { return s.occupied; }));
-            e.status = r.race ? net::RoomStatus::racing
-                              : (e.humans >= net::max_seats ? net::RoomStatus::full : net::RoomStatus::lobby);
-            reply.rooms.push_back(e);
+            reply.rooms.push_back(list_entry(code, r));
         }
         send(c, reply);
         return;

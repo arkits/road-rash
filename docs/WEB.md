@@ -60,6 +60,37 @@ no game fonts are published. Badloc headings and Futura controls/body replace th
 system-font approximation. Before import the page uses system fallbacks. Browser
 smoothing differs from the native thresholded text rasteriser.
 
+### Online launcher panel — October 27, 2026
+
+The launcher has a **Multiplayer** panel (plan 34) below Start Game and Quick
+Race. It does not speak the binary protocol; it polls same-origin
+`/net/health` every 8 s while the launcher is visible. `rr-netd` now adds
+`public_rooms` to that JSON: the same entries a `RoomList` reply carries
+(code, host alias, level, humans, seats, `lobby`/`full`/`racing`), at most 32,
+public rooms only, without the build filter. Production already proxies
+`/net/health`, so no Nginx change is needed.
+
+Buttons start the same `rr-game` with `--room`. A room code joins;
+`@watch:CODE` joins as a spectator; `@host` opens the Host popup and `@rooms`
+the in-game list (`Frontend::net_join_invite`; `@` never occurs in a code or
+link). The page also passes `--net-server` as `wss://<page host>/net` (`ws://`
+on plain-HTTP localhost), so the game connects to the server the panel lists.
+An invite link's `?room=` shows a banner and is removed from the address so
+Start Game keeps its meaning.
+
+Local end-to-end test with a real server:
+
+```sh
+RR_NETD_PORT=18080 RR_NETD_HTTP_PORT=18081 RR_NETD_BIND=127.0.0.1 build/server/rr-netd
+node tools/web_dev_server.mjs build-agent-browser/dist --assets /path/to/hosted-game-assets --port 8766
+```
+
+`web_dev_server.mjs` serves the bundle (and optional hosted assets) on
+loopback and forwards `/net` (WebSocket) and `/net/health` to `rr-netd`, like
+the production Nginx locations. Without `rr-netd` the panel shows "Server
+offline" and an explanation; `tests/web_browser_smoke.cjs` checks that state,
+then a routed `/net/health` list, the invite banner and code validation.
+
 ### Build, serve, test and deploy
 
 ```sh

@@ -63,8 +63,21 @@ void Frontend::net_join_shown(int index) {
 void Frontend::net_join_invite(const std::string& text) {
     if (!net_factory_) return;
     career_.mode = GameMode::mano;
+    // Web launcher intents ('@' never appears in a room code or invite link):
+    // "@host" opens the Host popup, "@rooms" the public list, and
+    // "@watch:CODE" joins CODE as a spectator.
+    if (text == "@host" || text == "@rooms") {
+        enter(0x0b);
+        text == "@host" ? net_open_host() : net_open_rooms();
+        return;
+    }
+    std::string join = text;
+    if (join.starts_with("@watch:")) {
+        net_spectate_ = true;
+        join.erase(0, 7);
+    }
     net_ensure();
-    net_->join_room_text(text, net_spectate_);
+    net_->join_room_text(join, net_spectate_);
     enter(0x0b);
     net_connecting_ = true;
     show_dialog(str(ns::net_connecting), 4, {{204, 0}});

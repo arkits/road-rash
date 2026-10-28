@@ -247,6 +247,45 @@ int main() {
     }
     guest.enter(rr::screen_id::net_rooms);
     capture(guest, "rooms");
+    // Web launcher intents passed as --room: Host popup, public list, spectate.
+    {
+        rr::Career wc = gc;
+        rr::Settings ws = gs;
+        rr::Frontend web(assets, text, rr::frontend_strings(resources), rr::credit_lines(resources), data,
+                         tables, wc, ws, (dir / "web/saves").string());
+        web.net_attach(factory, hello);
+        web.enter(9);
+        web.net_join_invite("@host");
+        const bool level_popup = std::any_of(web.items().begin(), web.items().end(), [](const auto& m) {
+            return m.enabled && m.handler == 0x00445440;
+        });
+        check(web.screen() == 11 && level_popup && !web.net_in_room(), "@host opens the Host level popup");
+        rr::Frontend lister(assets, text, rr::frontend_strings(resources), rr::credit_lines(resources), data,
+                            tables, wc, ws, (dir / "web2/saves").string());
+        lister.net_attach(factory, hello);
+        lister.enter(9);
+        lister.net_join_invite("@rooms");
+        for (int i = 0; i < 60; ++i) {
+            now += 10;
+            server.step(now);
+            lister.update({}, now);
+        }
+        check(lister.screen() == rr::screen_id::net_rooms && lister.net_client()->rooms().size() == 1,
+              "@rooms opens the public room list");
+        rr::Frontend watcher(assets, text, rr::frontend_strings(resources), rr::credit_lines(resources), data,
+                             tables, wc, ws, (dir / "web3/saves").string());
+        watcher.net_attach(factory, hello);
+        watcher.enter(9);
+        watcher.net_join_invite("@watch:" + host.net_client()->room()->code);
+        for (int i = 0; i < 60; ++i) {
+            now += 10;
+            server.step(now);
+            host.update({}, now);
+            watcher.update({}, now);
+        }
+        check(watcher.net_in_room() && watcher.net_client()->my_seat() == 0xff,
+              "@watch:CODE joins as a spectator");
+    }
     check(rr::write_save(hc) == career_before && rr::write_save(gc) == career_before &&
               hc.rng == rng_before && gc.rng == rng_before,
           "all online result paths preserve both careers");

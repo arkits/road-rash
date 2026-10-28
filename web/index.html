@@ -84,6 +84,47 @@
             <button id="quick">Race<span aria-hidden="true">▸</span></button>
           </section>
         </div>
+        <section class="online" aria-labelledby="online-title">
+          <header class="online-head">
+            <div>
+              <span class="mode-kicker">Online · Mano a Mano</span>
+              <h3 id="online-title">Multiplayer</h3>
+            </div>
+            <span id="net-status" class="net-status" data-state="checking" role="status" aria-live="polite"><i aria-hidden="true"></i><span>Checking server…</span></span>
+          </header>
+          <div id="invite" class="invite" hidden>
+            <p><span class="kicker">You're invited</span> Room <strong id="invite-code"></strong></p>
+            <div class="invite-actions">
+              <button id="invite-join" class="primary">Join race</button>
+              <button id="invite-watch">Watch</button>
+            </div>
+          </div>
+          <div class="online-grid">
+            <div class="online-actions">
+              <button id="net-host" class="net-host">
+                <span class="net-host-title">Host a room</span>
+                <span class="net-host-note">Pick a level, then share the room code</span>
+              </button>
+              <form id="net-join" class="net-join" novalidate>
+                <label class="course-label" for="net-code">Join with a code</label>
+                <div class="code-row">
+                  <input id="net-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="64" placeholder="ABC-DEF" aria-describedby="net-code-hint">
+                  <button id="net-join-go" type="submit" disabled>Join</button>
+                </div>
+                <label class="net-watch"><input id="net-watch" type="checkbox"> Watch as a spectator</label>
+                <span id="net-code-hint" class="net-hint">Six letters and digits, or paste an invite link.</span>
+              </form>
+            </div>
+            <div class="rooms" aria-labelledby="rooms-title">
+              <div class="rooms-head">
+                <span id="rooms-title" class="course-label">Public rooms</span>
+                <button id="net-browse" class="link-button" type="button">Browse in game</button>
+              </div>
+              <ul id="net-rooms" class="room-list"></ul>
+              <p id="net-empty" class="net-empty">No public rooms right now. Host one and share the code.</p>
+            </div>
+          </div>
+        </section>
         <p id="cache-note" class="cache-note" hidden>Game files load automatically as you play and are cached on this device.</p>
       </div>
       <p id="status" role="status" aria-live="polite">Loading…</p>

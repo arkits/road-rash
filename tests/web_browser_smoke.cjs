@@ -24,6 +24,8 @@ fs.mkdirSync(evidence, {recursive:true});
         page.on('console', msg => {
             if (msg.type() !== 'error') return;
             if (hostedProbe(msg.text()) && new URL(msg.location().url || url, url).pathname === '/game-assets/manifest.json') return;
+            // Likewise the launcher's multiplayer probe: no rr-netd behind a local server.
+            if (/Failed to load resource/.test(msg.text()) && new URL(msg.location().url || url, url).pathname === '/net/health') return;
             errors.push(msg.text());
         });
         const visibleFrame = async () => page.evaluate(() => {
@@ -75,6 +77,29 @@ fs.mkdirSync(evidence, {recursive:true});
         assert.equal(await page.evaluate(()=>engine.FS.readFile('/persist/browser-smoke.txt',{encoding:'utf8'})), 'saved');
         console.log('PASS disc and save filesystem survive reload');
         await page.screenshot({path:path.join(evidence,'launcher-ready.png'),fullPage:true});
+        // Online panel: offline without rr-netd, then a live list, invite and code entry.
+        await page.waitForFunction(() => document.querySelector('#net-status').dataset.state === 'offline');
+        await page.route('**/net/health', route => route.fulfill({contentType:'application/json', body:JSON.stringify({
+            ok:true, players:3, public_rooms:[
+                {code:'QXETN8', host:'Viper', level:1, humans:2, seats:8, status:'lobby'},
+                {code:'234567', host:'<b>Natasha</b>', level:4, humans:8, seats:8, status:'racing'},
+                {code:'OOOOOO', host:'Invalid', level:0, humans:1, seats:8, status:'lobby'}]})}));
+        await page.goto(url + '/?room=qxe-tn8');
+        await page.waitForFunction(() => document.querySelector('#net-status').dataset.state === 'online');
+        assert.equal(new URL(page.url()).search, '', 'invite parameter removed from the address');
+        assert.equal(await page.locator('#invite-code').textContent(), 'QXE-TN8');
+        assert.equal(await page.locator('#net-status').textContent(), '3 riders online');
+        const rows = page.locator('#net-rooms li');
+        assert.equal(await rows.count(), 2, 'invalid room codes are not listed');
+        assert.match(await rows.nth(0).textContent(), /Viper.*Level 2 · 2\/8 riders · QXE-TN8.*Open.*Join/);
+        assert.match(await rows.nth(1).textContent(), /<b>Natasha<\/b>.*Racing.*Watch/);
+        await page.locator('#net-code').fill('abc');
+        assert.equal(await page.locator('#net-join-go').isDisabled(), true);
+        await page.locator('#net-code').fill('https://road-rash.archit.xyz/?room=234-567');
+        assert.equal(await page.locator('#net-join-go').isDisabled(), false);
+        await page.screenshot({path:path.join(evidence,'launcher-online.png'),fullPage:true});
+        await page.unroute('**/net/health');
+        console.log('PASS online panel: server status, public rooms, invite and code entry');
         await page.locator('#quick').click();
         await page.waitForTimeout(7000);
         assert.equal(await page.evaluate(()=>engine.SDL3.audioContext.state),'running');

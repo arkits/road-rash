@@ -31,7 +31,7 @@ prevent playing. Localhost and other hostnames never initialize either SDK.
 | --- | --- |
 | `$pageview` | One per page load |
 | `launcher_ready` | `source`: hosted or local disc |
-| `game_start` | `mode`: main_game or quick_race; quick race `course`: 0–4 |
+| `game_start` | `mode`: main_game, quick_race, or online_host / online_browse / online_join / online_watch (no room code is sent); quick race `course`: 0–4 |
 | `game_exit` | Normal main() return; mode and duration_ms |
 | `launcher_exit` | Exit to launcher button |
 | `connection_retry` | Retry connection button |

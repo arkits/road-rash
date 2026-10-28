@@ -119,6 +119,7 @@ async function restoreHostedAssets() {
     if (!cache || storageWarning) $('cache-note').textContent =
         (!cache ? 'Game files will download as you play; caching is unavailable. ' : '') + storageWarning;
     $('ready').hidden = false;
+    startRoomPolling();
     status('Ready to play.');
     telemetry.track('launcher_ready', {source: 'hosted'});
     return true;
@@ -186,6 +187,7 @@ async function restoreDisc() {
         assetDirectory = dir;
         engine.localAssets.names = new Set(references.map(r => r.path));
         $('ready').hidden = false;
+        startRoomPolling();
         $('state').textContent = 'Disc ready';
         status('Your game is ready to play.');
         telemetry.track('launcher_ready', {source: 'local'});
@@ -277,11 +279,14 @@ async function importDisc(source, iso) {
         document.querySelectorAll('label.button').forEach(el => el.classList.remove('disabled'));
     }
 }
-async function startGame(quick) {
+// room: a room code (optionally "@watch:" prefixed) or "@host"/"@rooms";
+// the game opens its online screens with it (Frontend::net_join_invite).
+async function startGame(quick, room) {
     if (!engine || !assetDirectory || running) return;
     running = true;
+    stopRoomPolling();
     const started = performance.now();
-    const mode = quick ? 'quick_race' : 'main_game';
+    const mode = room ? onlineMode(room) : quick ? 'quick_race' : 'main_game';
     engine.assetError = ''; engine.gameError = ''; engine.gameException = undefined;
     telemetry.track('game_start', {mode, ...(quick ? {course: Number($('course').value)} : {})});
     telemetry.gameStarted(mode);
@@ -302,6 +307,9 @@ async function startGame(quick) {
         }
         const args = ['rr-game', '--assets', '/assets', '--windowed', '--window-scale', '1'];
         if (quick) args.push('--race', '--course', $('course').value);
+        // Online play uses rr-netd on this page's origin, where /net/health lists rooms.
+        if (room) args.push('--room', room);
+        args.push('--net-server', (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/net');
         const argv = engine._malloc((args.length + 1) * 4); allocated.push(argv);
         if (!argv) throw new Error('Not enough memory to start the game');
         args.forEach((arg, index) => {
@@ -332,6 +340,115 @@ $('iso').addEventListener('change', e => e.target.files[0] && importDisc(e.targe
 $('folder').addEventListener('change', e => e.target.files.length && importDisc(e.target.files, false));
 $('cancel').onclick = () => { cancelled = true; };
 $('play').onclick = () => startGame(false);
+// Online (mano a mano). The launcher lists public rooms from rr-netd's
+// /net/health (same origin as the hosted game); joining and hosting happen in
+// the game's own online screens, opened through --room.
+const codeAlphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+function parseRoomCode(text) {
+    let value = String(text || '').trim();
+    const query = value.indexOf('room=');
+    if (query >= 0) value = value.slice(query + 5).split(/[&#]/)[0];
+    value = value.replace(/[\s\-/]/g, '').toUpperCase();
+    return value.length === 6 && [...value].every(c => codeAlphabet.includes(c)) ? value : '';
+}
+const showCode = code => code.slice(0, 3) + '-' + code.slice(3);
+const onlineMode = room => room === '@host' ? 'online_host' : room === '@rooms' ? 'online_browse'
+    : room.startsWith('@watch:') ? 'online_watch' : 'online_join';
+const joinRoom = (code, watch) => startGame(false, (watch ? '@watch:' : '') + code);
+$('net-host').onclick = () => startGame(false, '@host');
+$('net-browse').onclick = () => startGame(false, '@rooms');
+$('net-code').addEventListener('input', () => {
+    const value = $('net-code').value, code = parseRoomCode(value);
+    // A pasted invite link collapses to its code.
+    if (code && value.includes('room=')) $('net-code').value = showCode(code);
+    $('net-join-go').disabled = !code;
+    $('net-code').setAttribute('aria-invalid', String(Boolean(value.trim()) && !code));
+});
+$('net-code').addEventListener('change', () => {
+    const code = parseRoomCode($('net-code').value);
+    if (code) $('net-code').value = showCode(code);
+});
+$('net-join').addEventListener('submit', event => {
+    event.preventDefault();
+    const code = parseRoomCode($('net-code').value);
+    if (code) joinRoom(code, $('net-watch').checked);
+});
+// An invite link (?room=CODE) is offered explicitly. It is removed from the
+// address so Start Game keeps its normal meaning; the game also reads it.
+const invited = parseRoomCode(new URLSearchParams(location.search).get('room'));
+if (invited) {
+    $('invite-code').textContent = showCode(invited);
+    $('invite').hidden = false;
+    $('net-code').value = showCode(invited);
+    $('net-join-go').disabled = false;
+    $('invite-join').onclick = () => joinRoom(invited, false);
+    $('invite-watch').onclick = () => joinRoom(invited, true);
+    const url = new URL(location.href);
+    url.searchParams.delete('room');
+    history.replaceState(null, '', url);
+}
+const emptyRooms = $('net-empty').textContent;
+const roomStatus = {lobby: 'Open', full: 'Full', racing: 'Racing'};
+function renderRooms(rooms) {
+    const list = $('net-rooms');
+    list.replaceChildren(...rooms.map(room => {
+        const row = document.createElement('li');
+        const info = document.createElement('div');
+        const host = document.createElement('span');
+        host.className = 'room-host';
+        host.textContent = room.host || 'Rider';
+        const meta = document.createElement('span');
+        meta.className = 'room-meta';
+        meta.textContent = `Level ${room.level + 1} · ${room.humans}/${room.seats} riders · ${showCode(room.code)}`;
+        info.append(host, meta);
+        const chip = document.createElement('span');
+        chip.className = 'room-chip';
+        chip.dataset.status = room.status;
+        chip.textContent = roomStatus[room.status] || room.status;
+        const watch = room.status !== 'lobby';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = watch ? 'Watch' : 'Join';
+        button.setAttribute('aria-label', `${button.textContent} ${host.textContent}'s room ${showCode(room.code)}`);
+        button.onclick = () => joinRoom(room.code, watch);
+        row.append(info, chip, button);
+        return row;
+    }));
+    $('net-empty').hidden = rooms.length > 0;
+}
+function setNetStatus(state, text) {
+    $('net-status').dataset.state = state;
+    $('net-status').lastElementChild.textContent = text;
+}
+let roomTimer, roomRequest;
+async function refreshRooms() {
+    if (running || document.hidden) return;
+    roomRequest?.abort();
+    const request = roomRequest = new AbortController();
+    try {
+        const response = await fetch('/net/health', {cache: 'no-store', signal: request.signal});
+        const health = response.ok ? await response.json() : null;
+        if (!health?.ok) throw new Error('Server unavailable');
+        const rooms = (Array.isArray(health.public_rooms) ? health.public_rooms : [])
+            .filter(room => parseRoomCode(room.code) && Number.isInteger(room.level) && Number.isInteger(room.humans));
+        const players = Number(health.players) || 0;
+        setNetStatus('online', `${players} ${players === 1 ? 'rider' : 'riders'} online`);
+        $('net-empty').textContent = emptyRooms;
+        renderRooms(rooms);
+    } catch (error) {
+        if (request.signal.aborted) return;
+        setNetStatus('offline', 'Server offline');
+        renderRooms([]);
+        $('net-empty').textContent = 'The multiplayer server is not reachable from this page. You can still try hosting or joining in game.';
+    }
+}
+function startRoomPolling() {
+    clearInterval(roomTimer);
+    refreshRooms();
+    roomTimer = setInterval(refreshRooms, 8000);
+}
+function stopRoomPolling() { clearInterval(roomTimer); roomRequest?.abort(); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !running) refreshRooms(); });
 $('quick').onclick = () => startGame(true);
 $('reload').onclick = () => { telemetry.track('launcher_exit'); location.reload(); };
 function fullscreenRequest() {

@@ -367,6 +367,137 @@ select { width: 100%; font-family: inherit; font-size: 14px; }
   color: #8c8e85;
   font-size: 12px;
 }
+/* Online (mano a mano) panel: host, join by code, live public rooms. */
+.online {
+  margin-top: 18px;
+  padding: 18px 20px 20px;
+  background: #1d1b18;
+  border: 1px solid #3c3a35;
+  border-left: 4px solid var(--yellow);
+}
+.online .mode-kicker { color: var(--yellow); }
+.online-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.online-head h3 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #000;
+  transform: skewX(-10deg);
+  transform-origin: left bottom;
+}
+.net-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 4px;
+  background: #24211d;
+  color: var(--muted);
+  font-family: var(--demi);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.net-status i { width: 8px; height: 8px; border-radius: 50%; background: #6b6a63; }
+.net-status[data-state="online"] { color: var(--text); }
+.net-status[data-state="online"] i { background: #7ee05a; box-shadow: 0 0 8px #7ee05a; animation: pulse 2s ease-in-out infinite; }
+.net-status[data-state="offline"] i { background: #e2412f; }
+@keyframes pulse { 50% { opacity: .45; } }
+.invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: rgba(229, 220, 96, .08);
+  border: 1px solid var(--yellow);
+  clip-path: var(--notch);
+}
+#setup .invite p { margin: 0; color: var(--text); font-family: var(--bold); font-size: 17px; }
+.invite .kicker { display: inline; margin-right: 8px; color: var(--yellow); }
+.invite strong { color: var(--yellow); font-family: var(--display); font-size: 22px; font-weight: 400; letter-spacing: .06em; }
+.invite-actions { display: flex; gap: 8px; }
+.online-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; }
+.online-actions { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.net-host {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 14px 16px;
+  color: #120a05;
+  background: var(--orange);
+  border-color: var(--orange);
+  text-align: left;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+}
+.net-host:hover { color: #120a05; background: #ff7d45; border-color: #ff7d45; }
+.net-host:active { transform: translate(1px, 1px); }
+.net-host-title { font-family: var(--display); font-size: 26px; line-height: 1; transform: skewX(-10deg); }
+.net-host-note { font-family: var(--bold); font-size: 13px; opacity: .8; }
+.code-row { display: flex; gap: 8px; }
+#net-code {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  background: #0f0e0d;
+  border: 1px solid #4a4741;
+  border-radius: 0;
+  color: var(--yellow);
+  font-family: var(--bold);
+  font-size: 18px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+#net-code::placeholder { color: #55534d; letter-spacing: .12em; }
+#net-code:hover { border-color: var(--orange); }
+#net-code:focus-visible { outline-offset: 0; border-color: var(--yellow); }
+#net-code[aria-invalid="true"] { border-color: #e2412f; }
+.net-watch { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--text); font-size: 13px; cursor: pointer; }
+.net-watch input { width: 16px; height: 16px; margin: 0; accent-color: var(--yellow); }
+.net-hint { display: block; margin-top: 6px; color: #7d7f77; font-size: 12px; }
+.rooms { min-width: 0; }
+.rooms-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.link-button {
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text);
+  font-size: 13px;
+  clip-path: none;
+}
+.link-button:hover { background: none; color: var(--yellow); border-bottom-color: var(--yellow); }
+.room-list { margin: 0; padding: 0; list-style: none; max-height: 196px; overflow-y: auto; }
+.room-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #2c2a26;
+}
+.room-list li:first-child { border-top: 0; }
+.room-host { min-width: 0; overflow: hidden; color: var(--text); font-family: var(--bold); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.room-meta { display: block; color: var(--muted); font-family: "RoadRashFutura", sans-serif; font-size: 12px; }
+.room-chip {
+  padding: 2px 7px 1px;
+  background: #24211d;
+  color: var(--muted);
+  font-family: var(--demi);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.room-chip[data-status="lobby"] { color: #b9f09e; box-shadow: inset 2px 0 0 #7ee05a; }
+.room-chip[data-status="racing"] { color: var(--orange); box-shadow: inset 2px 0 0 var(--orange); }
+.room-list button { padding: 6px 12px; font-size: 14px; }
+#setup .net-empty { margin: 8px 0 0; padding: 14px; border: 1px dashed #3c3a35; color: var(--muted); font-size: 13px; }
 /* The ready view has its own copy; keep transient status for errors and imports. */
 #setup:has(#ready:not([hidden])) #status:not(.error) { display: none; }
 #setup #status { margin: 20px 0 0; font-size: 12px; overflow-wrap: anywhere; }
@@ -416,7 +547,7 @@ progress::-moz-progress-bar { background: var(--hazard); background-size: 34px 3
 }
 @keyframes hazard-roll { to { background-position: 34px 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .loading-track { animation: none; }
+  .loading-track, .net-status i { animation: none !important; }
   body:not(.playing) .viewport::before, #setup, .mode-go i { animation: none; }
 }
 .controls { position: relative; }
@@ -484,6 +615,9 @@ a { color: inherit; }
   #setup { padding: 26px 20px 20px; }
   .modes { grid-template-columns: 1fr; gap: 14px; }
   .start-game { min-height: 160px; padding: 18px 20px; }
+  .online { padding: 16px 14px; }
+  .online-head { flex-direction: column; }
+  .online-grid { grid-template-columns: 1fr; }
   footer { font-size: 8px; letter-spacing: .08em; padding: 0 10px; }
   footer > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .footer-links { gap: 12px; }

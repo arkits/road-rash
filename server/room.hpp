@@ -165,6 +165,7 @@ class Server {
     std::string new_code();
     net::SeatToken new_token();
     Room* room_of(const Conn&);
+    net::RoomListEntry list_entry(const std::string& code, const Room&) const;
     int race_slot(const Room&, int seat) const;
     void emit(const std::string& event, const std::string& fields);
 
