@@ -40,8 +40,17 @@ workflow will validate the updated real-browser check after push.
 
 ## Checks / remaining work
 
-Awaiting full deployment workflow result.
+Complete: deployment workflow 40649895689 SUCCESS (6m9s), code revision c87e916.
+All build/package/recovery/cache/telemetry checks passed. Deployment, revision
+and health verification passed. Entire live hosted smoke suite passed, including
+storage-blocked startup, audio/input, responsive/fullscreen rendering, cache
+repair/reuse, C++ failure diagnostics and lifecycle callbacks.
+Run: https://github.com/arkits/road-rash/actions/runs/40649895689
+Site: https://road-rash.archit.xyz
+Full local CI log: `/tmp/rr-cold-start-ci-full-20261028.log`.
+No production source changes were needed for either failure.
 
 ## Live processes / resources
 
-Probe browser closed. No live local processes. Release claim after push.
+Probe browser closed; CI watcher exited successfully. File claim released.
+No live local processes or held resources.

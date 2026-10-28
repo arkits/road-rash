@@ -39,9 +39,12 @@ Push will trigger the normal deployment workflow; verify its result before closi
 
 Run 40648592205 confirmed recovery/cache/telemetry checks PASS, deployment and
 revision/health PASS, normal live gameplay PASS. A separate 90-second cold-start
-timeout in the storage-blocked live test remains; see
+timeout in the storage-blocked live test was subsequently fixed; see
 `hosted-cold-start-20261028.md` for its measured reproduction and fix.
 
 ## Live processes / resources
 
 No live local processes. Release claim after push; monitor CI independently.
+
+Final result: run 40649895689 passed every stage, including live gameplay.
+The updated site is deployed at https://road-rash.archit.xyz (c87e916).
