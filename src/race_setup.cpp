@@ -297,6 +297,7 @@ RaceInstance build_race(const RaceAssets& assets, const std::vector<uint8_t>& ex
                                        assets.specs[size_t(assets.bike_index)], assets.rider_value,
                                        std::move(opponents), config.level, config.road_base_q8,
                                        assets.personalities, exe, seat0_pos, seat0_lat);
+    race->set_player_bike(assets.bike_index);
     if (!config.net.humans.empty()) race->set_net(true);
     race->set_pedestrian_setup_tick(config.pedestrian_setup_tick);
     // 0x00407990 builds rows 9..14 from the 0x004c5f20 copies: base and

@@ -224,7 +224,6 @@ Race::Race(std::vector<RouteSample> a, std::vector<RouteSample> b, const Physics
     if (!personalities.empty()) brain_from(player.brain, personalities[0]);
     player.human = 0;
     riders_.push_back(player);
-    int colour = 1;
     for (const auto& o : opponents) {
         if (o.slot < 1 || o.slot > 15) throw std::runtime_error("Opponent grid slot must be 1..15");
         Rider r = place_rider(o.spec, o.rider_value, o.slot, o.grid_pos, o.grid_lat);
@@ -232,7 +231,7 @@ Race::Race(std::vector<RouteSample> a, std::vector<RouteSample> b, const Physics
         r.human = o.human;
         r.rider_idx = o.rider;
         r.frozen = o.frozen;
-        r.colour = colour++ % 9;
+        r.colour = o.slot; // 0x00446190 with player bike 0; see set_player_bike
         if (o.human >= 0) {
             // Plan 34: another human seat, built like the player (0x00405990
             // player tables, no AI scaling); 0x004317a0 puts seats on grid
@@ -4465,6 +4464,21 @@ void Race::prepare_traffic_obstacles() {
 void Race::step(uint32_t controls) {
     const uint32_t one[1] = {controls};
     step(std::span<const uint32_t>(one));
+}
+
+void Race::set_player_bike(int bike) {
+    // 0x00446190 (offline branch): the player draws remap = its rider-row
+    // byte +5, which 0x00405990 fills with the bike index (0x405b3a..0x405b57:
+    // level_bike in Thrash, else the career bike 0x004b8a14); opponent slot i
+    // draws remap i, except the slot equal to that byte, which draws remap 0.
+    // The network branch (bike +0x328) is not modelled.
+    for (Rider& r : riders_) {
+        if (r.cop) continue;
+        if (r.slot == 0)
+            r.colour = bike;
+        else
+            r.colour = r.slot == bike ? 0 : r.slot;
+    }
 }
 
 void Race::set_human_driven(int seat, bool driven) {

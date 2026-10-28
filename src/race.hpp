@@ -472,6 +472,8 @@ class Race {
     // server flags it in the sealed frame); `back` returns it to its seat.
     void set_human_driven(int seat, bool driven);
     void set_human_nitro(int seat, const NitroConfig&);
+    // Rider colour remaps from the player's bike index (0x00446190).
+    void set_player_bike(int bike);
     // Plan 34: mano-a-mano rules inside the simulation (handicap 0x00442f60
     // every 0x39 ticks, applied in 0x004395e0). Off offline.
     void set_net(bool v) { net_ = v; }

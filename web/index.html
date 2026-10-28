@@ -81,13 +81,16 @@
               <option value="2">Sierra Nevada</option><option value="3">Pacific Highway</option>
               <option value="4">Peninsula</option>
             </select>
-            <label class="course-label rider-label" for="character">Rider</label>
-            <select id="character">
-              <option value="1">Axle</option><option value="2">Bose Jefferson</option>
-              <option value="3">Cydney Bass</option><option value="4">Milwaukee Jon</option>
-              <option value="5">Pearl McKurdy</option><option value="6">Rhonda the Rash</option>
-              <option value="7">Slim Jim</option><option value="8">Teflon Mike</option>
-            </select>
+            <span class="course-label rider-label" id="rider-label">Rider</span>
+            <input id="character" type="hidden" value="1">
+            <button id="rider-button" class="rider-button" type="button" aria-haspopup="dialog" aria-labelledby="rider-label rider-name">
+              <span class="rider-thumb" aria-hidden="true"><img id="rider-thumb" alt=""></span>
+              <span class="rider-chip-text">
+                <span id="rider-name" class="rider-chip-name">Axle</span>
+                <span id="rider-bike" class="rider-chip-bike">Choose your rider</span>
+              </span>
+              <span class="rider-chip-go" aria-hidden="true">Change</span>
+            </button>
             <button id="quick">Race<span aria-hidden="true">▸</span></button>
           </section>
         </div>
@@ -149,6 +152,42 @@
     </div>
   </div>
 </main>
+<dialog id="rider-dialog" class="rider-dialog" aria-labelledby="rider-dialog-title">
+  <form method="dialog" class="rider-screen">
+    <div class="rider-art">
+      <img id="rider-portrait" class="rider-portrait" alt="">
+      <div class="rider-namebox">
+        <span class="kicker" id="rider-dialog-title">Choose your rider</span>
+        <h2 id="rider-title" aria-live="polite">Axle</h2>
+      </div>
+      <div class="rider-sheet">
+        <p id="rider-stats" class="rider-stats"></p>
+        <p id="rider-bio" class="rider-bio"></p>
+      </div>
+      <div class="rider-roster" role="radiogroup" aria-label="Riders" id="rider-roster">
+        <button type="button" role="radio" value="1">Axle</button>
+        <button type="button" role="radio" value="2">Bose Jefferson</button>
+        <button type="button" role="radio" value="3">Cydney Bass</button>
+        <button type="button" role="radio" value="4">Milwaukee Jon</button>
+        <button type="button" role="radio" value="5">Pearl McKurdy</button>
+        <button type="button" role="radio" value="6">Rhonda the Rash</button>
+        <button type="button" role="radio" value="7">Slim Jim</button>
+        <button type="button" role="radio" value="8">Teflon Mike</button>
+      </div>
+    </div>
+    <div class="rider-rail">
+      <figure class="rider-bike-view" id="rider-bike-view" hidden>
+        <span class="kicker">On the road</span>
+        <div class="rider-road"><canvas id="rider-sprite" width="56" height="128" role="img" aria-label="Rider and bike as seen in the race"></canvas></div>
+        <figcaption id="rider-bike-name"></figcaption>
+      </figure>
+      <div class="rider-actions">
+        <button id="rider-confirm" value="ride" class="primary">Ride as <span id="rider-confirm-name">Axle</span></button>
+        <button value="cancel">Back</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 <footer>
   <span>Unofficial port. Not affiliated with Electronic Arts.</span>
   <span class="footer-links"><a href="https://github.com/arkits/road-rash" target="_blank" rel="noopener">GitHub</a><a href="LICENSES.txt">Licences</a></span>

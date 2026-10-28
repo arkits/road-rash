@@ -1177,7 +1177,16 @@ the base must be a group id, not a descriptor index). Next: hook
 fix `read_actor_sequence`/`select_actor_view` against ground truth.
 BONUS: opponent colour is the 1-based grid slot in `DAT_004c7f74` (frame 750
 shows colour 0xa = slot 10); player colour is the live rider-table row
-byte+5 (writer unidentified).
+byte+5. Resolved October 27, 2026: `0x00405990` writes row+5 = the rider's
+bike index (`0x405b3a..0x405b57`: `0x004641c8[row*5 + level]` when the rider
+is not the player or the mode `0x004753b0` is Thrash, else the career bike
+`0x004b8a14`) and passes it to `0x00405ea0` as the bike. `0x00446190` (bike)
+and `0x004460c0` (rider half) return 0xde for the cop, `(s8)bike+0x328` in a
+network race, row+5 for the player, and slot i for opponent i except the slot
+equal to the player's byte, which gets remap 0. So the in-race look follows
+the bike, not the character: at level 1 Axle/Jon/Rhonda/Mike ride bike 1,
+Bose/Cydney bike 2, Pearl/Jim bike 4. Native drew the player with remap 0
+and opponents with `n % 9` until `Race::set_player_bike`.
 
 ### Playtest audio and AI corrections (October 12, 2026)
 

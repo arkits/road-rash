@@ -887,7 +887,7 @@ int main(int argc, char** argv) {
     std::string root, screenshot, video, net_invite, net_server;
     bool rtc = false;
     int course = 0, bike = 0, level = 0, opponents = 14, character = 1;
-    bool explicit_bike = false;
+    bool explicit_bike = false, explicit_character = false;
     long run_ticks = -1, menu_frames = -1;
     bool auto_drive = false, into_traffic = false, start_paused = false, first_run_smoke = false,
          quick_race = false;
@@ -923,7 +923,7 @@ int main(int argc, char** argv) {
             explicit_bike = quick_race = true;
         } else if (a == "--character" && i + 1 < argc) {
             character = std::atoi(argv[++i]);
-            quick_race = true;
+            explicit_character = quick_race = true;
         } else if (a == "--ticks" && i + 1 < argc) {
             run_ticks = std::atol(argv[++i]);
             quick_race = true;
@@ -1068,7 +1068,7 @@ int main(int argc, char** argv) {
             // specs validated below from a local read (factory owns the game copy).
             (void)rr::read_bike_specs(assets.read("DATA/BIKESPEC.RSC"));
             g.bobs = rr::read_bobs(assets.read("DATA/BIKERS/HIBOB.DAT"), rr::bob_frames);
-            g.remaps = rr::read_rider_remaps(bytes, 9);
+            g.remaps = rr::read_rider_remaps(bytes, 15);
             g.palette = rr::Palette::from_raw(assets.read("DATA/PALETTE.RAW"));
             return bytes;
         });
@@ -1088,6 +1088,11 @@ int main(int argc, char** argv) {
                               net_invite, net_server, rtc, quick);
         } else {
             g.course_name = course_names[course];
+            // An explicit --character rides its level bike (0x004641c8), as
+            // the Thrash setup of the interactive quick race does.
+            if (explicit_character && !explicit_bike)
+                bike = rr::read_career_tables(exe).level_bike.at(size_t(level) +
+                                                                 size_t(rr::character_rider(character)) * 5);
             {
                 const auto specs = rr::read_bike_specs(assets.read("DATA/BIKESPEC.RSC"));
                 if (bike < 0 || size_t(bike) >= specs.size())

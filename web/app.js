@@ -119,6 +119,7 @@ async function restoreHostedAssets() {
     if (!cache || storageWarning) $('cache-note').textContent =
         (!cache ? 'Game files will download as you play; caching is unavailable. ' : '') + storageWarning;
     $('ready').hidden = false;
+    riderReady();
     startRoomPolling();
     status('Ready to play.');
     telemetry.track('launcher_ready', {source: 'hosted'});
@@ -187,6 +188,7 @@ async function restoreDisc() {
         assetDirectory = dir;
         engine.localAssets.names = new Set(references.map(r => r.path));
         $('ready').hidden = false;
+        riderReady();
         startRoomPolling();
         $('state').textContent = 'Disc ready';
         status('Your game is ready to play.');
@@ -448,6 +450,193 @@ function startRoomPolling() {
     roomTimer = setInterval(refreshRooms, 8000);
 }
 function stopRoomPolling() { clearInterval(roomTimer); roomRequest?.abort(); }
+// Rider picker, modelled on the original character select (0x00421df0
+// case 0xe). Portraits, stats, bios and the in-race sprite are read at run
+// time from the player's verified disc files; nothing disc-derived ships.
+const riderFiles = ['Axle', 'Bose', 'Cydney', 'Jon', 'Pearl', 'Rhonda', 'Jim', 'Mike'];
+const riderRows = [8, 7, 2, 5, 4, 6, 3, 1];                          // 0x00415fc0 character -> rider row
+const showroomBikes = [0, 1, 2, 4, 3, 10, 12, 14, 11, 13, 5, 7, 9, 6, 8]; // 0x0041ff00 name slot 0x80+i -> bike
+const riderLean = [3, 6, 5, 6, 3, 8, 9, 8];                            // HIBOB riding frames: straight, right, left
+const riderNames = [...document.querySelectorAll('#rider-roster [role=radio]')].map(button => button.textContent);
+let roster, rosterLoad, riderSprites, riderSpriteLoad, riderPreview = 1, riderTimer;
+const portraits = new Map();
+async function discBytes(path) {
+    const file = await (await assetDirectory.getFileHandle(encodeURIComponent(path))).getFile();
+    return new Uint8Array(await file.arrayBuffer());
+}
+function peImage(bytes) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (view.getUint16(0, true) !== 0x5a4d) throw new Error('Not a PE image');
+    const pe = view.getUint32(60, true), table = pe + 24 + view.getUint16(pe + 20, true);
+    const sections = Array.from({length: view.getUint16(pe + 6, true)}, (_, i) => ({
+        va: view.getUint32(table + 40 * i + 12, true), size: view.getUint32(table + 40 * i + 16, true),
+        raw: view.getUint32(table + 40 * i + 20, true)}));
+    const offset = (rva, count) => {
+        const s = sections.find(s => rva >= s.va && rva - s.va + count <= s.size);
+        if (!s) throw new Error('PE address has no file data');
+        return s.raw + rva - s.va;
+    };
+    const base = view.getUint32(pe + 52, true);
+    return {bytes, view, offset, resources: view.getUint32(pe + 136, true),
+        data: (address, count) => bytes.subarray(offset(address - base, count), offset(address - base, count) + count)};
+}
+// RT_STRING blocks hold 16 counted UTF-16 strings; block n starts at id (n-1)*16.
+function peStrings(pe) {
+    const {view} = pe, base = pe.offset(pe.resources, 16), strings = new Map(), utf16 = new TextDecoder('utf-16le');
+    const entries = dir => Array.from({length: view.getUint16(base + dir + 12, true) + view.getUint16(base + dir + 14, true)},
+        (_, i) => [view.getUint32(base + dir + 16 + 8 * i, true), view.getUint32(base + dir + 20 + 8 * i, true) & 0x7fffffff]);
+    for (const [type, types] of entries(0)) {
+        if (type !== 6) continue;
+        for (const [block, languages] of entries(types))
+            for (const [, data] of entries(languages)) {
+                const size = view.getUint32(base + data + 4, true);
+                let p = pe.offset(view.getUint32(base + data, true), size);
+                for (let k = 0; k < 16; k++) {
+                    const n = view.getUint16(p, true); p += 2;
+                    if (n && !strings.has((block - 1) * 16 + k)) strings.set((block - 1) * 16 + k, utf16.decode(pe.bytes.subarray(p, p + 2 * n)));
+                    p += 2 * n;
+                }
+            }
+    }
+    return strings;
+}
+const formatC = (format, args) => { let i = 0; return format.replace(/%([%sdc])/g, (_, c) => c === '%' ? '%' : String(args[i++])); };
+// Frontend::prepare_characters for the quick race (level 1, imperial units).
+async function loadRoster() {
+    const [exe, text] = await Promise.all([discBytes('ROADRASH.EXE'), discBytes('TEXT/ENU.DLL')]);
+    const pe = peImage(exe), strings = peStrings(peImage(text)), str = id => strings.get(id) || '';
+    const cash = pe.data(0x00469000, 18), levelBikes = pe.data(0x004641c8, 16 * 5);
+    const entries = riderNames.map((name, i) => {
+        const row = riderRows[i], body = pe.data(0x00463c78 + row * 0x40 + 8, 8);
+        const inches = body[0] | body[1] << 8, pounds = body[4] | body[5] << 8;
+        const heightFormat = str(4000);
+        const height = formatC(heightFormat.replace(/^[+-]/, ''), [Math.floor(inches / 12), inches % 12]);
+        const bike = levelBikes[row * 5];
+        const bikeName = str(0x80 + Math.max(0, showroomBikes.lastIndexOf(bike)));
+        const lines = formatC(str(40 + i), [height, formatC(str(4001), [pounds]), bikeName, cash[2 * (i + 1)] | cash[2 * (i + 1) + 1] << 8]).split('\n');
+        return {name, bike, bikeName, stats: lines.slice(0, 4), bio: lines.slice(4).join(' ')};
+    });
+    return {entries, remaps: pe.data(0x0046e158, 15 * 256)};
+}
+async function loadRiderSprites() {
+    const [bob, palette] = await Promise.all([discBytes('DATA/BIKERS/HIBOB.DAT'), discBytes('DATA/PALETTE.RAW')]);
+    const frames = [];
+    for (let p = 0, i = 0; i <= Math.max(...riderLean); i++) {
+        const width = bob[p], height = bob[p + 1];
+        frames.push({width, height, pixels: bob.subarray(p + 2, p + 2 + width * height)});
+        p += 2 + width * height;
+    }
+    const canvas = $('rider-sprite');
+    canvas.width = Math.max(...riderLean.map(i => frames[i].width));
+    canvas.height = Math.max(...riderLean.map(i => frames[i].height));
+    return {frames, palette};
+}
+function portrait(c) {
+    if (!portraits.has(c)) portraits.set(c, discBytes(`IMAGES/CHARS/${riderFiles[c - 1].toUpperCase()}-N.RRI`)
+        .then(bytes => URL.createObjectURL(new Blob([bytes], {type: 'image/jpeg'}))) // .RRI is a JPEG
+        .catch(error => { portraits.delete(c); throw error; }));
+    return portraits.get(c);
+}
+// HIBOB frame through the bike's colour remap (0x00443820, 0x00446190).
+function drawRider(frameIndex) {
+    const canvas = $('rider-sprite'), entry = roster?.entries[riderPreview - 1];
+    if (!riderSprites || !entry) return;
+    const frame = riderSprites.frames[frameIndex], {palette} = riderSprites;
+    const context = canvas.getContext('2d'), image = context.createImageData(canvas.width, canvas.height);
+    const left = (canvas.width - frame.width) >> 1, top = canvas.height - frame.height;
+    for (let y = 0; y < frame.height; y++)
+        for (let x = 0; x < frame.width; x++) {
+            const v = frame.pixels[y * frame.width + x];
+            if (!v) continue;
+            const c = roster.remaps[entry.bike * 256 + v] * 4, o = ((top + y) * canvas.width + left + x) * 4;
+            image.data.set([palette[c], palette[c + 1], palette[c + 2], 255], o);
+        }
+    context.putImageData(image, 0, 0);
+}
+function animateRider() {
+    clearInterval(riderTimer);
+    let step = 0;
+    drawRider(riderLean[0]);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    riderTimer = setInterval(() => drawRider(riderLean[++step % riderLean.length]), 220);
+}
+function previewRider(c) {
+    riderPreview = c;
+    const entry = roster?.entries[c - 1];
+    document.querySelectorAll('#rider-roster [role=radio]').forEach(button => {
+        const on = Number(button.value) === c;
+        button.setAttribute('aria-checked', String(on));
+        button.tabIndex = on ? 0 : -1;
+    });
+    $('rider-title').textContent = $('rider-confirm-name').textContent = riderNames[c - 1];
+    $('rider-stats').replaceChildren(...(entry ? entry.stats : []).map(line => Object.assign(document.createElement('span'), {textContent: line})));
+    $('rider-bio').textContent = entry ? entry.bio : '';
+    $('rider-bike-name').textContent = entry ? entry.bikeName : '';
+    $('rider-portrait').classList.remove('shown');
+    portrait(c).then(url => {
+        if (riderPreview !== c) return;
+        $('rider-portrait').src = url;
+        $('rider-portrait').classList.add('shown');
+    }).catch(error => console.warn('Rider portrait unavailable:', error));
+    if (riderSprites && entry) animateRider();
+}
+function setRider(c) {
+    $('character').value = String(c);
+    $('rider-name').textContent = riderNames[c - 1];
+    $('rider-bike').textContent = roster?.entries[c - 1].bikeName || 'Choose your rider';
+    try { localStorage.setItem('rr-rider', String(c)); } catch {}
+    portrait(c).then(url => { if ($('character').value === String(c)) $('rider-thumb').src = url; })
+        .catch(error => console.warn('Rider portrait unavailable:', error));
+}
+function riderReady() {
+    let saved = 1;
+    try { saved = Number(localStorage.getItem('rr-rider')) || 1; } catch {}
+    rosterLoad ||= loadRoster().then(result => { roster = result; }).catch(error => {
+        rosterLoad = undefined;
+        console.warn('Rider details unavailable:', error);
+    });
+    setRider(saved >= 1 && saved <= 8 ? saved : 1);
+    rosterLoad.then(() => setRider(Number($('character').value)));
+}
+$('rider-button').onclick = async () => {
+    previewRider(Number($('character').value));
+    $('rider-dialog').showModal();
+    $('rider-roster').querySelector('[aria-checked=true]').focus();
+    await (rosterLoad ||= loadRoster().then(result => { roster = result; }).catch(error => { rosterLoad = undefined; console.warn(error); }));
+    riderSpriteLoad ||= loadRiderSprites().then(result => { riderSprites = result; })
+        .catch(error => { riderSpriteLoad = undefined; console.warn('Rider sprite unavailable:', error); });
+    await riderSpriteLoad;
+    $('rider-bike-view').hidden = !riderSprites;
+    if ($('rider-dialog').open) previewRider(riderPreview);
+};
+$('rider-roster').addEventListener('click', event => {
+    const button = event.target.closest('[role=radio]');
+    if (button) previewRider(Number(button.value));
+});
+$('rider-roster').addEventListener('dblclick', event => {
+    if (event.target.closest('[role=radio]')) $('rider-confirm').click();
+});
+$('rider-roster').addEventListener('keydown', event => {
+    const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[event.key];
+    let next;
+    if (step) next = (riderPreview - 1 + step + 8) % 8 + 1;
+    else if (event.key === 'Home') next = 1;
+    else if (event.key === 'End') next = 8;
+    else if (event.key === 'Enter') { event.preventDefault(); $('rider-confirm').click(); return; }
+    else return;
+    event.preventDefault();
+    previewRider(next);
+    $('rider-roster').querySelector('[aria-checked=true]').focus();
+});
+$('rider-dialog').addEventListener('close', () => {
+    clearInterval(riderTimer);
+    if ($('rider-dialog').returnValue === 'ride') {
+        setRider(riderPreview);
+        telemetry.track('rider_select', {character: riderPreview});
+    }
+    $('rider-dialog').returnValue = '';
+    $('rider-button').focus();
+});
 $('quick').onclick = () => startGame(true);
 $('reload').onclick = () => { telemetry.track('launcher_exit'); location.reload(); };
 function fullscreenRequest() {

@@ -56,6 +56,23 @@ build. Vercel does not report a build duration for this upload.
   standings screens; **Start game** runs the original frontend. Enter skips the
   opening movie/credits. All five native course choices were browser-tested.
 
+### Rider picker — October 27, 2026
+
+The Quick Race rider is a chip (portrait thumbnail, name, level-1 bike) that
+opens a modal modelled on the original character select (`0x00421df0` case
+`0xe`): the `IMAGES/CHARS/<rider>-N.RRI` portrait (the `.RRI` is a JPEG, shown
+through a Blob URL), the orange Badloc name, `Height/Weight/Bike/Cash` and the
+bio from `TEXT/ENU.DLL` string `40+i` (heights/weights `0x00463c78` +8/+0xc,
+cash `0x00469000`, bike `0x004641c8[row*5]` named through slot `0x80+i`,
+imperial formats 4000/4001), and three columns of names with the yellow marker.
+A side rail draws the in-race sprite: `DATA/BIKERS/HIBOB.DAT` riding frames
+3/6/5/8/9 through the bike's remap `0x0046e158 + bike*256` and
+`DATA/PALETTE.RAW`, as the race does (`0x00446190`). Everything is parsed in
+`web/app.js` at run time from the verified hosted or OPFS files; nothing
+disc-derived is committed. Arrow keys/Home/End move the radio group, Enter or
+double-click rides, Esc goes back; at ≤720 px the picker is full screen with a
+two-column, 44 px-row roster. The choice is remembered in `localStorage`.
+
 The page also loads the original Badloc/Futura TrueType files from the verified
 local disc after import/restore. Browser FontFace uses in-memory bytes from OPFS;
 no game fonts are published. Badloc headings and Futura controls/body replace the
