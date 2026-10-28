@@ -46,3 +46,7 @@ Optimized assembleRelease -PreleaseDebugSigning=true also passed, including the 
 ## Upstream integration
 
 Direct push rejected because upstream main advanced. Integrated both this slice and the earlier Pixel smoke-test note into an isolated shared clone at /tmp/rr-pixel-integrate-20261027 on upstream 73b7fd8. Conflicts preserve both standard includes, upstream network overlay, and upstream's rule preventing online simulation pause while clearing touch inputs. Shared dirty checkout was not rebased/reset/stashed. Validation on integrated source: native rr-game/input/race-actions/race-screen targets built; input and race-actions passed; race-screen passed with the original disc exposed at /tmp/cdrom (20.98 s). Android assembleDebug and asset check passed in 17 s with ANDROID_HOME pointing at the existing SDK. Network transports disabled for this integration compile; network acceptance not repeated. Full 106/106 gate and phone gameplay above cover the pre-integration working tree.
+
+## Final device choice
+
+Release install preserved data and reached landscape menus, but its subsequent Napa launch remained on GAME LOADING through repeated observations over several minutes (PID 30491; SDLThread still consumed CPU, no game crash observed). This does not establish release gameplay acceptance. Restored the tested debug APK for owner playtesting. Release-load latency/stall needs a separate profile and debug/release comparison; do not report the optimized build as hardware-accepted. Debug gameplay, multitouch and lifecycle evidence above remains valid.
