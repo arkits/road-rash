@@ -61,38 +61,59 @@ void draw_phone_controls(SDL_Renderer* renderer, const PlayerInput& in, bool lef
 
 FpsOverlay::FpsOverlay(const Assets& assets) : assets_(assets) {}
 
-void FpsOverlay::frame(SDL_Renderer* renderer, uint64_t now, int ticks_this_frame) {
+void FpsOverlay::frame(SDL_Renderer* renderer, uint64_t now, int ticks_this_frame,
+                       const std::string& location) {
     ++frames_;
     tick_acc_ += ticks_this_frame;
+    if (prev_ns_ && now > prev_ns_) worst_ns_ = std::max(worst_ns_, now - prev_ns_);
+    prev_ns_ = now;
     const uint64_t now_ms = now / 1000000;
     if (now_ms >= next_) {
-        const uint64_t span = now_ms >= last_ ? now_ms - last_ : 1;
+        const bool first = last_ == 0; // no measured window yet
+        const uint64_t span = now_ms > last_ ? now_ms - last_ : 1;
         v_ = int(uint64_t(frames_) * 1000 / span);
         tps_ = int(uint64_t(tick_acc_) * 1000 / span);
+        // Mean and worst frame time over the window, in 0.1 ms.
+        const int mean_tenths = frames_ ? int(span * 10 / uint64_t(frames_)) : 0;
+        const int worst_tenths = int(worst_ns_ / 100000);
         frames_ = 0;
         tick_acc_ = 0;
+        worst_ns_ = 0;
         last_ = now_ms;
         next_ = now_ms + 500;
         if (!text_) text_ = std::make_unique<TextRenderer>(assets_);
         if (text_->has(Face::futura_bold)) {
-            const std::string s = std::to_string(v_) + " FPS " + std::to_string(tps_) + " TPS";
-            const int w = text_->width(Face::futura_bold, 24, s) + 4;
-            img_ = RgbImage(w, 30, 0);
-            text_->draw(img_, Face::futura_bold, 24, 2, 2, 0x404040, s);
-            text_->draw(img_, Face::futura_bold, 24, 0, 0, 0xdefff0, s);
+            auto ms = [](int tenths) {
+                return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10);
+            };
+            std::vector<std::string> lines{first ? std::string("-- FPS -- ms -- TPS")
+                                                 : std::to_string(v_) + " FPS " + ms(mean_tenths) +
+                                                       " ms (max " + ms(worst_tenths) + ") " +
+                                                       std::to_string(tps_) + " TPS"};
+            if (!location.empty()) lines.push_back(location);
+            int w = 4;
+            for (const auto& line : lines) w = std::max(w, text_->width(Face::futura_bold, 24, line) + 4);
+            const int h = 30 * int(lines.size());
+            img_ = RgbImage(w, h, 0);
+            for (size_t i = 0; i < lines.size(); ++i) {
+                // Right-aligned so the block stays pinned to the corner.
+                const int x = w - 4 - text_->width(Face::futura_bold, 24, lines[i]), y = 30 * int(i);
+                text_->draw(img_, Face::futura_bold, 24, x + 2, y + 2, 0x404040, lines[i]);
+                text_->draw(img_, Face::futura_bold, 24, x, y, 0xdefff0, lines[i]);
+            }
             // Opaque ink over a transparent background (straight-alpha
             // ARGB8888) so the sky shows through.
-            argb_.assign(size_t(w) * 30, 0);
+            argb_.assign(size_t(w) * size_t(h), 0);
             for (size_t i = 0; i < argb_.size(); ++i)
                 if (img_.pixels[i]) argb_[i] = 0xff000000u | img_.pixels[i];
             if (tex_) {
                 float tw = 0, th = 0;
                 SDL_GetTextureSize(tex_.get(), &tw, &th);
-                if (int(tw) != w || int(th) != 30) tex_.reset();
+                if (int(tw) != w || int(th) != h) tex_.reset();
             }
             if (!tex_) {
-                tex_.reset(SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
-                                             w, 30));
+                tex_.reset(
+                    SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h));
                 if (tex_) SDL_SetTextureBlendMode(tex_.get(), SDL_BLENDMODE_BLEND);
             }
             if (tex_) SDL_UpdateTexture(tex_.get(), nullptr, argb_.data(), w * 4);

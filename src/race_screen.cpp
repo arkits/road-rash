@@ -534,7 +534,15 @@ bool RaceScreen::iterate(uint64_t now_ns) {
     }
     // Plan 18 Task 9: FPS + simulation ticks/sec, top-right, Futura Bold 24
     // #DEFFF0 with a 2-pixel black shadow like all original text, twice a second.
-    if (fps_) fps_->frame(renderer_, now, steps);
+    // The second line locates the frame: course file, level, route sample
+    // (position >> 8) and race tick.
+    if (fps_) {
+        std::string where;
+        if (g_.instance.race)
+            where = g_.config.course + " L" + std::to_string(g_.config.level + 1) + "  sample " +
+                    std::to_string(g_.race().position() >> 8) + "  tick " + std::to_string(g_.race().ticks());
+        fps_->frame(renderer_, now, steps, where);
+    }
     if (network_overlay_)
         network_overlay_->frame(
             renderer_,

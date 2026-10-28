@@ -111,3 +111,16 @@ human-vs-AI fight capture comparing hit rates.
 ## Live processes / resources
 
 None held.
+
+## FPS overlay: frame time and location (October 27, 2026)
+
+Owner request: make screenshots locatable. With Options → Display → FPS on,
+the top-right overlay now shows two lines, refreshed every 500 ms:
+`<fps> FPS <mean> ms (max <worst>) <tps> TPS` and
+`<COURSE> L<level> sample <position >> 8> tick <race tick>`. The first window
+shows `--` instead of a measurement taken from time zero. Changed
+`src/race_overlay.{hpp,cpp}` and `src/race_screen.cpp`. Checked: rr-game builds;
+`--ticks 600 --screenshot` with `show_fps=1` shows `NAPA L1 sample 75
+tick 420` (one rendered frame, so only the first-window FPS text appears);
+frontend/native-screens/settings ctests pass. Live FPS values were not
+captured in a screenshot.

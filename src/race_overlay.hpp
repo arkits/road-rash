@@ -17,14 +17,17 @@ class FpsOverlay { // Futura Bold 24 #DEFFF0, 2-px black shadow, refreshed every
   public:
     explicit FpsOverlay(const Assets& assets);
     void add_ticks(int steps) { tick_acc_ += steps; }
-    void frame(SDL_Renderer*, uint64_t now_ns,
-               int ticks_this_frame); // counts + redraws when due, then renders
+    // Counts + redraws when due, then renders. Line 1: FPS, mean and worst
+    // frame time, sim ticks/sec. Line 2: location (course, route sample,
+    // race tick) so a screenshot identifies where it was taken.
+    void frame(SDL_Renderer*, uint64_t now_ns, int ticks_this_frame, const std::string& location = {});
+
   private:
     const Assets& assets_;
     std::unique_ptr<TextRenderer> text_;
     TexturePtr tex_;
     RgbImage img_;
-    uint64_t next_ = 0, last_ = 0;
+    uint64_t next_ = 0, last_ = 0, prev_ns_ = 0, worst_ns_ = 0;
     int frames_ = 0, tick_acc_ = 0, v_ = 0, tps_ = 0;
     std::vector<uint32_t> argb_;
 };
