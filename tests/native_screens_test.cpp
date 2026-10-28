@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
     // Plan 21 Task 8: + WIDESCREEN (9 desktop / 8 mobile rows).
     check(data.screens[rr::screen_id::native_display].items.size() == 11, "display screen rows");
     check(mobile.screens[rr::screen_id::native_display].items.size() == 10, "mobile display screen rows");
-    // Plan 21 Task 9: Enhancements screen (10 effect rows + Smooth Terrain + Back).
-    check(data.screens[rr::screen_id::native_enhancements].items.size() == 12, "enhancements screen rows");
+    // Plan 21 Task 9: Enhancements screen (10 effect rows + Back).
+    check(data.screens[rr::screen_id::native_enhancements].items.size() == 11, "enhancements screen rows");
     check(data.screens[rr::screen_id::native_enhancements].items.back().target ==
               rr::screen_id::native_display,
           "enhancements Back returns to Display");

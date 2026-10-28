@@ -183,25 +183,24 @@ void add_native_screens(FrontendData& data, bool mobile) {
         enh.title_format = data.screens[0x13].title_format;
         enh.items.clear();
         const std::pair<int, uint32_t> erows[] = {
-            {ns::enh_interp, native_popup::on_off},  {ns::enh_persp, native_popup::on_off},
-            {ns::enh_colour, native_popup::on_off},  {ns::enh_filter, native_popup::enh_filter},
-            {ns::enh_fog, native_popup::enh_fog},    {ns::enh_grade, native_popup::enh_grade},
-            {ns::enh_bloom, native_popup::on_off},   {ns::enh_vig, native_popup::on_off},
-            {ns::enh_mb, native_popup::on_off},      {ns::enh_wide, native_popup::widescreen},
-            {ns::enh_terrain, native_popup::on_off},
+            {ns::enh_interp, native_popup::on_off}, {ns::enh_persp, native_popup::on_off},
+            {ns::enh_colour, native_popup::on_off}, {ns::enh_filter, native_popup::enh_filter},
+            {ns::enh_fog, native_popup::enh_fog},   {ns::enh_grade, native_popup::enh_grade},
+            {ns::enh_bloom, native_popup::on_off},  {ns::enh_vig, native_popup::on_off},
+            {ns::enh_mb, native_popup::on_off},     {ns::enh_wide, native_popup::widescreen},
         };
         {
-            // Review 2026-10-13 item 3: 12 rows fit in 480 px.
-            const int estep = fit_step(tpl.h, tpl.y, 13);
+            // Review 2026-10-13 item 3: 11 rows fit in 480 px.
+            const int estep = fit_step(tpl.h, tpl.y, 12);
             const int eh = std::min(tpl.h, estep - 2);
-            for (size_t i = 0; i < std::size(erows); ++i) {
+            for (size_t i = 0; i < 10; ++i) {
                 MenuItem m =
                     value_item(tpl, tpl.y + int(i) * estep, erows[i].first, ns::d_enh, erows[i].second);
                 m.h = eh;
                 enh.items.push_back(m);
             }
             MenuItem back = tpl;
-            back.y = tpl.y + int(std::size(erows)) * estep;
+            back.y = tpl.y + 10 * estep;
             back.h = eh;
             back.target = screen_id::native_display;
             back.caption = ns::back;

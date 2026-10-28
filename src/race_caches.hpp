@@ -9,7 +9,6 @@
 #include "actor_nodes.hpp"
 #include "display.hpp"
 #include "fog.hpp"
-#include "world_texture.hpp"
 #include "framebuffer.hpp"
 #include "framebuffer_rgb.hpp"
 #include "frame_profile.hpp"
@@ -212,8 +211,7 @@ struct CourseCanvas {
             {
                 ProfileScope ps(profile, FrameProfile::raster);
                 render_nodes_rgb_fog(rgb, nodes, view_mode_wide(s, wide), 16, game.palette, game.enhancements,
-                                     *workers, fog_rgb, 33,
-                                     game.smooth_terrain ? &world_blend(game.palette) : nullptr);
+                                     *workers, fog_rgb);
             }
             // Grade post-pass (identity when grade == none).
             if (game.enhancements.grade != Grade::none) {
@@ -310,8 +308,7 @@ struct CourseCanvas {
             {
                 ProfileScope ps(profile, FrameProfile::raster);
                 rr::render_nodes_threaded(frame, nodes, view_mode_wide(s, wide), 16, *workers,
-                                          game.enhancements.perspective,
-                                          game.smooth_terrain ? &world_blend(game.palette) : nullptr);
+                                          game.enhancements.perspective);
             }
             if (need_dash) {
                 // Plan 19 Task 8: the dashboard composes at the race scale. Its

@@ -1,6 +1,5 @@
 #include "world_renderer.hpp"
 #include "texture.hpp"
-#include "world_texture.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -15,8 +14,7 @@ int16_t narrow(int32_t v) {
 }
 } // namespace
 static void render_nodes_impl(Framebuffer& fb, const std::vector<DrawNode>& nodes, const ViewMode& mode,
-                              uint32_t flat_mask, bool perspective_on,
-                              const WorldBlend* smooth_terrain = nullptr) {
+                              uint32_t flat_mask, bool perspective_on) {
     if (fb.width() != mode.surface_width || fb.height() != mode.surface_height)
         throw std::runtime_error("View/framebuffer size mismatch");
     const RasterClip clip{0, 0, fb.width(), fb.height() - 1};
@@ -40,13 +38,6 @@ static void render_nodes_impl(Framebuffer& fb, const std::vector<DrawNode>& node
         if (node.texture && node.texture->mips.empty() && !(node.texture->flags & flat_mask)) continue;
         if (!node.texture || (node.texture->flags & flat_mask)) {
             draw_flat_quad(fb, {points, node.texture ? node.texture->flat_index : *node.flat_index}, clip);
-            continue;
-        }
-        if (smooth_terrain && node.world_uv && node.view_depth[0] > 0 && node.view_depth[1] > 0 &&
-            node.view_depth[2] > 0 && node.view_depth[3] > 0) {
-            draw_world_quad(world_quad(node, mode), *node.texture, (node.texture->flags & 2) != 0, clip,
-                            fb.width(), fb.height(), smooth_terrain,
-                            [&](int x, int y, uint8_t index, double) { fb.row(y)[x] = index; });
             continue;
         }
         const auto& texture = *node.texture;
@@ -145,7 +136,7 @@ void render_nodes(Framebuffer& fb, const std::vector<DrawNode>& nodes, const Vie
     render_nodes_impl(fb, nodes, mode, flat_mask, false);
 }
 void render_nodes_perspective(Framebuffer& fb, const std::vector<DrawNode>& nodes, const ViewMode& mode,
-                              uint32_t flat_mask, bool perspective, const WorldBlend* smooth_terrain) {
-    render_nodes_impl(fb, nodes, mode, flat_mask, perspective, smooth_terrain);
+                              uint32_t flat_mask, bool perspective) {
+    render_nodes_impl(fb, nodes, mode, flat_mask, perspective);
 }
 } // namespace rr

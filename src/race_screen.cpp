@@ -115,7 +115,6 @@ void RaceScreen::draw_scene(FrameProfile* prof) {
         g_.display_h = dh;
         g_.enhancements = opt_.settings->enhancements;
         g_.texture_detail = opt_.settings->texture_detail;
-        g_.smooth_terrain = opt_.settings->smooth_terrain;
     }
     // Road slices centre on the same logical width as the scene builders
     // (synced above), so road, terrain, scenery and actors line up.

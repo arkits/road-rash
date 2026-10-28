@@ -1,5 +1,4 @@
 #include "render_threads.hpp"
-#include "world_texture.hpp"
 #include "texture.hpp"
 #include <algorithm>
 #include <condition_variable>
@@ -168,7 +167,6 @@ struct ThreadedCtx {
     uint32_t flat_mask;
     bool wide_surface;
     bool perspective_on;
-    const WorldBlend* smooth_terrain;
 };
 static void threaded_band(ThreadedCtx& c, int top, int bottom, RasterScratch64& scratch) {
     Framebuffer& fb = *c.fb;
@@ -177,7 +175,6 @@ static void threaded_band(ThreadedCtx& c, int top, int bottom, RasterScratch64& 
     const uint32_t flat_mask = c.flat_mask;
     const bool wide_surface = c.wide_surface;
     const bool perspective_on = c.perspective_on;
-    const WorldBlend* smooth_terrain = c.smooth_terrain;
 
     RasterClip clip{0, top, fb.width(), bottom};
     for (const auto& node : nodes) {
@@ -196,13 +193,6 @@ static void threaded_band(ThreadedCtx& c, int top, int bottom, RasterScratch64& 
         if (node.texture && node.texture->mips.empty() && !(node.texture->flags & flat_mask)) continue;
         if (!node.texture || (node.texture->flags & flat_mask)) {
             draw_flat_quad(fb, {points, node.texture ? node.texture->flat_index : *node.flat_index}, clip);
-            continue;
-        }
-        if (smooth_terrain && node.world_uv && node.view_depth[0] > 0 && node.view_depth[1] > 0 &&
-            node.view_depth[2] > 0 && node.view_depth[3] > 0) {
-            draw_world_quad(world_quad(node, mode), *node.texture, (node.texture->flags & 2) != 0, clip,
-                            fb.width(), fb.height(), smooth_terrain,
-                            [&](int x, int y, uint8_t index, double) { fb.row(y)[x] = index; });
             continue;
         }
         const auto& texture = *node.texture;
@@ -273,18 +263,12 @@ static void threaded_band(ThreadedCtx& c, int top, int bottom, RasterScratch64& 
     }
 }
 void render_nodes_threaded(Framebuffer& fb, const std::vector<DrawNode>& nodes, const ViewMode& mode,
-                           uint32_t flat_mask, RenderThreads& pool, bool perspective_on,
-                           const WorldBlend* smooth_terrain) {
+                           uint32_t flat_mask, RenderThreads& pool, bool perspective_on) {
     if (fb.width() != mode.surface_width || fb.height() != mode.surface_height)
         throw std::runtime_error("View/RGB framebuffer size mismatch");
     const int bands = std::max(1, pool.count());
-    ThreadedCtx ctx{&fb,
-                    &nodes,
-                    &mode,
-                    flat_mask,
-                    mode.surface_width > 640 || mode.surface_height > 480,
-                    perspective_on,
-                    smooth_terrain};
+    ThreadedCtx ctx{
+        &fb, &nodes, &mode, flat_mask, mode.surface_width > 640 || mode.surface_height > 480, perspective_on};
     // Single-pointer capture (8 bytes, std::function SBO-clean): no per-run heap job.
     ThreadedCtx* pc = &ctx;
     pool.run(bands, fb.height(), [pc](int, int top, int bottom, RasterScratch64& scratch) {

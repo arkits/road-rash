@@ -66,6 +66,11 @@ In Thrash the dashboard name stays the alias/"Player" as in the original
   is failing since the `AWEMAN32.DLL` rebuild (REVERSE_ENGINEERING.md
   "Last successes"), so a new capture is blocked on that, not on this task.
 
+Follow-up (October 27, 2026): a native "smooth terrain" path (945e0ff,
+continuous road-space hill textures) was tried at the owner's request and then
+reverted when the owner asked for the original look. Terrain is the original raster again;
+the Enhancements menu is back to 11 rows.
+
 ## 4. Punches: traced, matches the original
 
 `Race::fight_reach` matches `0x00409c10` field for field (assembly

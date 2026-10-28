@@ -67,13 +67,9 @@ struct Settings {
     int render_scale = 1;                           // plan 19 Task 8: 0 = match display, 1..4 fixed
     Widescreen widescreen = Widescreen::off;        // plan 21 Task 8: Hor+ logical width
     int texture_detail = 0;                         // plan 20 Task 3: 0 original, 1 enhanced (MMPX)
-    // Native terrain texturing (world_texture.hpp): continuous road-space
-    // hill textures instead of the original per-strip mapping. Owner choice
-    // (October 27, 2026): on by default; off restores the original raster.
-    bool smooth_terrain = true;
-    Enhancements enhancements; // plan 21 Task 1: all off = original renderer
-    int touch_opacity = 50;    // 0..100, Android touch overlay (plan 14 Task 3)
-    bool haptics = true;       // Android rumble on crash/hit where the device supports it
+    Enhancements enhancements;                      // plan 21 Task 1: all off = original renderer
+    int touch_opacity = 50;                         // 0..100, Android touch overlay (plan 14 Task 3)
+    bool haptics = true; // Android rumble on crash/hit where the device supports it
     // Plan 34 Task 7: online lobby persistence. net_server is the WebSocket
     // URL of rr-netd; net_seat is the 128-bit seat token (32 hex chars) kept
     // for the life of the room; net_room is the last room code.

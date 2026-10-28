@@ -79,7 +79,6 @@ struct Game {
     std::string course_name;
     int bike = 0;
     int texture_detail = 0;                  // plan 20 Task 3: 0 original, 1 enhanced (MMPX)
-    bool smooth_terrain = false;             // Settings::smooth_terrain, synced per frame
     mutable bool upscaled_attached = false;  // scene textures carry MMPX levels
     Widescreen widescreen = Widescreen::off; // plan 21 Task 8: live setting
     int display_w = 0, display_h = 0;        // window size for Widescreen::match (0 = unknown)

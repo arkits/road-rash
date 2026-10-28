@@ -718,7 +718,7 @@ int main(int argc, char** argv) {
     key("down"); // On row
     key("select");
     check(settings.enhancements.bloom, "controller toggles Bloom on");
-    if (focus_item(11)) key("select"); // Back row (after Smooth Terrain)
+    if (focus_item(10)) key("select"); // Back row
     check(fe.screen() == screen_id::native_display, "Back returns to Display");
     {
         std::string style_text;

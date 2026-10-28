@@ -98,7 +98,6 @@ enum : int {
     enh_vig,
     enh_mb,
     enh_wide,
-    enh_terrain,
     d_enh,
     filt_nearest,
     filt_bilinear,
