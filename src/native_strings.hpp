@@ -151,6 +151,7 @@ enum : int {
     net_reconnecting,
     d_net_lobby,
     net_unofficial,
+    d_net_host,
     count
 };
 }

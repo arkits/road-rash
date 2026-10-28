@@ -260,6 +260,26 @@ int main() {
             return m.enabled && m.handler == 0x00445440;
         });
         check(web.screen() == 11 && level_popup && !web.net_in_room(), "@host opens the Host level popup");
+        capture(web, "host-level");
+        // Every Host wizard popup clears the mano menu rows it opens over (the
+        // EXE level popup's own rows covered Chat Messages/Restroom/Disconnect).
+        auto popup_clear = [&] {
+            for (const auto& p : web.items())
+                if (p.flags & rr::item_flag::popup_item)
+                    for (const auto& m : web.items())
+                        if ((m.flags & rr::item_flag::dimmed) && p.x < m.x + m.w && m.x < p.x + p.w &&
+                            p.y < m.y + m.h && m.y < p.y + p.h)
+                            return false;
+            return true;
+        };
+        check(popup_clear(), "level popup clears the menu rows");
+        check(web.items().back().caption == 95, "level popup keeps the original Level 1-5 captions");
+        for (int target : {2, 3, 1}) { // level 2, AI full, cars on
+            choice(web, target);
+            check(popup_clear(), "Host wizard popup clears the menu rows");
+        }
+        capture(web, "host-visibility");
+        choice(web, 2); // unlisted: keeps the public list below unchanged
         rr::Frontend lister(assets, text, rr::frontend_strings(resources), rr::credit_lines(resources), data,
                             tables, wc, ws, (dir / "web2/saves").string());
         lister.net_attach(factory, hello);

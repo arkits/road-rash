@@ -12,7 +12,7 @@ constexpr uint32_t display_mode = 0xF0000001, window_size = 0xF0000002, scaling 
                    filtering = 0xF0000004, on_off = 0xF0000005, touch = 0xF0000006, resolution = 0xF0000007,
                    widescreen = 0xF0000008, visual_style = 0xF0000009, tex_detail = 0xF000000D,
                    enh_filter = 0xF000000A, enh_grade = 0xF000000B, enh_fog = 0xF000000C, net_ai = 0xF0000020,
-                   net_cars = 0xF0000021, net_public = 0xF0000022;
+                   net_cars = 0xF0000021, net_public = 0xF0000022, net_level = 0xF0000023;
 }
 // Setter ids for native popup choices (negative: never an EXE setter).
 namespace native_setter {
