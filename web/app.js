@@ -533,7 +533,13 @@ async function loadRiderSprites() {
 }
 function portrait(c) {
     if (!portraits.has(c)) portraits.set(c, discBytes(`IMAGES/CHARS/${riderFiles[c - 1].toUpperCase()}-N.RRI`)
-        .then(bytes => URL.createObjectURL(new Blob([bytes], {type: 'image/jpeg'}))) // .RRI is a JPEG
+        // .RRI is a JPEG. A data: URL, because the deployed CSP (img-src 'self' data:) blocks blob:.
+        .then(bytes => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(new Blob([bytes], {type: 'image/jpeg'}));
+        }))
         .catch(error => { portraits.delete(c); throw error; }));
     return portraits.get(c);
 }
