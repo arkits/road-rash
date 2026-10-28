@@ -85,17 +85,8 @@ button:focus-visible, summary:focus-visible { outline-offset: -4px; }
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 0 16px 4px;
+  padding: 0 16px;
   background: linear-gradient(180deg, #1a1816, #110f0e);
-}
-.toolbar::after {
-  /* Hazard tape along the bottom edge, matching the launcher panel. */
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: 4px;
-  background: var(--hazard);
-  background-size: 34px 34px;
 }
 .brand {
   margin: 0;
