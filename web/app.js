@@ -119,8 +119,7 @@ async function restoreHostedAssets() {
     if (!cache || storageWarning) $('cache-note').textContent =
         (!cache ? 'Game files will download as you play; caching is unavailable. ' : '') + storageWarning;
     $('ready').hidden = false;
-    riderReady();
-    courseReady();
+    pickerReady(false);
     startRoomPolling();
     status('Ready to play.');
     telemetry.track('launcher_ready', {source: 'hosted'});
@@ -189,8 +188,7 @@ async function restoreDisc() {
         assetDirectory = dir;
         engine.localAssets.names = new Set(references.map(r => r.path));
         $('ready').hidden = false;
-        riderReady();
-        courseReady();
+        pickerReady(true);
         startRoomPolling();
         $('state').textContent = 'Disc ready';
         status('Your game is ready to play.');
@@ -460,7 +458,7 @@ const riderRows = [8, 7, 2, 5, 4, 6, 3, 1];                          // 0x00415f
 const showroomBikes = [0, 1, 2, 4, 3, 10, 12, 14, 11, 13, 5, 7, 9, 6, 8]; // 0x0041ff00 name slot 0x80+i -> bike
 const riderLean = [3, 6, 5, 6, 3, 8, 9, 8];                            // HIBOB riding frames: straight, right, left
 const riderNames = [...document.querySelectorAll('#rider-roster [role=radio]')].map(button => button.textContent);
-let roster, rosterLoad, riderSprites, riderSpriteLoad, riderPreview = 1, riderTimer, discTables;
+let roster, rosterLoad, riderSprites, riderSpriteLoad, riderPreview = 1, riderTimer, discTables, pickerFiles = false;
 const discImages = new Map();
 async function discBytes(path) {
     const file = await (await assetDirectory.getFileHandle(encodeURIComponent(path))).getFile();
@@ -601,24 +599,20 @@ function setRider(c) {
     $('rider-name').textContent = riderNames[c - 1];
     $('rider-bike').textContent = roster?.entries[c - 1].bikeName || 'Choose your rider';
     try { localStorage.setItem('rr-rider', String(c)); } catch {}
-    portrait(c).then(url => { if ($('character').value === String(c)) $('rider-thumb').src = url; })
+    if (pickerFiles) portrait(c).then(url => { if ($('character').value === String(c)) $('rider-thumb').src = url; })
         .catch(error => console.warn('Rider portrait unavailable:', error));
 }
-function riderReady() {
-    let saved = 1;
-    try { saved = Number(localStorage.getItem('rr-rider')) || 1; } catch {}
-    rosterLoad ||= loadRoster().then(result => { roster = result; }).catch(error => {
-        rosterLoad = undefined;
-        console.warn('Rider details unavailable:', error);
-    });
-    setRider(saved >= 1 && saved <= 8 ? saved : 1);
-    rosterLoad.then(() => setRider(Number($('character').value)));
-}
+const ensureRoster = () => rosterLoad ||= loadRoster().then(result => { roster = result; }).catch(error => {
+    rosterLoad = undefined;
+    console.warn('Rider details unavailable:', error);
+});
 $('rider-button').onclick = async () => {
+    pickerFiles = true;
     previewRider(Number($('character').value));
     $('rider-dialog').showModal();
     $('rider-roster').querySelector('[aria-checked=true]').focus();
-    await (rosterLoad ||= loadRoster().then(result => { roster = result; }).catch(error => { rosterLoad = undefined; console.warn(error); }));
+    await ensureRoster();
+    setRider(Number($('character').value));
     riderSpriteLoad ||= loadRiderSprites().then(result => { riderSprites = result; })
         .catch(error => { riderSpriteLoad = undefined; console.warn('Rider sprite unavailable:', error); });
     await riderSpriteLoad;
@@ -658,21 +652,23 @@ $('rider-dialog').addEventListener('close', () => {
 // in-race horizon. Roster order is the original's (City, Sierra, Peninsula,
 // Napa, PCH); each button's value is the launcher's --course number.
 const courseButtons = [...document.querySelectorAll('#course-roster [role=radio]')];
+const courseOrder = [1, 2, 4, 0, 3];                                  // original course -> --course
+const courseNames = ['The City', 'Sierra Nevada', 'The Peninsula', 'Napa Valley', 'Pacific Highway'];
 const coursePostcards = ['CITY', 'SIERRA', 'PENIN', 'NAPA', 'PCH'];
 let courses, courseLoad, coursePreview = 0, horizonPalette;
 const horizons = new Map();
-const courseSlot = id => courseButtons.findIndex(button => Number(button.value) === id);
+const courseSlot = id => courseOrder.indexOf(id);
 // Level 1, imperial units: lengths 0x00468f58 (tenths of a mile, [course*5 + level]),
 // texts 16+i / 21+i / 27, horizon names through the pointer table 0x00467aa0.
 async function loadCourses() {
     const {pe, str} = await loadDiscTables();
     const lengths = pe.data(0x00468f58, 4 * 25), pointers = pe.data(0x00467aa0, 4 * 5);
     const u32 = (bytes, i) => (bytes[i] | bytes[i + 1] << 8 | bytes[i + 2] << 16 | bytes[i + 3] << 24) >>> 0;
-    return courseButtons.map((button, i) => {
+    return courseNames.map((fallback, i) => {
         const tenths = u32(lengths, 4 * i * 5);
         const text = formatC(str(21 + i), [`${Math.floor(tenths / 10)}.${tenths % 10}`, str(27)]);
         const raw = pe.data(u32(pointers, 4 * i), 16), end = raw.indexOf(0);
-        return {name: str(16 + i) || button.textContent, blurb: text.split('\n')[0], length: text.slice(text.lastIndexOf('\n') + 1),
+        return {name: str(16 + i) || fallback, blurb: text.split('\n')[0], length: text.slice(text.lastIndexOf('\n') + 1),
             miles: `${Math.floor(tenths / 10)}.${tenths % 10} ${str(27)}`,
             horizon: String.fromCharCode(...raw.subarray(0, end < 0 ? 16 : end)).toUpperCase()};
     });
@@ -707,7 +703,7 @@ function previewCourse(id) {
         button.setAttribute('aria-checked', String(on));
         button.tabIndex = on ? 0 : -1;
     });
-    const name = entry ? entry.name : courseButtons[slot].textContent;
+    const name = entry ? entry.name : courseNames[slot];
     $('course-title').textContent = $('course-confirm-name').textContent = name;
     $('course-blurb').textContent = entry ? entry.blurb : '';
     $('course-miles').textContent = entry ? entry.length : '';
@@ -724,29 +720,25 @@ function previewCourse(id) {
 function setCourse(id) {
     const slot = courseSlot(id), entry = courses?.[slot];
     $('course').value = String(id);
-    $('course-name').textContent = entry ? entry.name : courseButtons[slot].textContent;
+    $('course-name').textContent = entry ? entry.name : courseNames[slot];
     $('course-length').textContent = entry ? entry.miles : 'Choose your course';
     try { localStorage.setItem('rr-course', String(id)); } catch {}
-    postcard(slot).then(url => { if ($('course').value === String(id)) $('course-thumb').src = url; })
+    if (pickerFiles) postcard(slot).then(url => { if ($('course').value === String(id)) $('course-thumb').src = url; })
         .catch(error => console.warn('Course postcard unavailable:', error));
 }
 const ensureCourses = () => courseLoad ||= loadCourses().then(result => { courses = result; }).catch(error => {
     courseLoad = undefined;
     console.warn('Course details unavailable:', error);
 });
-function courseReady() {
-    let saved = 0;
-    try { saved = Number(localStorage.getItem('rr-course') ?? 0); } catch {}
-    setCourse(courseSlot(saved) >= 0 ? saved : 0);
-    ensureCourses().then(() => setCourse(Number($('course').value)));
-    discImage('IMAGES/POSTCARD.RRI').then(url => { $('course-strip').src = url; })
-        .catch(error => console.warn('Postcard strip unavailable:', error));
-}
 $('course-button').onclick = async () => {
+    pickerFiles = true;
     previewCourse(Number($('course').value));
     $('course-dialog').showModal();
     $('course-roster').querySelector('[aria-checked=true]').focus();
+    if (!$('course-strip').getAttribute('src')) discImage('IMAGES/POSTCARD.RRI').then(url => { $('course-strip').src = url; })
+        .catch(error => console.warn('Postcard strip unavailable:', error));
     await ensureCourses();
+    setCourse(Number($('course').value));
     if ($('course-dialog').open) previewCourse(coursePreview);
 };
 $('course-roster').addEventListener('click', event => {
@@ -757,7 +749,7 @@ $('course-roster').addEventListener('dblclick', event => {
     if (event.target.closest('[role=radio]')) $('course-confirm').click();
 });
 $('course-roster').addEventListener('keydown', event => {
-    const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[event.key], count = courseButtons.length;
+    const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[event.key], count = courseOrder.length;
     let slot;
     if (step) slot = (courseSlot(coursePreview) + step + count) % count;
     else if (event.key === 'Home') slot = 0;
@@ -765,7 +757,7 @@ $('course-roster').addEventListener('keydown', event => {
     else if (event.key === 'Enter') { event.preventDefault(); $('course-confirm').click(); return; }
     else return;
     event.preventDefault();
-    previewCourse(Number(courseButtons[slot].value));
+    previewCourse(courseOrder[slot]);
     $('course-roster').querySelector('[aria-checked=true]').focus();
 });
 $('course-dialog').addEventListener('close', () => {
@@ -776,6 +768,22 @@ $('course-dialog').addEventListener('close', () => {
     $('course-dialog').returnValue = '';
     $('course-button').focus();
 });
+// Chips show the saved choices. A hosted launcher downloads only the fonts
+// before launch (tests/web_hosted_smoke.cjs), so their pictures and details
+// wait until a picker is first opened; an imported disc is already local.
+function pickerReady(local) {
+    pickerFiles ||= local;
+    let rider = 1, course = 0;
+    try {
+        rider = Number(localStorage.getItem('rr-rider')) || 1;
+        course = Number(localStorage.getItem('rr-course') ?? 0);
+    } catch {}
+    setRider(rider >= 1 && rider <= 8 ? rider : 1);
+    setCourse(courseSlot(course) >= 0 ? course : 0);
+    if (!pickerFiles) return;
+    ensureRoster().then(() => setRider(Number($('character').value)));
+    ensureCourses().then(() => setCourse(Number($('course').value)));
+}
 $('quick').onclick = () => startGame(true);
 $('reload').onclick = () => { telemetry.track('launcher_exit'); location.reload(); };
 function fullscreenRequest() {

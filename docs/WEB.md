@@ -91,6 +91,11 @@ Keyboard, touch, phone layout and `localStorage` follow the rider picker;
 `course_select` telemetry is sent on confirm. `tests/web_browser_smoke.cjs`
 now picks each course through the modal.
 
+Hosted launches download only the four fonts before a race
+(`tests/web_hosted_smoke.cjs`), so with hosted assets both chips show the
+saved names only and fetch pictures/details the first time a picker opens.
+With an imported disc the files are local and the chips fill in at once.
+
 The page also loads the original Badloc/Futura TrueType files from the verified
 local disc after import/restore. Browser FontFace uses in-memory bytes from OPFS;
 no game fonts are published. Badloc headings and Futura controls/body replace the

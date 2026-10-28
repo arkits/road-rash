@@ -989,7 +989,7 @@ int main(int argc, char** argv) {
         }
     }
     if (course < 0 || course > 4 || level < 0 || level > 4 || opponents < 0 || opponents > 14 ||
-        character < 1 || character > 8 || (explicit_bike && (bike < 0 || bike > 14)))
+        character < 1 || character > 8)
         return 2;
     if (render_scale < 1 || render_scale > 4) return 2;
     if (benchmark && (bench.frames < 1 || bench.warmup < 0)) return 2;
@@ -1083,6 +1083,11 @@ int main(int argc, char** argv) {
         if (!quick_race || !tool_run) {
             boot.apply(480);
             QuickStart quick;
+            // An explicit --bike is checked here as the tool race does below,
+            // rather than truncated into the career's u8 bike.
+            if (explicit_bike &&
+                (bike < 0 || size_t(bike) >= rr::read_bike_specs(assets.read("DATA/BIKESPEC.RSC")).size()))
+                throw std::runtime_error("Bike index out of range");
             if (quick_race) quick = {original_index[course], character, level + 1, explicit_bike ? bike : -1};
             result = run_game(assets, window, renderer, g, exe, screenshot, menu_frames, cli, menu_script,
                               net_invite, net_server, rtc, quick);

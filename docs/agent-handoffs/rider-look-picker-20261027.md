@@ -110,6 +110,22 @@ characters' stats/bikes/cash/bios match the original screen (Axle: 6'1",
   tests/web_browser_smoke.cjs`: all steps PASS, exit 0 (courses 1–4 picked
   through the modal). Only console errors: the `/net/health` 502s.
 
+## Deploy fix (owner: "deploy failed")
+
+`Deploy browser game` had failed since 97d365d. Three causes:
+- `web_hosted_smoke.cjs` "only fonts are downloaded before launch": the
+  pickers read the EXE, ENU.DLL and pictures as soon as the launcher showed.
+  Hosted launches now defer them to the first picker open (`pickerReady`).
+- `web_recovery.cjs` (fake DOM, no roster buttons): `setCourse` read the
+  DOM roster. The course order and names are now constants.
+- The `--bike 999` diagnostics step: since a5455c1 the interactive quick race
+  truncated an explicit bike into the u8 career bike instead of throwing.
+  `game_main.cpp` now rejects an out-of-range `--bike` before `run_game`,
+  as the tool race does ("Bike index out of range").
+The 03:25 runs failed later in the same test (a TimeoutError after "lazy
+fonts"), before this work; later runs stopped earlier, so whether it still
+occurs is shown only by the next deploy.
+
 ## Remaining
 
 - Network-race colour (`bike+0x328`) not modelled.
