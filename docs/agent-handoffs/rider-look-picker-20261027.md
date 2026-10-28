@@ -94,6 +94,22 @@ characters' stats/bikes/cash/bios match the original screen (Axle: 6'1",
   - Console errors only the expected `/net/health` 502s (no local rr-netd).
 - clang-format 22 clean on the changed C++ files.
 
+## Follow-ups (owner, same day)
+
+- Portraits did not load on road-rash.archit.xyz: the deployed CSP
+  (`vercel.json`, `deploy/nginx.conf`: `img-src 'self' data:`) blocks the
+  `blob:` URLs. Portraits are now `data:` URLs (7ef713c); CSP unchanged.
+- Course picker in the same style (see `docs/WEB.md` "Course picker"):
+  postcard screen, blurb/length from the disc, panning in-race horizon.
+- Checks: a fingerprinted bundle of the browser build with the production CSP
+  as a `<meta>` tag, served locally. In-app browser: 1280x860 picker matches
+  the original City screen ("Length: 5.3 miles"); Down Down Enter picks the
+  Peninsula (`--course 4`), Esc keeps it; 375x812 no overflow, 44 px rows,
+  tap Napa + Race sets 0; a race on The City via the picker renders the City.
+  `NODE_PATH=.tools/browser-tests/node_modules RR_WEB_URL=… node
+  tests/web_browser_smoke.cjs`: all steps PASS, exit 0 (courses 1–4 picked
+  through the modal). Only console errors: the `/net/health` 502s.
+
 ## Remaining
 
 - Network-race colour (`bike+0x328`) not modelled.

@@ -134,7 +134,10 @@ fs.mkdirSync(evidence, {recursive:true});
         for (const course of ['1','2','3','4']) {
             await page.reload();
             await page.waitForFunction(()=>!document.querySelector('#ready').hidden);
-            await page.locator('#course').selectOption(course);
+            await page.locator('#course-button').click();
+            await page.locator(`#course-roster [value="${course}"]`).click();
+            await page.locator('#course-confirm').click();
+            await page.waitForFunction(c => document.querySelector('#course').value === c, course); // dialog close is async
             await page.locator('#quick').click();
             await page.waitForTimeout(6500);
             assert.equal(await page.locator('#loading').isVisible(),false);

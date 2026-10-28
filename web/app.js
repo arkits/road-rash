@@ -120,6 +120,7 @@ async function restoreHostedAssets() {
         (!cache ? 'Game files will download as you play; caching is unavailable. ' : '') + storageWarning;
     $('ready').hidden = false;
     riderReady();
+    courseReady();
     startRoomPolling();
     status('Ready to play.');
     telemetry.track('launcher_ready', {source: 'hosted'});
@@ -189,6 +190,7 @@ async function restoreDisc() {
         engine.localAssets.names = new Set(references.map(r => r.path));
         $('ready').hidden = false;
         riderReady();
+        courseReady();
         startRoomPolling();
         $('state').textContent = 'Disc ready';
         status('Your game is ready to play.');
@@ -458,8 +460,8 @@ const riderRows = [8, 7, 2, 5, 4, 6, 3, 1];                          // 0x00415f
 const showroomBikes = [0, 1, 2, 4, 3, 10, 12, 14, 11, 13, 5, 7, 9, 6, 8]; // 0x0041ff00 name slot 0x80+i -> bike
 const riderLean = [3, 6, 5, 6, 3, 8, 9, 8];                            // HIBOB riding frames: straight, right, left
 const riderNames = [...document.querySelectorAll('#rider-roster [role=radio]')].map(button => button.textContent);
-let roster, rosterLoad, riderSprites, riderSpriteLoad, riderPreview = 1, riderTimer;
-const portraits = new Map();
+let roster, rosterLoad, riderSprites, riderSpriteLoad, riderPreview = 1, riderTimer, discTables;
+const discImages = new Map();
 async function discBytes(path) {
     const file = await (await assetDirectory.getFileHandle(encodeURIComponent(path))).getFile();
     return new Uint8Array(await file.arrayBuffer());
@@ -501,10 +503,17 @@ function peStrings(pe) {
     return strings;
 }
 const formatC = (format, args) => { let i = 0; return format.replace(/%([%sdc])/g, (_, c) => c === '%' ? '%' : String(args[i++])); };
+// The EXE and its English string table, parsed once for both pickers.
+function loadDiscTables() {
+    discTables ||= Promise.all([discBytes('ROADRASH.EXE'), discBytes('TEXT/ENU.DLL')]).then(([exe, text]) => {
+        const strings = peStrings(peImage(text));
+        return {pe: peImage(exe), str: id => strings.get(id) || ''};
+    }).catch(error => { discTables = undefined; throw error; });
+    return discTables;
+}
 // Frontend::prepare_characters for the quick race (level 1, imperial units).
 async function loadRoster() {
-    const [exe, text] = await Promise.all([discBytes('ROADRASH.EXE'), discBytes('TEXT/ENU.DLL')]);
-    const pe = peImage(exe), strings = peStrings(peImage(text)), str = id => strings.get(id) || '';
+    const {pe, str} = await loadDiscTables();
     const cash = pe.data(0x00469000, 18), levelBikes = pe.data(0x004641c8, 16 * 5);
     const entries = riderNames.map((name, i) => {
         const row = riderRows[i], body = pe.data(0x00463c78 + row * 0x40 + 8, 8);
@@ -531,18 +540,19 @@ async function loadRiderSprites() {
     canvas.height = Math.max(...riderLean.map(i => frames[i].height));
     return {frames, palette};
 }
-function portrait(c) {
-    if (!portraits.has(c)) portraits.set(c, discBytes(`IMAGES/CHARS/${riderFiles[c - 1].toUpperCase()}-N.RRI`)
-        // .RRI is a JPEG. A data: URL, because the deployed CSP (img-src 'self' data:) blocks blob:.
+// .RRI pictures are JPEGs. A data: URL, because the deployed CSP (img-src 'self' data:) blocks blob:.
+function discImage(path) {
+    if (!discImages.has(path)) discImages.set(path, discBytes(path)
         .then(bytes => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result);
             reader.onerror = () => reject(reader.error);
             reader.readAsDataURL(new Blob([bytes], {type: 'image/jpeg'}));
         }))
-        .catch(error => { portraits.delete(c); throw error; }));
-    return portraits.get(c);
+        .catch(error => { discImages.delete(path); throw error; }));
+    return discImages.get(path);
 }
+const portrait = c => discImage(`IMAGES/CHARS/${riderFiles[c - 1].toUpperCase()}-N.RRI`);
 // HIBOB frame through the bike's colour remap (0x00443820, 0x00446190).
 function drawRider(frameIndex) {
     const canvas = $('rider-sprite'), entry = roster?.entries[riderPreview - 1];
@@ -642,6 +652,129 @@ $('rider-dialog').addEventListener('close', () => {
     }
     $('rider-dialog').returnValue = '';
     $('rider-button').focus();
+});
+// Course picker: the original course-select screen (0x0041dbc0 postcards over
+// the Postcard strip, 0x00420810 description and length) plus the course's
+// in-race horizon. Roster order is the original's (City, Sierra, Peninsula,
+// Napa, PCH); each button's value is the launcher's --course number.
+const courseButtons = [...document.querySelectorAll('#course-roster [role=radio]')];
+const coursePostcards = ['CITY', 'SIERRA', 'PENIN', 'NAPA', 'PCH'];
+let courses, courseLoad, coursePreview = 0, horizonPalette;
+const horizons = new Map();
+const courseSlot = id => courseButtons.findIndex(button => Number(button.value) === id);
+// Level 1, imperial units: lengths 0x00468f58 (tenths of a mile, [course*5 + level]),
+// texts 16+i / 21+i / 27, horizon names through the pointer table 0x00467aa0.
+async function loadCourses() {
+    const {pe, str} = await loadDiscTables();
+    const lengths = pe.data(0x00468f58, 4 * 25), pointers = pe.data(0x00467aa0, 4 * 5);
+    const u32 = (bytes, i) => (bytes[i] | bytes[i + 1] << 8 | bytes[i + 2] << 16 | bytes[i + 3] << 24) >>> 0;
+    return courseButtons.map((button, i) => {
+        const tenths = u32(lengths, 4 * i * 5);
+        const text = formatC(str(21 + i), [`${Math.floor(tenths / 10)}.${tenths % 10}`, str(27)]);
+        const raw = pe.data(u32(pointers, 4 * i), 16), end = raw.indexOf(0);
+        return {name: str(16 + i) || button.textContent, blurb: text.split('\n')[0], length: text.slice(text.lastIndexOf('\n') + 1),
+            miles: `${Math.floor(tenths / 10)}.${tenths % 10} ${str(27)}`,
+            horizon: String.fromCharCode(...raw.subarray(0, end < 0 ? 16 : end)).toUpperCase()};
+    });
+}
+const postcard = slot => discImage(`IMAGES/POSTCARD/${coursePostcards[slot]}.RRI`);
+// The 720x320 horizon (0x00416310) in the race palette, drawn twice so the
+// rail can pan across the seam.
+async function drawHorizon(slot) {
+    const entry = courses?.[slot];
+    if (!entry) return false;
+    if (!horizons.has(entry.horizon)) horizons.set(entry.horizon, (async () => {
+        horizonPalette ||= discBytes('DATA/PALETTE.RAW').catch(error => { horizonPalette = undefined; throw error; });
+        const [bob, palette] = await Promise.all([discBytes(`IMAGES/HORIZONS/${entry.horizon}.BOB`), horizonPalette]);
+        if (bob.length !== 720 * 320) throw new Error('Unexpected horizon size');
+        const image = new ImageData(1440, 320);
+        for (let y = 0; y < 320; y++)
+            for (let x = 0; x < 1440; x++) {
+                const c = bob[y * 720 + x % 720] * 4;
+                image.data.set([palette[c], palette[c + 1], palette[c + 2], 255], (y * 1440 + x) * 4);
+            }
+        return image;
+    })().catch(error => { horizons.delete(entry.horizon); throw error; }));
+    const image = await horizons.get(entry.horizon);
+    if (courseSlot(coursePreview) === slot) $('course-horizon').getContext('2d').putImageData(image, 0, 0);
+    return true;
+}
+function previewCourse(id) {
+    coursePreview = id;
+    const slot = courseSlot(id), entry = courses?.[slot];
+    courseButtons.forEach(button => {
+        const on = Number(button.value) === id;
+        button.setAttribute('aria-checked', String(on));
+        button.tabIndex = on ? 0 : -1;
+    });
+    const name = entry ? entry.name : courseButtons[slot].textContent;
+    $('course-title').textContent = $('course-confirm-name').textContent = name;
+    $('course-blurb').textContent = entry ? entry.blurb : '';
+    $('course-miles').textContent = entry ? entry.length : '';
+    $('course-horizon-name').textContent = entry ? `${name} · ${entry.miles}` : '';
+    $('course-postcard').classList.remove('shown');
+    postcard(slot).then(url => {
+        if (coursePreview !== id) return;
+        $('course-postcard').src = url;
+        $('course-postcard').classList.add('shown');
+    }).catch(error => console.warn('Course postcard unavailable:', error));
+    drawHorizon(slot).then(shown => { if (coursePreview === id) $('course-horizon-view').hidden = !shown; })
+        .catch(error => { $('course-horizon-view').hidden = true; console.warn('Course horizon unavailable:', error); });
+}
+function setCourse(id) {
+    const slot = courseSlot(id), entry = courses?.[slot];
+    $('course').value = String(id);
+    $('course-name').textContent = entry ? entry.name : courseButtons[slot].textContent;
+    $('course-length').textContent = entry ? entry.miles : 'Choose your course';
+    try { localStorage.setItem('rr-course', String(id)); } catch {}
+    postcard(slot).then(url => { if ($('course').value === String(id)) $('course-thumb').src = url; })
+        .catch(error => console.warn('Course postcard unavailable:', error));
+}
+const ensureCourses = () => courseLoad ||= loadCourses().then(result => { courses = result; }).catch(error => {
+    courseLoad = undefined;
+    console.warn('Course details unavailable:', error);
+});
+function courseReady() {
+    let saved = 0;
+    try { saved = Number(localStorage.getItem('rr-course') ?? 0); } catch {}
+    setCourse(courseSlot(saved) >= 0 ? saved : 0);
+    ensureCourses().then(() => setCourse(Number($('course').value)));
+    discImage('IMAGES/POSTCARD.RRI').then(url => { $('course-strip').src = url; })
+        .catch(error => console.warn('Postcard strip unavailable:', error));
+}
+$('course-button').onclick = async () => {
+    previewCourse(Number($('course').value));
+    $('course-dialog').showModal();
+    $('course-roster').querySelector('[aria-checked=true]').focus();
+    await ensureCourses();
+    if ($('course-dialog').open) previewCourse(coursePreview);
+};
+$('course-roster').addEventListener('click', event => {
+    const button = event.target.closest('[role=radio]');
+    if (button) previewCourse(Number(button.value));
+});
+$('course-roster').addEventListener('dblclick', event => {
+    if (event.target.closest('[role=radio]')) $('course-confirm').click();
+});
+$('course-roster').addEventListener('keydown', event => {
+    const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[event.key], count = courseButtons.length;
+    let slot;
+    if (step) slot = (courseSlot(coursePreview) + step + count) % count;
+    else if (event.key === 'Home') slot = 0;
+    else if (event.key === 'End') slot = count - 1;
+    else if (event.key === 'Enter') { event.preventDefault(); $('course-confirm').click(); return; }
+    else return;
+    event.preventDefault();
+    previewCourse(Number(courseButtons[slot].value));
+    $('course-roster').querySelector('[aria-checked=true]').focus();
+});
+$('course-dialog').addEventListener('close', () => {
+    if ($('course-dialog').returnValue === 'ride') {
+        setCourse(coursePreview);
+        telemetry.track('course_select', {course: coursePreview});
+    }
+    $('course-dialog').returnValue = '';
+    $('course-button').focus();
 });
 $('quick').onclick = () => startGame(true);
 $('reload').onclick = () => { telemetry.track('launcher_exit'); location.reload(); };

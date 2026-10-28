@@ -61,7 +61,7 @@ build. Vercel does not report a build duration for this upload.
 The Quick Race rider is a chip (portrait thumbnail, name, level-1 bike) that
 opens a modal modelled on the original character select (`0x00421df0` case
 `0xe`): the `IMAGES/CHARS/<rider>-N.RRI` portrait (the `.RRI` is a JPEG, shown
-through a Blob URL), the orange Badloc name, `Height/Weight/Bike/Cash` and the
+through a `data:` URL: the deployed CSP `img-src 'self' data:` blocks `blob:`), the orange Badloc name, `Height/Weight/Bike/Cash` and the
 bio from `TEXT/ENU.DLL` string `40+i` (heights/weights `0x00463c78` +8/+0xc,
 cash `0x00469000`, bike `0x004641c8[row*5]` named through slot `0x80+i`,
 imperial formats 4000/4001), and three columns of names with the yellow marker.
@@ -72,6 +72,24 @@ A side rail draws the in-race sprite: `DATA/BIKERS/HIBOB.DAT` riding frames
 disc-derived is committed. Arrow keys/Home/End move the radio group, Enter or
 double-click rides, Esc goes back; at ≤720 px the picker is full screen with a
 two-column, 44 px-row roster. The choice is remembered in `localStorage`.
+
+### Course picker — October 27, 2026
+
+The Quick Race course is a chip of the same kind (postcard thumbnail, name,
+length) opening a modal modelled on the original course select: the 243-wide
+`IMAGES/POSTCARD.RRI` strip with `IMAGES/POSTCARD/<course>.RRI` right of it
+(`0x0041e240`, `0x0041dbc0`; the unqualified postcards, not the `Q*` stamped
+ones or the alternate Sierra), the orange name, the blurb and `Length: %s %s`
+from `TEXT/ENU.DLL` strings `21+i`/27 with the level-1 length `0x00468f58`
+(tenths of a mile, `[course*5 + level]`, as `0x00420810`), "Level 1", and the
+names in the original two-row, three-column order (City, Sierra, Peninsula,
+Napa, PCH). The rail pans the course's in-race horizon
+`IMAGES/HORIZONS/<name>.BOB` (720x320 indices, name through `0x00467aa0`,
+`DATA/PALETTE.RAW`). Roster buttons carry the launcher's `--course` number
+(Napa 0, City 1, Sierra 2, PCH 3, Peninsula 4), so launch args are unchanged.
+Keyboard, touch, phone layout and `localStorage` follow the rider picker;
+`course_select` telemetry is sent on confirm. `tests/web_browser_smoke.cjs`
+now picks each course through the modal.
 
 The page also loads the original Badloc/Futura TrueType files from the verified
 local disc after import/restore. Browser FontFace uses in-memory bytes from OPFS;

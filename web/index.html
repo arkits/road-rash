@@ -75,12 +75,16 @@
           <section class="quick-race" aria-labelledby="quick-race-title">
             <span class="mode-kicker">Jump straight in</span>
             <h3 id="quick-race-title">Quick Race</h3>
-            <label class="course-label" for="course">Course</label>
-            <select id="course">
-              <option value="0">Napa Valley</option><option value="1">City</option>
-              <option value="2">Sierra Nevada</option><option value="3">Pacific Highway</option>
-              <option value="4">Peninsula</option>
-            </select>
+            <span class="course-label" id="course-label">Course</span>
+            <input id="course" type="hidden" value="0">
+            <button id="course-button" class="rider-button course-button" type="button" aria-haspopup="dialog" aria-labelledby="course-label course-name">
+              <span class="rider-thumb" aria-hidden="true"><img id="course-thumb" alt=""></span>
+              <span class="rider-chip-text">
+                <span id="course-name" class="rider-chip-name">Napa Valley</span>
+                <span id="course-length" class="rider-chip-bike">Choose your course</span>
+              </span>
+              <span class="rider-chip-go" aria-hidden="true">Change</span>
+            </button>
             <span class="course-label rider-label" id="rider-label">Rider</span>
             <input id="character" type="hidden" value="1">
             <button id="rider-button" class="rider-button" type="button" aria-haspopup="dialog" aria-labelledby="rider-label rider-name">
@@ -152,6 +156,38 @@
     </div>
   </div>
 </main>
+<dialog id="course-dialog" class="rider-dialog course-dialog" aria-labelledby="course-dialog-title">
+  <form method="dialog" class="rider-screen">
+    <div class="rider-art course-art">
+      <img id="course-strip" class="course-strip" alt="">
+      <img id="course-postcard" class="course-postcard" alt="">
+      <div class="rider-namebox course-namebox">
+        <span class="kicker" id="course-dialog-title">Choose your course</span>
+        <h2 id="course-title" aria-live="polite">Napa Valley</h2>
+      </div>
+      <p id="course-blurb" class="course-blurb"></p>
+      <p class="course-meta"><span id="course-miles"></span><span>Level 1</span></p>
+      <div class="rider-roster course-roster" role="radiogroup" aria-label="Courses" id="course-roster">
+        <button type="button" role="radio" value="1">The City</button>
+        <button type="button" role="radio" value="2">Sierra Nevada</button>
+        <button type="button" role="radio" value="4">The Peninsula</button>
+        <button type="button" role="radio" value="0">Napa Valley</button>
+        <button type="button" role="radio" value="3">Pacific Highway</button>
+      </div>
+    </div>
+    <div class="rider-rail">
+      <figure class="rider-bike-view" id="course-horizon-view" hidden>
+        <span class="kicker">On the horizon</span>
+        <div class="course-horizon"><canvas id="course-horizon" width="1440" height="320" role="img" aria-label="The course skyline as seen in the race"></canvas></div>
+        <figcaption id="course-horizon-name"></figcaption>
+      </figure>
+      <div class="rider-actions">
+        <button id="course-confirm" value="ride" class="primary">Race <span id="course-confirm-name">Napa Valley</span></button>
+        <button value="cancel">Back</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 <dialog id="rider-dialog" class="rider-dialog" aria-labelledby="rider-dialog-title">
   <form method="dialog" class="rider-screen">
     <div class="rider-art">

@@ -336,16 +336,6 @@ input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; over
   text-transform: uppercase;
 }
 .rider-label { margin-top: 10px; }
-select { width: 100%; font-family: inherit; font-size: 14px; }
-.quick-race select {
-  min-width: 0;
-  padding: 9px 12px;
-  background: #0f0e0d;
-  border: 1px solid #4a4741;
-  font-family: "RoadRashFuturaBold", "Arial Narrow", sans-serif;
-  font-size: 16px;
-}
-.quick-race select:hover { border-color: var(--orange); }
 #quick {
   display: flex;
   align-items: center;
@@ -559,6 +549,66 @@ select { width: 100%; font-family: inherit; font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rider-dialog[open], .rider-roster button[aria-checked=true]::before, .rider-road::after { animation: none; }
+}
+/* Course picker: the original course-select screen. The 243-wide Postcard
+   strip with the course postcard right of it (0x0041e240), the orange name
+   top left, blurb and length in shadowed Futura, two rows of names; the rail
+   pans the course's in-race horizon. Shares the rider picker's frame. */
+.course-button .rider-thumb img { object-position: 50% 45%; }
+.course-art { background: #15121c; }
+.course-strip, .course-postcard { position: absolute; top: 0; height: 100%; object-fit: fill; }
+.course-strip { left: 0; width: 37.97%; }
+.course-strip:not([src]) { visibility: hidden; }
+.course-postcard { left: 37.97%; width: 62.03%; opacity: 0; transition: opacity .18s ease; }
+.course-postcard.shown { opacity: 1; }
+.course-namebox { left: 0; right: auto; width: auto; height: auto; padding: 2.4cqw 3.4cqw 1.8cqw 2.6cqw; background: rgba(10, 8, 14, .5); }
+.course-namebox h2 { font-size: 8.6cqw; }
+.course-blurb, .course-meta {
+  position: absolute;
+  left: 4%;
+  margin: 0;
+  font-family: "RoadRashFutura", "Arial Narrow", sans-serif;
+  font-size: 3.35cqw;
+  line-height: 1.38;
+  text-shadow: .22cqw .22cqw 0 #000, 0 0 .6cqw rgba(0, 0, 0, .7);
+}
+.course-blurb { top: 27%; width: 40%; }
+.course-meta { top: 75%; right: 4%; display: flex; gap: 6cqw; }
+.course-meta span:last-child { margin-left: auto; margin-right: 22%; }
+.course-roster { grid-template-rows: repeat(2, auto); }
+.course-horizon {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+  overflow: hidden;
+  background: #8fb4e8;
+  clip-path: var(--notch);
+}
+#course-horizon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  image-rendering: pixelated;
+  animation: course-pan 36s linear infinite;
+}
+@keyframes course-pan { to { transform: translateX(-50%); } }
+@media (max-width: 720px) {
+  .course-strip { display: none; }
+  .course-postcard { position: relative; left: 0; display: block; width: 100%; height: auto; aspect-ratio: 16 / 11; object-fit: cover; object-position: 50% 40%; }
+  .course-namebox { top: calc(68.75vw - 72px); }
+  .course-namebox h2 { font-size: 36px; }
+  .course-blurb, .course-meta { position: static; padding: 12px 16px 0; font-size: 16px; text-shadow: 1px 1px 0 #000; }
+  .course-blurb { width: auto; }
+  .course-meta { gap: 16px; padding-bottom: 6px; }
+  .course-meta span:last-child { margin: 0 0 0 auto; }
+  .course-roster { grid-template-rows: repeat(3, auto); }
+  .course-dialog .rider-rail { flex-direction: column; }
+  .course-dialog .rider-bike-view { flex: 0 0 auto; }
+  .course-horizon { flex: 0 0 96px; min-height: 96px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #course-horizon { animation: none; }
 }
 #setup .cache-note {
   margin: 20px 0 0;
