@@ -7,9 +7,13 @@ const app = fs.readFileSync('web/app.js', 'utf8');
 async function fixture(options = {}) {
     const elements = new Map();
     const element = id => {
+        const attributes = new Map();
         if (!elements.has(id)) elements.set(id, {hidden:true, disabled:false, value:'0', textContent:'',
             classList:{add(){},remove(){},toggle(){}}, addEventListener(){}, focus(){}, getContext(){},
-            dataset:{}, lastElementChild:{textContent:''}, setAttribute(){}, replaceChildren(){}});
+            dataset:{}, style:{}, lastElementChild:{textContent:''},
+            setAttribute(name,value){attributes.set(name,String(value));},
+            getAttribute(name){return attributes.get(name) ?? null;},
+            removeAttribute(name){attributes.delete(name);}, replaceChildren(){}});
         return elements.get(id);
     };
     const events = {}, reports = [], tracks = [], calls = [], fetches = [], args = [];
@@ -120,4 +124,19 @@ async function fixture(options = {}) {
     assert.equal(online.args[room+1],'@watch:QXETN8');
     assert.equal(online.args[online.args.indexOf('--net-server')+1],'wss://localhost/net');
     console.log('PASS offline multiplayer panel, invite banner and online launch arguments');
+    const progress=await fixture();
+    progress.eval('running = true');
+    progress.engine.webLoading('Verifying game files...', 127, 341);
+    assert.equal(progress.element('loading-progress').getAttribute('aria-valuenow'),'37');
+    assert.equal(progress.element('loading-fill').style.width,'37%');
+    assert.match(progress.element('loading-count').textContent,/127 of 341 files verified/);
+    assert.equal(progress.element('loading-count').hidden,false);
+    progress.engine.webLoading('Preparing video...');
+    assert.equal(progress.element('loading-progress').getAttribute('aria-valuenow'),null);
+    assert.equal(progress.element('loading-progress').getAttribute('aria-valuetext'),null);
+    assert.equal(progress.element('loading-count').hidden,true);
+    progress.eval("showGameMessage('Engine error')");
+    assert.equal(progress.element('.loading-track').hidden,true);
+    assert.equal(progress.element('loading-count').hidden,true);
+    console.log('PASS measured loading progress, unknown-stage reset and terminal-error cleanup');
 })().catch(error=>{console.error(error);process.exitCode=1;});
