@@ -448,7 +448,6 @@ function startRoomPolling() {
     roomTimer = setInterval(refreshRooms, 8000);
 }
 function stopRoomPolling() { clearInterval(roomTimer); roomRequest?.abort(); }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !running) refreshRooms(); });
 $('quick').onclick = () => startGame(true);
 $('reload').onclick = () => { telemetry.track('launcher_exit'); location.reload(); };
 function fullscreenRequest() {
@@ -465,6 +464,7 @@ $('fullscreen').onclick = async () => {
 // SDL receives these events too; prevent browser scrolling while the game owns focus.
 document.addEventListener('visibilitychange', () => {
     if (running) call('rr_web_visibility', null, ['number'], [document.hidden ? 1 : 0]);
+    else if (!document.hidden) refreshRooms();
 });
 window.addEventListener('keydown', event => {
     if (running && document.activeElement === $('canvas') && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Backspace'].includes(event.key)) event.preventDefault();

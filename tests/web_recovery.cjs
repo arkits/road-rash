@@ -8,10 +8,11 @@ async function fixture(options = {}) {
     const elements = new Map();
     const element = id => {
         if (!elements.has(id)) elements.set(id, {hidden:true, disabled:false, value:'0', textContent:'',
-            classList:{add(){},remove(){},toggle(){}}, addEventListener(){}, focus(){}, getContext(){}});
+            classList:{add(){},remove(){},toggle(){}}, addEventListener(){}, focus(){}, getContext(){},
+            dataset:{}, lastElementChild:{textContent:''}, setAttribute(){}, replaceChildren(){}});
         return elements.get(id);
     };
-    const events = {}, reports = [], tracks = [], calls = [], fetches = [];
+    const events = {}, reports = [], tracks = [], calls = [], fetches = [], args = [];
     const bytes = new Uint8Array([1,2,3]);
     const hash = Buffer.from(await webcrypto.subtle.digest('SHA-256', bytes)).toString('hex');
     const files = ['TEXT/BADLOC.DLL','TEXT/FUTR.DLL','TEXT/FUTB.DLL','TEXT/FUTD.DLL'].map(path=>({path,hash,size:3}));
@@ -21,11 +22,12 @@ async function fixture(options = {}) {
     const engine = {FS:{mkdirTree(){},mount(){},unmount(){calls.push('unmount');},filesystems:{IDBFS:{}},
         syncfs(populate, done){syncTries++;done(options.idbBlocked || (!populate && options.saveBlocked) ? new Error('IDB blocked') : null);}},
         HEAPU8:new Uint8Array(10000), _malloc:()=>options.mallocFail ? 0 : 64,
-        _free(){},lengthBytesUTF8:s=>s.length,stringToUTF8(){},
+        _free(){},lengthBytesUTF8:s=>s.length,stringToUTF8:s=>args.push(s),
         ccall(name){calls.push(name); if(name==='main') {if(options.gameError) engine.gameError=options.gameError;return options.exitCode || 0;}},
         SDL3:{}};
     const sandbox = {console:{log(){},warn(){}}, File, Uint8Array, DataView, Set, Map, Error, DOMException,
-        crypto:webcrypto, performance, setTimeout:fn=>setTimeout(fn,0),
+        crypto:webcrypto, performance, setTimeout:fn=>setTimeout(fn,0), setInterval:()=>0, clearInterval(){},
+        URL, URLSearchParams, AbortController, history:{replaceState(){}},
         FontFace:class {async load(){return this;}},
         document:{getElementById:element,querySelector:element,querySelectorAll:()=>[],
             fonts:{add(){}},body:{classList:{add(){}}},addEventListener:(name,fn)=>{events[name]=fn;}},
@@ -38,17 +40,19 @@ async function fixture(options = {}) {
             fetches.push(url);
             if(options.networkBlocked || (options.networkTransient && fetches.length===1)) throw new TypeError('Failed to fetch');
             if(url==='references.json') return {ok:true,json:async()=>files};
+            // No rr-netd behind the fixture: the multiplayer panel reports offline.
+            if(url==='/net/health') return {ok:false,status:404};
             if(url.endsWith('manifest.json')) return {ok:true,json:async()=>({version:1,files})};
             return {ok:true,arrayBuffer:async()=>bytes.buffer};
         },
         createRoadRash:async module=>{factories++;if(options.wasmBlocked || (options.wasmTransient && factories===1)){module.onAbort('fetch failed');throw new Error('wasm fetch failed');}return engine;},
-        location:{reload(){}},addEventListener(){}};
+        location:{reload(){},search:options.search||'',href:'https://localhost/'+(options.search||''),protocol:'https:',host:'localhost'},addEventListener(){}};
     sandbox.window={isSecureContext:true,addEventListener(){},rrTelemetry:{track:(...args)=>tracks.push(args),error:(...args)=>reports.push(args),log(){},gameStarted(){},gameStopped(){calls.push('stopped');}}};
     if(options.missingOPFS) sandbox.navigator.storage={};
     context=vm.createContext(sandbox);
     vm.runInContext(app,context);
     for(let i=0;i<100 && element('ready').hidden && element('retry').hidden;i++) await new Promise(r=>setTimeout(r,2));
-    return {element, reports, calls, fetches, engine, events, eval:code=>vm.runInContext(code,context),
+    return {element, reports, calls, fetches, engine, events, args, eval:code=>vm.runInContext(code,context),
         counts:()=>({storageTries,syncTries,factories})};
 }
 (async()=>{
@@ -102,4 +106,18 @@ async function fixture(options = {}) {
         assert.equal(f.calls.length,count,'no callback into a stopped engine');
     }
     console.log('PASS actual engine error preserved, allocation failures and stopped-engine lifecycle');
+    // Multiplayer panel: an unreachable /net/health never blocks play, an
+    // invite is offered, and the launch carries the room intent and server.
+    const online=await fixture({search:'?room=qxe-tn8'});
+    await new Promise(r=>setTimeout(r,5));
+    assert.equal(online.element('net-status').dataset.state,'offline');
+    assert.equal(online.element('invite').hidden,false);
+    assert.equal(online.element('invite-code').textContent,'QXE-TN8');
+    assert.deepEqual(online.reports,[]);
+    await online.element('invite-watch').onclick();
+    assert.equal(online.eval('running'),false);
+    const room=online.args.indexOf('--room');
+    assert.equal(online.args[room+1],'@watch:QXETN8');
+    assert.equal(online.args[online.args.indexOf('--net-server')+1],'wss://localhost/net');
+    console.log('PASS offline multiplayer panel, invite banner and online launch arguments');
 })().catch(error=>{console.error(error);process.exitCode=1;});
