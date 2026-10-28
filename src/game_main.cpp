@@ -318,11 +318,20 @@ rr::RaceEnd run_race(rr::Game& g, SDL_Renderer* renderer, const rr::RaceOptions&
     return screen.result();
 }
 
+// Quick race through the front end: a Thrash race on one course, then the
+// original results/standings screens (0x1e..0x22) and the Thrash menus.
+struct QuickStart {
+    int course = 0;    // original 1..5 (0x0046df58 order); 0 = normal start
+    int character = 1; // 1..8 (0x00415fc0)
+    int level = 1;     // 1..5 (0x004453f0)
+    int bike = -1;     // explicit bike id, -1 = the character's level bike
+};
+
 // Menus -> videos -> races -> results: the original main loop (0x00448200) around the front end.
 int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* renderer, rr::Game& g,
              const std::vector<uint8_t>& exe, const std::string& screenshot, long menu_frames,
              const CliDisplayOverride& cli, const std::string& menu_script, const std::string& net_invite,
-             const std::string& net_server, bool rtc) {
+             const std::string& net_server, bool rtc, const QuickStart& quick = {}) {
     const std::string pref = rr::pref_directory();
     const std::string settings_path = (std::filesystem::path(pref) / "settings.txt").string();
     rr::Settings settings = rr::load_settings(settings_path);
@@ -412,7 +421,17 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
     rr::MenuStickInput menu_stick;
     rr::LifecycleWatch lifecycle;
     rr::RgbImage frame;
-    if (net_invite.empty())
+    if (quick.course) {
+        // Thrash setup as the character (0x0041f5a0) and level (0x004453f0)
+        // screens leave it, then the course item's race start (0x004160c0).
+        rr::select_mode(career, tables, rr::GameMode::thrash);
+        rr::choose_character(career, tables, quick.character);
+        rr::set_level(career, tables, quick.level);
+        if (quick.bike >= 0) career.state.bike = uint8_t(quick.bike);
+        rr::start_race(career, quick.course);
+        fe.enter(rr::screen_id::thrash_courses);
+        fe.enter(quick.course);
+    } else if (net_invite.empty())
         fe.start();
     else {
         fe.enter(9);
@@ -880,7 +899,8 @@ int main(int argc, char** argv) {
     }
     std::string root, screenshot, video, net_invite, net_server;
     bool rtc = false;
-    int course = 0, bike = 0, level = 0, opponents = 14;
+    int course = 0, bike = 0, level = 0, opponents = 14, character = 1;
+    bool explicit_bike = false;
     long run_ticks = -1, menu_frames = -1;
     bool auto_drive = false, into_traffic = false, start_paused = false, first_run_smoke = false,
          quick_race = false;
@@ -913,6 +933,9 @@ int main(int argc, char** argv) {
             quick_race = true;
         } else if (a == "--bike" && i + 1 < argc) {
             bike = std::atoi(argv[++i]);
+            explicit_bike = quick_race = true;
+        } else if (a == "--character" && i + 1 < argc) {
+            character = std::atoi(argv[++i]);
             quick_race = true;
         } else if (a == "--ticks" && i + 1 < argc) {
             run_ticks = std::atol(argv[++i]);
@@ -978,7 +1001,9 @@ int main(int argc, char** argv) {
             quick_race = true;
         }
     }
-    if (course < 0 || course > 4 || level < 0 || level > 4 || opponents < 0 || opponents > 14) return 2;
+    if (course < 0 || course > 4 || level < 0 || level > 4 || opponents < 0 || opponents > 14 ||
+        character < 1 || character > 8 || (explicit_bike && (bike < 0 || bike > 14)))
+        return 2;
     if (render_scale < 1 || render_scale > 4) return 2;
     if (benchmark && (bench.frames < 1 || bench.warmup < 0)) return 2;
     const bool capturing = !capture.video_path.empty() || !capture.audio_path.empty() || capture.frames != 0;
@@ -1060,10 +1085,20 @@ int main(int argc, char** argv) {
             g.palette = rr::Palette::from_raw(assets.read("DATA/PALETTE.RAW"));
             return bytes;
         });
-        if (!quick_race) {
+        // Public quick-race order differs from the original course index.
+        const int original_index[] = {4, 1, 2, 5, 3};
+        // An interactive quick race is a Thrash race in the front end, so it
+        // ends on the original results screens; tool runs (fixed ticks,
+        // autopilot, captures, benchmarks) keep the standalone race below.
+        const bool tool_run = run_ticks >= 0 || auto_drive || into_traffic || start_paused || benchmark ||
+                              capturing || print_wiring || explicit_render_scale || !screenshot.empty() ||
+                              opponents != 14;
+        if (!quick_race || !tool_run) {
             boot.apply(480);
+            QuickStart quick;
+            if (quick_race) quick = {original_index[course], character, level + 1, explicit_bike ? bike : -1};
             result = run_game(assets, window, renderer, g, exe, screenshot, menu_frames, cli, menu_script,
-                              net_invite, net_server, rtc);
+                              net_invite, net_server, rtc, quick);
         } else {
             g.course_name = course_names[course];
             {
@@ -1075,6 +1110,7 @@ int main(int argc, char** argv) {
             g.config.course = g.course_name;
             g.config.level = level;
             g.config.bike = bike;
+            g.config.character = character;
             g.config.career = false;
             g.config.opponents = opponents;
             {
@@ -1191,9 +1227,7 @@ int main(int argc, char** argv) {
                     levels.mute = settings.mute;
                     levels.swap_speakers = settings.swap_speakers;
                     sound->set_levels(levels);
-                    sound->start_race(bike, 0);
-                    // Public quick-race order differs from the original course index.
-                    const int original_index[] = {4, 1, 2, 5, 3};
+                    sound->start_race(bike, character);
                     race_music.set_music_level(
                         settings.mute ? 0 : settings.music_volume * settings.master_volume / 100);
                     if (!capturing) race_music.play_race(original_index[course], "");

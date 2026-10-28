@@ -103,8 +103,12 @@ build/rr-game --assets ../cdrom/ROADRASH --video VIDEO/INTRO.AVI
 ```
 
 `--course 0-4` (Napa, City, Highway, Canyon, Medley),
-`--level 1-5`, `--bike 0-14`. Omitting race flags enters the menu/career
-flow. `--ticks N --screenshot out.bmp` runs a headless verification slice.
+`--level 1-5`, `--bike 0-14`, `--character 1-8` (Axle .. Teflon Mike).
+An interactive quick race is a Thrash race in the original front end: it
+ends on the original results and standings screens, then the Thrash menus.
+Omitting race flags enters the menu/career flow. `--ticks N --screenshot
+out.bmp` runs a headless verification slice; tool runs (`--ticks`,
+`--autopilot`, captures, benchmarks, `--opponents`) keep the standalone race.
 
 ## Controls
 

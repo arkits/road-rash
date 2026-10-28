@@ -335,6 +335,7 @@ input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; over
   letter-spacing: .1em;
   text-transform: uppercase;
 }
+.rider-label { margin-top: 10px; }
 select { width: 100%; font-family: inherit; font-size: 14px; }
 .quick-race select {
   min-width: 0;

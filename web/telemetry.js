@@ -84,7 +84,7 @@ window.rrTelemetry = Object.freeze({
         if (!enabled || !allowed.has(name)) return;
         // Deliberate allowlist: never send disc bytes, saves, filenames or input.
         const data = {release};
-        for (const key of ['mode', 'course', 'source', 'phase', 'duration_ms']) {
+        for (const key of ['mode', 'course', 'character', 'source', 'phase', 'duration_ms']) {
             if (['string', 'number'].includes(typeof properties[key])) data[key] = properties[key];
         }
         safe(() => posthog.capture(name, data));

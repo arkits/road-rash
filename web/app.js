@@ -288,7 +288,7 @@ async function startGame(quick, room) {
     const started = performance.now();
     const mode = room ? onlineMode(room) : quick ? 'quick_race' : 'main_game';
     engine.assetError = ''; engine.gameError = ''; engine.gameException = undefined;
-    telemetry.track('game_start', {mode, ...(quick ? {course: Number($('course').value)} : {})});
+    telemetry.track('game_start', {mode, ...(quick ? {course: Number($('course').value), character: Number($('character').value)} : {})});
     telemetry.gameStarted(mode);
     document.body.classList.add('playing');
     loadingStage = 'Starting game…'; updateLoading();
@@ -306,7 +306,7 @@ async function startGame(quick, room) {
             engine.SDL3.audioContext.resume().catch(() => {});
         }
         const args = ['rr-game', '--assets', '/assets', '--windowed', '--window-scale', '1'];
-        if (quick) args.push('--race', '--course', $('course').value);
+        if (quick) args.push('--race', '--course', $('course').value, '--character', $('character').value);
         // Online play uses rr-netd on this page's origin, where /net/health lists rooms.
         if (room) args.push('--room', room);
         args.push('--net-server', (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/net');

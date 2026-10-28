@@ -51,7 +51,9 @@ build. Vercel does not report a build duration for this upload.
   settings request multiple workers. Native worker behavior is unchanged.
 - `web/` contains the launcher, progress/cancel/retry UI, course selector,
   controls, non-affiliation notice, canvas and error recovery. **Quick race**
-  starts directly; **Start game** runs the original frontend. Enter skips the
+  (course and rider pickers, `--race --course N --character C`) starts the
+  race directly as a Thrash race and finishes on the original results and
+  standings screens; **Start game** runs the original frontend. Enter skips the
   opening movie/credits. All five native course choices were browser-tested.
 
 The page also loads the original Badloc/Futura TrueType files from the verified
