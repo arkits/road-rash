@@ -3368,3 +3368,17 @@ messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
   new desktop layout (checked by eye, 2560x1920 window capture).
 - Not run: Android assembly/device, live file-picker import, progress and
   error states on screen (code paths compiled only).
+
+## 2026-10-27 — import screen font
+
+- Build `build-agent-import-ui-20261027` (Debug): pass, no warnings in
+  `import_ui.cpp`. `rr-game --assets <empty dir> --screenshot` shows Futura
+  text on macOS (checked by eye at 2560x1920).
+- Loading screen: rendered with a scratch harness (software renderer,
+  2560x1920, logical 640x480 and 853x480) calling `rr::draw_loading_screen`;
+  both centred correctly. The import screen BMP is byte-identical before and
+  after moving the font code into the shared helper.
+- `ctest --test-dir build-agent-import-ui-20261027 --output-on-failure`:
+  121/121 passed.
+- Not run: Android/Linux/Windows font paths, debug-font fallback on screen,
+  the loading screen inside a live `rr-game` run (it shows for under a second).

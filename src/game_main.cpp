@@ -87,20 +87,7 @@ void draw_loading(SDL_Renderer* renderer, const char* stage) {
     (void)renderer;
     rr::web_loading(stage);
 #else
-    SDL_SetRenderDrawColor(renderer, 15, 18, 22, 255);
-    SDL_RenderClear(renderer);
-    SDL_SetRenderDrawColor(renderer, 225, 225, 128, 255);
-    SDL_SetRenderScale(renderer, 2, 2);
-    SDL_RenderDebugText(renderer, 92, 102, "LOADING ROAD RASH");
-    SDL_SetRenderScale(renderer, 1, 1);
-    SDL_RenderDebugText(renderer, 180, 250, stage);
-    SDL_FRect track{180, 282, 280, 4};
-    SDL_SetRenderDrawColor(renderer, 50, 55, 60, 255);
-    SDL_RenderFillRect(renderer, &track);
-    SDL_FRect pulse{180 + float((SDL_GetTicks() / 4) % 232), 282, 48, 4};
-    SDL_SetRenderDrawColor(renderer, 225, 225, 128, 255);
-    SDL_RenderFillRect(renderer, &pulse);
-    SDL_RenderPresent(renderer);
+    rr::draw_loading_screen(renderer, stage);
 #endif
 }
 

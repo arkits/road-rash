@@ -2533,3 +2533,20 @@ messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
   Keys are unchanged (I/Enter ISO, F folder, Esc/Back/Q quit).
 - Remaining: the Android layout was compiled out in the desktop build only;
   not yet seen on a device.
+
+## 2026-10-27 — import screen font
+
+- `src/import_ui.cpp`: the import screen now draws anti-aliased TrueType text
+  rasterized at output resolution (stb_truetype, per-string texture cache)
+  instead of SDL's 8x8 debug font. The disc's own fonts cannot be used before
+  import, so it loads a system face: Futura Condensed ExtraBold/Bold/Medium on
+  macOS (the original's typeface family), Roboto on Android, Segoe UI on
+  Windows, DejaVu Sans on Linux. Without any of them (for example the web
+  build) it falls back to the debug font. Nothing is bundled.
+- The native startup loading screen (`draw_loading` in `game_main.cpp`) now
+  uses the same fonts and style through `rr::draw_loading_screen`: yellow
+  ROAD RASH title, grey stage line and a yellow pulse bar, centred on the
+  logical width so widescreen stays centred. The web build keeps its DOM
+  loading overlay.
+- Remaining: Android, Linux, Windows and the debug-font fallback were not
+  seen on screen.
