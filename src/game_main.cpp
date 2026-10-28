@@ -355,7 +355,18 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
 #else
         constexpr auto platform=rr::net::Platform::linux_desktop;
 #endif
-            return rr::net::make_hello(settings.alias, platform, rr::net::verified_data_digest(assets));
+            const auto digest = rr::net::verified_data_digest(assets, [](size_t completed, size_t total) {
+#ifdef RR_WEB_BROWSER
+                rr::web_loading("Verifying game files...", int(completed), int(total));
+                // Cached/local reads may resolve without a frame. Let the browser
+                // paint completed work even when there is no network wait.
+                emscripten_sleep(0);
+#else
+                (void)completed;
+                (void)total;
+#endif
+            });
+            return rr::net::make_hello(settings.alias, platform, digest);
         });
         fe.net_attach(
             [&settings, rtc] {

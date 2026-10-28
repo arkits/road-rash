@@ -27,7 +27,8 @@ EM_ASYNC_JS(int, read_local_asset, (const char* path, unsigned* length), {
 EM_JS(int, has_local_asset, (const char* path), { return Module.localAssets.names.has(UTF8ToString(path)); });
 EM_JS(void, copy_asset_error, (char* message, unsigned capacity),
       { stringToUTF8(Module.assetError || 'Game data unavailable. Reload to retry.', message, capacity); });
-EM_JS(void, report_web_loading, (const char* stage), { Module.webLoading ?.(UTF8ToString(stage)); });
+EM_JS(void, report_web_loading, (const char* stage, int completed, int total),
+      { Module.webLoading ?.(UTF8ToString(stage), completed, total); });
 EM_JS(void, copy_room_invite, (char* out, unsigned capacity),
       { stringToUTF8(new URLSearchParams(globalThis.location.search).get("room") || "", out, capacity); });
 namespace rr {
@@ -36,8 +37,8 @@ std::string web_room_invite() {
     copy_room_invite(room, sizeof(room));
     return room;
 }
-void web_loading(const char* stage) {
-    report_web_loading(stage);
+void web_loading(const char* stage, int completed, int total) {
+    report_web_loading(stage, completed, total);
 }
 std::vector<uint8_t> web_read_asset(const std::string& path) {
     unsigned length = 0;

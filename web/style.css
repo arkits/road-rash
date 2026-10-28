@@ -789,15 +789,21 @@ progress::-moz-progress-bar { background: var(--hazard); background-size: 34px 3
 .loading-track {
   height: 10px;
   margin-top: 24px;
-  background: var(--hazard);
-  background-size: 34px 34px;
+  background: #24211d;
   opacity: .9;
   clip-path: var(--notch);
+}
+#loading-fill {
+  height: 100%;
+  background: var(--hazard);
+  background-size: 34px 34px;
   animation: hazard-roll .8s linear infinite;
 }
+.loading-track.measured #loading-fill { animation: none; }
+#loading-count { margin: 8px 0 0; color: var(--yellow); font-family: var(--bold); font-size: 15px; }
 @keyframes hazard-roll { to { background-position: 34px 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .loading-track, .net-status i { animation: none !important; }
+  #loading-fill, .net-status i { animation: none !important; }
   body:not(.playing) .viewport::before, #setup, .mode-go i { animation: none; }
 }
 .controls { position: relative; }

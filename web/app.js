@@ -3,7 +3,7 @@
 const telemetry = window.rrTelemetry || {track() {}, error() {}, log() {}, gameStarted() {}, gameStopped() {}};
 const $ = id => document.getElementById(id);
 let engine, storageRoot, assetDirectory, references, importing = false, cancelled = false, running = false;
-let loadingStage = '', downloadingAssets = 0;
+let loadingStage = '', downloadingAssets = 0, loadingCompleted = -1, loadingTotal = -1;
 let persistentSaves = false, storageWarning = '';
 // Retry transient network/HTTP failures, including reading a truncated body.
 // Immutable assets are still size/hash checked by their caller.
@@ -25,12 +25,28 @@ async function fetchData(url, decode, options) {
 }
 function updateLoading() {
     $('loading-message').textContent = loadingStage || 'Downloading game data…';
+    const measured = loadingTotal > 0 && loadingCompleted >= 0;
+    const percent = measured ? Math.floor(100 * Math.min(loadingCompleted, loadingTotal) / loadingTotal) : 0;
+    const track = $('loading-progress');
+    track.hidden = false;
+    track.classList.toggle('measured', measured);
+    if (measured) {
+        track.setAttribute('aria-valuenow', String(percent));
+        track.setAttribute('aria-valuetext', `${percent}% — ${loadingCompleted} of ${loadingTotal} files verified`);
+    } else {
+        track.removeAttribute('aria-valuenow');
+        track.removeAttribute('aria-valuetext');
+    }
+    $('loading-fill').style.width = measured ? `${percent}%` : '100%';
+    $('loading-count').hidden = !measured;
+    $('loading-count').textContent = measured ? `${percent}% — ${loadingCompleted} of ${loadingTotal} files verified` : '';
     $('loading').hidden = !running || (!loadingStage && !downloadingAssets);
 }
 function showGameMessage(message, title = 'Game stopped') {
     $('loading-title').textContent = title;
     $('loading-message').textContent = message;
     document.querySelector('.loading-track').hidden = true;
+    $('loading-count').hidden = true;
     $('loading').hidden = false;
 }
 const status = (message, error = false) => { $('status').textContent = message; $('status').classList.toggle('error', error); };
@@ -293,6 +309,7 @@ async function startGame(quick, room) {
     telemetry.track('game_start', {mode, ...(quick ? {course: Number($('course').value), character: Number($('character').value)} : {})});
     telemetry.gameStarted(mode);
     document.body.classList.add('playing');
+    loadingCompleted = loadingTotal = -1;
     loadingStage = 'Starting game…'; updateLoading();
     $('setup').hidden = true; $('canvas').hidden = false; $('loading').hidden = false;
     $('fullscreen').disabled = !fullscreenRequest(); $('reload').hidden = false;
@@ -841,7 +858,12 @@ window.addEventListener('keydown', event => {
                 await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
             }
         }
-        engine.webLoading = stage => { loadingStage = stage; updateLoading(); };
+        engine.webLoading = (stage, completed = -1, total = -1) => {
+            loadingStage = stage;
+            loadingCompleted = completed;
+            loadingTotal = total;
+            updateLoading();
+        };
         await setupStorage();
         engine.localAssets = {
             names: new Set(),

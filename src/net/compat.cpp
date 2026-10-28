@@ -100,12 +100,15 @@ DataDigest digest_from_table(const std::vector<std::pair<std::string, std::strin
         digest[i] = uint8_t(std::stoul(hex.substr(i * 2, 2), nullptr, 16));
     return digest;
 }
-DataDigest verified_data_digest(const Assets& assets) {
+DataDigest verified_data_digest(const Assets& assets, const VerificationProgress& progress) {
     std::vector<std::pair<std::string, std::string>> rows;
-    for (const auto& reference : reference_hashes()) {
+    const auto& references = reference_hashes();
+    if (progress) progress(0, references.size());
+    for (const auto& reference : references) {
         if (!assets.exists(reference.path) || sha256(assets.read(reference.path)) != reference.hash)
             throw std::runtime_error("Multiplayer data verification failed: " + reference.path);
         rows.emplace_back(reference.path, reference.hash);
+        if (progress) progress(rows.size(), references.size());
     }
     return digest_from_table(rows);
 }

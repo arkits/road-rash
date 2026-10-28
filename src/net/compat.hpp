@@ -7,6 +7,7 @@
 #include "net/protocol.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -49,7 +50,9 @@ inline uint64_t local_fingerprint() {
 // "path + sha" lines of the committed reference table. Identical for every
 // build from this source; the per-file verification against the user's disc
 // happens at import/startup before any Hello is sent.
-DataDigest verified_data_digest(const Assets&); // verifies every reference file before a Hello
+// Reports only successfully verified files; failures never advance progress.
+using VerificationProgress = std::function<void(size_t completed, size_t total)>;
+DataDigest verified_data_digest(const Assets&, const VerificationProgress& progress = {});
 DataDigest digest_from_table(const std::vector<std::pair<std::string, std::string>>& rows);
 
 // Production Hello. The caller fills alias/platform/seat_token; the gate
