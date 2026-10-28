@@ -1,4 +1,5 @@
 #include "course_scene.hpp"
+#include "world_texture.hpp"
 #include <cstdlib>
 #include <cstdio>
 #include "upscale_import.hpp"
@@ -799,10 +800,17 @@ std::vector<DrawNode> CourseScene::draw_nodes(const std::vector<RouteSample>& ro
                                 }));
                         }
                     }
-                    append(hill_draw_nodes(hills, camera, depths, [&](uint8_t band, int32_t w, int32_t h) {
-                        return material(road.section, road.local, road.terrain->selectors[side], 1, band, w,
-                                        h);
-                    }));
+                    auto hill_nodes =
+                        hill_draw_nodes(hills, camera, depths, [&](uint8_t band, int32_t w, int32_t h) {
+                            return material(road.section, road.local, road.terrain->selectors[side], 1, band,
+                                            w, h);
+                        });
+                    // Native smooth terrain (world_texture.hpp): road-space
+                    // texel coordinates; the original raster ignores them.
+                    const WorldSlicePair frame{far.depth,   near.depth,          far.sample,
+                                               near.sample, a.road_x + camera.x, b.road_x + camera.x};
+                    for (auto& hill : hill_nodes) attach_world_uv(hill, frame, camera, depths, logical_width);
+                    append(std::move(hill_nodes));
                 }
             // 0x0043bef0 types 1-3: shoulder while the pair is visible (not
             // between two tunnel samples), then the mountain side; on the

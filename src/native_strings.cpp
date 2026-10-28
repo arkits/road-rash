@@ -96,6 +96,7 @@ const std::array<std::string, ns::count - native_slot_base> kNativeStrings = {
     "Vignette",
     "Motion Blur",
     "Widescreen",
+    "Smooth Terrain",
     "Per-effect options. Anything non-default shows Visual Style as Custom.",
     "Nearest",
     "Bilinear",

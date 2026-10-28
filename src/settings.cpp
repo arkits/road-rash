@@ -183,7 +183,9 @@ Settings parse_settings(const std::string& text) {
             if (parse_int(v, 0, 3, x)) s.widescreen = Widescreen(x);
         } else if (k == "texture_detail") {
             if (parse_int(v, 0, 1, x)) s.texture_detail = x;
-        } else if (k == "enh_interpolate")
+        } else if (k == "smooth_terrain")
+            flag(s.smooth_terrain);
+        else if (k == "enh_interpolate")
             flag(s.enhancements.interpolate);
         else if (k == "enh_perspective")
             flag(s.enhancements.perspective);
@@ -259,7 +261,7 @@ std::string format_settings(const Settings& s) {
       << "\nnetwork_hud=" << s.network_hud << "\nsmooth_remote=" << s.smooth_remote
       << "\nshow_fps=" << s.show_fps << "\nrender_scale=" << s.render_scale
       << "\nwidescreen=" << int(s.widescreen) << "\ntexture_detail=" << s.texture_detail
-      << "\nenh_interpolate=" << s.enhancements.interpolate
+      << "\nsmooth_terrain=" << s.smooth_terrain << "\nenh_interpolate=" << s.enhancements.interpolate
       << "\nenh_perspective=" << s.enhancements.perspective
       << "\nenh_full_colour=" << s.enhancements.full_colour << "\nenh_filter=" << int(s.enhancements.filter)
       << "\nenh_fog=" << s.enhancements.fog << "\nenh_grade=" << int(s.enhancements.grade)

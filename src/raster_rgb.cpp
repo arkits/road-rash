@@ -4,6 +4,7 @@
 #include "fog.hpp"
 #include <cstring>
 #include "texture.hpp"
+#include "world_texture.hpp"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -469,7 +470,7 @@ void draw_rgb_quad_trilinear(FramebufferRgb& fb, const std::array<RgbVertex, 4>&
 // clip rows, so the union is bit-identical to one thread (Focus 1: the edge
 // walk still starts at the polygon top; the clip only skips writes).
 struct ResolvedNode {
-    enum class Kind { flat, trilinear, nearest_impl, nearest_q16, nearest_wide, bilinear } kind;
+    enum class Kind { flat, trilinear, nearest_impl, nearest_q16, nearest_wide, bilinear, world } kind;
     std::array<RgbVertex, 4> pts{};
     const RgbaMip* mips = nullptr;
     size_t mip_count = 0, level = 0;
@@ -485,6 +486,11 @@ struct ResolvedNode {
     unsigned stride_shift = 0;
     const Palette* palette = nullptr;
     int miny = 0, maxy = 0; // mapped row range, for band culling
+    // Native smooth terrain (world_texture.hpp).
+    const CelTexture* world_texture = nullptr;
+    const WorldBlend* blend = nullptr;
+    WorldQuad world{};
+    int fog_strength = 0, draw_slices = 33;
 };
 static void draw_resolved(FramebufferRgb& fb, const ResolvedNode& r, RasterClip clip,
                           RasterScratch64& scratch) {
@@ -513,13 +519,29 @@ static void draw_resolved(FramebufferRgb& fb, const ResolvedNode& r, RasterClip 
     case ResolvedNode::Kind::bilinear:
         draw_rgb_quad_bilinear(fb, r.pts, r.mips, r.mip_count, r.transparent, clip, r.fog);
         break;
+    case ResolvedNode::Kind::world:
+        draw_world_quad(
+            r.world, *r.world_texture, r.transparent, clip, fb.width(), fb.height(), r.blend,
+            [&](int x, int y, uint8_t index, double inv_z) {
+                uint32_t c = r.blend->rgb[index];
+                if (r.fog.on && inv_z > 0) {
+                    const uint32_t f = fog_factor_q8(int32_t(256.0 / inv_z), r.draw_slices, r.fog_strength);
+                    auto mix = [&](int shift) {
+                        return (((c >> shift & 0xff) * (256 - f) + (r.fog.colour >> shift & 0xff) * f) >> 8)
+                               << shift;
+                    };
+                    c = mix(16) | mix(8) | mix(0);
+                }
+                fb.row(y)[x] = 0xff000000u | c;
+            });
+        break;
     }
 }
 
 static void render_nodes_rgb_impl(FramebufferRgb& fb, const std::vector<DrawNode>& nodes,
                                   const ViewMode& mode, uint32_t flat_mask, const Palette& palette,
                                   const Enhancements& enh, RenderThreads& pool, bool fog_on,
-                                  uint32_t fog_colour, int draw_slices) {
+                                  uint32_t fog_colour, int draw_slices, const WorldBlend* world) {
     if (fb.width() != mode.surface_width || fb.height() != mode.surface_height)
         throw std::runtime_error("View/RGB framebuffer size mismatch");
     const RasterClip clip{0, 0, fb.width(), fb.height() - 1};
@@ -553,6 +575,21 @@ static void render_nodes_rgb_impl(FramebufferRgb& fb, const std::vector<DrawNode
         node_miny = miny;
         node_maxy = maxy; // normalize_quad permutes corners only
         if (node.texture && node.texture->mips.empty() && !(node.texture->flags & flat_mask)) continue;
+        if (world && node.world_uv && node.texture && !(node.texture->flags & flat_mask) &&
+            node.view_depth[0] > 0 && node.view_depth[1] > 0 && node.view_depth[2] > 0 &&
+            node.view_depth[3] > 0) {
+            ResolvedNode rw;
+            rw.kind = ResolvedNode::Kind::world;
+            rw.world_texture = node.texture;
+            rw.blend = world;
+            rw.world = world_quad(node, mode);
+            rw.transparent = (node.texture->flags & 2) != 0;
+            rw.fog = {fog_on, fog_colour};
+            rw.fog_strength = enh.fog;
+            rw.draw_slices = draw_slices;
+            push_node(rw);
+            continue;
+        }
         bool rgb_flip = node.flip_u;
         std::array<RasterPoint, 4> nq;
         for (size_t i = 0; i < 4; ++i)
@@ -758,12 +795,13 @@ static void render_nodes_rgb_impl(FramebufferRgb& fb, const std::vector<DrawNode
 void render_nodes_rgb(FramebufferRgb& fb, const std::vector<DrawNode>& nodes, const ViewMode& mode,
                       uint32_t flat_mask, const Palette& palette, const Enhancements& enh,
                       RenderThreads& pool) {
-    render_nodes_rgb_impl(fb, nodes, mode, flat_mask, palette, enh, pool, false, 0, 33);
+    render_nodes_rgb_impl(fb, nodes, mode, flat_mask, palette, enh, pool, false, 0, 33, nullptr);
 }
 void render_nodes_rgb_fog(FramebufferRgb& fb, const std::vector<DrawNode>& nodes, const ViewMode& mode,
                           uint32_t flat_mask, const Palette& palette, const Enhancements& enh,
-                          RenderThreads& pool, uint32_t fog_colour_rgb, int draw_slices) {
+                          RenderThreads& pool, uint32_t fog_colour_rgb, int draw_slices,
+                          const WorldBlend* world) {
     render_nodes_rgb_impl(fb, nodes, mode, flat_mask, palette, enh, pool, enh.fog > 0, fog_colour_rgb,
-                          draw_slices);
+                          draw_slices, world);
 }
 } // namespace rr

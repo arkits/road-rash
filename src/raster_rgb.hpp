@@ -51,5 +51,5 @@ void render_nodes_rgb(FramebufferRgb&, const std::vector<DrawNode>&, const ViewM
 // fog_strength 0 == render_nodes_rgb exactly.
 void render_nodes_rgb_fog(FramebufferRgb&, const std::vector<DrawNode>&, const ViewMode&, uint32_t flat_mask,
                           const Palette&, const Enhancements&, RenderThreads& pool, uint32_t fog_colour_rgb,
-                          int draw_slices = 33);
+                          int draw_slices = 33, const struct WorldBlend* world = nullptr);
 } // namespace rr

@@ -1005,6 +1005,9 @@ void Frontend::open_native_popup(uint32_t popup) {
         } else if (cap == ns::enh_mb) {
             setter = native_setter::enh_mb;
             current = settings_.enhancements.motion_blur ? 2 : 1;
+        } else if (cap == ns::enh_terrain) {
+            setter = native_setter::enh_mb; // shared bool setter; the caption picks the field
+            current = settings_.smooth_terrain ? 2 : 1;
         } else if (cap == ns::enh_wide) {
             // Widescreen inside Enhancements edits the single Display setting.
             setter = native_setter::widescreen;
@@ -1074,6 +1077,8 @@ std::string Frontend::native_value_text(int caption) const {
         return native_string(settings_.enhancements.motion_blur ? ns::on : ns::off);
     case ns::enh_wide:
         return native_string(ns::wide_off + int(settings_.widescreen));
+    case ns::enh_terrain:
+        return native_string(settings_.smooth_terrain ? ns::on : ns::off);
     case ns::tex_detail:
         return native_string(settings_.texture_detail ? ns::tex_enhanced : ns::tex_original);
     default:
@@ -1905,6 +1910,8 @@ int Frontend::run_handler(size_t index) {
                 settings_.enhancements.vignette = v;
             else if (cap == ns::enh_mb)
                 settings_.enhancements.motion_blur = v;
+            else if (cap == ns::enh_terrain)
+                settings_.smooth_terrain = v;
             apply_native_setting();
             break;
         }

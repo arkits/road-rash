@@ -33,5 +33,6 @@ class RenderThreads {
                          const std::function<void(int, int, int, RasterScratch64&)>& job);
 };
 void render_nodes_threaded(Framebuffer&, const std::vector<DrawNode>&, const ViewMode&, uint32_t flat_mask,
-                           RenderThreads&, bool perspective = false);
+                           RenderThreads&, bool perspective = false,
+                           const struct WorldBlend* smooth_terrain = nullptr);
 } // namespace rr
