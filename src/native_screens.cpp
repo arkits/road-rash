@@ -397,15 +397,39 @@ void add_native_screens(FrontendData& data, bool mobile) {
     link.desc = ns::d_display_mode;
     link.flags = item_flag::description;
     link.enabled = true;
-    // Plan 34 Task 7: host option popups in the original popup style. Level
-    // reuses the EXE level popup with its own setter (the career setter also
-    // resets the career; the host setter only stages the room options).
-    data.popups[native_popup::net_ai] = build_popup(
-        rtpl, ns::net_ai_bikers, {{1, ns::net_ai_none}, {2, ns::net_ai_limited}, {3, ns::net_ai_full}});
-    data.popups[native_popup::net_cars] =
-        build_popup(rtpl, ns::net_cars, {{1, ns::net_cars_on}, {2, ns::net_cars_off}});
-    data.popups[native_popup::net_public] =
-        build_popup(rtpl, ns::net_visibility, {{1, ns::net_public}, {2, ns::net_unlisted}});
+    // Plan 34 Task 7: host option popups in the original popup style, opened
+    // over screen 0x0b. Level takes the EXE level popup's captions and targets
+    // (Level 1-5) with its own setter (the career setter also resets the
+    // career; the host setter only stages the room options). The original
+    // Host opened a transport popup there instead, so the EXE level popup's
+    // own rows (y 300-474) would cover Chat Messages/Restroom/Disconnect.
+    {
+        std::vector<std::pair<int, int>> levels;
+        for (size_t i = 1; i < data.popups.at(0x004736a0).size(); ++i)
+            levels.emplace_back(data.popups.at(0x004736a0)[i].target, data.popups.at(0x004736a0)[i].caption);
+        data.popups[native_popup::net_level] = build_popup(rtpl, 414, levels); // "Level" (room list column)
+        data.popups[native_popup::net_ai] = build_popup(
+            rtpl, ns::net_ai_bikers, {{1, ns::net_ai_none}, {2, ns::net_ai_limited}, {3, ns::net_ai_full}});
+        data.popups[native_popup::net_cars] =
+            build_popup(rtpl, ns::net_cars, {{1, ns::net_cars_on}, {2, ns::net_cars_off}});
+        data.popups[native_popup::net_public] =
+            build_popup(rtpl, ns::net_visibility, {{1, ns::net_public}, {2, ns::net_unlisted}});
+        // Lift each popup so its last row ends above the first menu row of
+        // screen 0x0b that it would overlap horizontally.
+        for (uint32_t id : {native_popup::net_level, native_popup::net_ai, native_popup::net_cars,
+                            native_popup::net_public}) {
+            auto& popup = data.popups[id];
+            int bottom = 480;
+            for (const MenuItem& m : data.screens[0x0b].items)
+                if (m.y > popup.front().y && m.x < popup.front().x + popup.front().w &&
+                    m.x + m.w > popup.front().x)
+                    bottom = std::min(bottom, m.y - 4);
+            const int lift = std::max(0, popup.back().y + popup.back().h - bottom);
+            for (MenuItem& row : popup) row.y -= lift;
+        }
+        for (MenuItem& m : data.screens[0x0b].items)
+            if (m.handler == 0x0042fc40) m.desc = ns::d_net_host;
+    }
     // Plan 34 Task 7: online lobby screens from the 0x13 template column.
     // Captions are scratch slots filled per entry (prepare_screen in
     // frontend.cpp); layout follows the Display screen so rows fit 640x480.

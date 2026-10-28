@@ -47,7 +47,7 @@ void Frontend::net_show_error() {
 void Frontend::net_open_host() {
     if (!net_factory_) return;
     net_pending_options_ = {};
-    open_popup(data_.popups.at(0x004736a0), 1, native_setter::net_level);
+    open_popup(data_.popups.at(native_popup::net_level), 1, native_setter::net_level);
 }
 void Frontend::net_open_rooms() {
     net_ensure();

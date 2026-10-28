@@ -146,7 +146,10 @@ const std::array<std::string, ns::count - native_slot_base> kNativeStrings = {
     "Room code copied.",
     "The server closed the connection. Reconnect to take the seat back.",
     "Online rooms on the game server. No accounts, no port forwarding.",
-    "The race results could not be confirmed.",
+    "The race results are unofficial.", // as wide as ENU 441 "...are now official."
+    // Replaces ENU 295, which also asks for "a connection mechanism".
+    "Host a mano-\xe0-mano game. Pick a level, the bikers, the traffic and who can join, and a character, "
+    "then wait for your friends!",
 };
 const std::string kEmpty;
 } // namespace
