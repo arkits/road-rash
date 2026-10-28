@@ -343,7 +343,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
                     career, settings, (std::filesystem::path(pref) / "saves").string());
 #ifdef RR_NET_TRANSPORT
     try {
-        const auto hello = load_with_indicator(renderer, "Checking multiplayer game data...", [&] {
+        const auto hello = load_with_indicator(renderer, "Verifying game files...", [&] {
 #if defined(__EMSCRIPTEN__)
             constexpr auto platform = rr::net::Platform::web;
 #elif defined(__ANDROID__)
