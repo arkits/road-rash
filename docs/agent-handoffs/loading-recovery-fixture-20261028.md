@@ -37,7 +37,10 @@ Push will trigger the normal deployment workflow; verify its result before closi
 
 ## Checks / remaining work
 
-Awaiting deployment workflow result.
+Run 40648592205 confirmed recovery/cache/telemetry checks PASS, deployment and
+revision/health PASS, normal live gameplay PASS. A separate 90-second cold-start
+timeout in the storage-blocked live test remains; see
+`hosted-cold-start-20261028.md` for its measured reproduction and fix.
 
 ## Live processes / resources
 

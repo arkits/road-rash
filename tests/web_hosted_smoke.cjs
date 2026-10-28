@@ -6,6 +6,25 @@ const path = require('node:path');
 const url = process.env.RR_WEB_URL || 'http://localhost:8780';
 const evidence = process.env.RR_WEB_EVIDENCE || path.resolve(__dirname, '../analysis/dokku-web-20261025');
 fs.mkdirSync(evidence, {recursive:true});
+// Startup verifies 341 files (~467 MiB). A storage-blocked session must
+// download them again; the former 90s limit expired during active verification.
+// Keep a bounded five-minute cold-start budget and retain state if it is ever exceeded.
+async function waitForStartup(page, predicate) {
+    try {
+        await page.waitForFunction(predicate, null, {timeout:300000});
+    } catch (error) {
+        const state = await page.evaluate(() => ({
+            stage:document.querySelector('#loading-message').textContent,
+            progress:document.querySelector('#loading-count').textContent,
+            visible:!document.querySelector('#loading').hidden,
+            assetError:engine.assetError, gameError:engine.gameError,
+            visibility:document.visibilityState
+        }));
+        fs.writeFileSync(path.join(evidence,'startup-timeout.json'),JSON.stringify(state,null,2));
+        await page.screenshot({path:path.join(evidence,'startup-timeout.png')});
+        throw error;
+    }
+}
 (async () => {
     const browser = await chromium.launch({headless:true});
     try {
@@ -80,8 +99,8 @@ fs.mkdirSync(evidence, {recursive:true});
             await page.screenshot({path:path.join(evidence,'loading.png')});
         } finally {releaseLoading();}
         await page.unrouteAll({behavior:'wait'});
-        await page.waitForFunction(() => engine.SDL3?.audioContext?.state==='running', null, {timeout:90000});
-        await page.waitForFunction(() => {
+        await waitForStartup(page, () => engine.SDL3?.audioContext?.state==='running');
+        await waitForStartup(page, () => {
             const canvas=document.querySelector('#canvas');
             const preview=document.createElement('canvas');preview.width=16;preview.height=12;
             const ctx=preview.getContext('2d');ctx.drawImage(canvas,0,0,16,12);
@@ -90,7 +109,7 @@ fs.mkdirSync(evidence, {recursive:true});
             // A race has a blue sky; require it before sending driving input.
             let sky=0;for(let i=0;i<p.length;i+=4) if(p[i+2]>p[i]*1.3 && p[i+2]>100)sky++;
             return sky>15 && document.querySelector('#loading').hidden;
-        }, null, {timeout:90000});
+        });
         // SDL applies these inline CSS sizes when its native Window Size
         // setting changes. Neither may override the page layout: the canvas
         // fills the play area and SDL letterboxes 4:3/widescreen inside it.
@@ -159,7 +178,7 @@ fs.mkdirSync(evidence, {recursive:true});
         await restricted.locator('#ready').waitFor({state:'visible',timeout:90000});
         assert.match(await restricted.locator('#cache-note').textContent(),/session/);
         await restricted.locator('#quick').click();
-        await restricted.waitForFunction(()=>document.querySelector('#loading').hidden,null,{timeout:90000});
+        await waitForStartup(restricted,()=>document.querySelector('#loading').hidden);
         assert.equal(await restricted.evaluate(()=>running),true);
         // Include SDL's registered callback and the launcher's lifecycle bridge.
         for (let i=0;i<3;i++) await restricted.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
