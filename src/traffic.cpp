@@ -498,10 +498,19 @@ void TrafficSystem::move(TrafficCar& car, const std::vector<RouteSample>& route,
     // until the next prepass. A due object outside it still moves once.
     const size_t sample =
         size_t(std::clamp(car.position, int32_t(0), int32_t((route.size() - 1) * 256)) >> 8);
-    const RouteSample& at = route.at(sample);
+    // The car's slice word (+0x2c) points into the 128-slot track ring. Once
+    // the ring back passes the car, its slot holds the slice built 128
+    // samples ahead, and every read through +0x2c sees that slice
+    // (traffic-field slice capture tick 3834: crossing car at sample 427,
+    // back 429, takes sample 555's surface class 3, accel -14 not -11).
+    const bool in_window = car.position >= back_q8 && car.position < front_q8;
+    const size_t slot = car.position < back_q8 && sample + 128 < route.size() ? sample + 128 : sample;
+    const RouteSample& at = route.at(slot);
     if (car.kind & 1) {
-        // 0x0044dc10: crossing cars require an intersection slice and zone.
-        if ((at.path.marking_flags & 0x20) == 0 || car.zone_end == 0 || car.zone_lanes == 0) {
+        // 0x0044dc10: inside the ring window a crossing car needs an
+        // intersection slice and zone; outside it keeps moving until the
+        // window check below unlinks it.
+        if (in_window && ((at.path.marking_flags & 0x20) == 0 || car.zone_end == 0 || car.zone_lanes == 0)) {
             car.pending_remove = true;
             return;
         }
@@ -750,13 +759,11 @@ void TrafficSystem::think_intersections(int32_t back_q8, int32_t front_q8, uint3
         for (size_t k = 1; k < windows_.size(); ++k)
             outside = outside && (windows_[k].front_q8 - c.position_q8 < 0 ||
                                   c.position_q8 - (windows_[k].front_q8 - 0x8000) < 0);
-        if (outside) {
-            for (int k = 0; k < 4; ++k)
-                if (c.signals[k] >= 0) signals_[size_t(c.signals[k])] = IntersectionSignal{};
-            for (auto& car : cars_)
-                if (car.signal >= 0 && signals_[size_t(car.signal)].active == false) car.signal = -1;
-            c = IntersectionController{};
-        }
+        // 0x0041f1f0 marks the controller and its four signals through
+        // 0x00437c10; the next prepass (0x00437df0) unlinks them, so they are
+        // still listed on the teardown tick (traffic-field box capture: the
+        // controller at 109824 thinks on 3861 and is gone on 3862).
+        if (outside) c.pending_remove = true;
     }
 }
 
@@ -843,6 +850,14 @@ bool TrafficSystem::begin_schedule(const std::vector<RouteSample>& route, int32_
         if (car.pending_remove) {
             car.active = false;
             car.pending_remove = false;
+        }
+    for (auto& c : controllers_)
+        if (c.active && c.pending_remove) {
+            for (int k = 0; k < 4; ++k)
+                if (c.signals[k] >= 0) signals_[size_t(c.signals[k])] = IntersectionSignal{};
+            for (auto& car : cars_)
+                if (car.signal >= 0 && signals_[size_t(car.signal)].active == false) car.signal = -1;
+            c = IntersectionController{};
         }
     if (!filled_) build_slices(route, front_q8, 0, tick);
     think_intersections(front_q8 - 0x8000, front_q8, tick, route, random);

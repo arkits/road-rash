@@ -1,0 +1,56 @@
+diff --git a/oracle/aweman_proxy.c b/oracle/aweman_proxy.c
+index 801d523..6729b79 100644
+--- a/oracle/aweman_proxy.c
++++ b/oracle/aweman_proxy.c
+@@ -535,13 +535,47 @@ static void dump_sim_tick(void) {
+                         rr_log("rider.0.half_ec", RD32(half0 + 0xec));
+                     }
+                 }
+-                if (slot == 0 && sim_field_value(node, 0x2f4, 4, 1) != 0) {
++                { /* The rider's own sub-slice (+0x140) static-collision words:
++                   * BORR count +0x60, loaded box count +0x61, flags +0x64
++                   * (bit 4 = boxes loaded), box list +0x68 present, billboard
++                   * count +0x3d. 0x004373f0 sweeps only loaded boxes, which the
++                   * renderer fills on first draw (0x0044b630). */
++                    const uintptr_t sl = (uint32_t)sim_field_value(node, 0x140, 4, 0);
++                    if (sl && readable(sl, 0x70)) {
++                        snprintf(key, sizeof key, "rider.%d.slice_3d", slot);
++                        rr_log(key, RD8(sl + 0x3d));
++                        snprintf(key, sizeof key, "rider.%d.slice_60", slot);
++                        rr_log(key, RD8(sl + 0x60));
++                        snprintf(key, sizeof key, "rider.%d.slice_61", slot);
++                        rr_log(key, RD8(sl + 0x61));
++                        snprintf(key, sizeof key, "rider.%d.slice_64", slot);
++                        rr_log(key, RD8(sl + 0x64));
++                        snprintf(key, sizeof key, "rider.%d.slice_68", slot);
++                        rr_log(key, RD32(sl + 0x68) != 0);
++                        snprintf(key, sizeof key, "rider.%d.slice_6c", slot);
++                        rr_log(key, RD8(sl + 0x60) ? (int32_t)RD32(sl + 0x6c) : 0);
++                        snprintf(key, sizeof key, "rider.%d.slice_ac", slot);
++                        rr_log(key, RD32(sl + 0xac));
++                        { /* First loaded box {left, bottom, right, top}. */
++                            const uintptr_t box = (uint32_t)RD32(sl + 0x68);
++                            if (RD8(sl + 0x61) && box && readable(box, 16))
++                                for (unsigned w = 0; w < 4; ++w) {
++                                    snprintf(key, sizeof key, "rider.%d.slice_box%u", slot, w);
++                                    rr_log(key, (int32_t)RD32(box + 4 * w));
++                                }
++                        }
++                    }
++                }
++                /* Every crashed slot's half (the crash body): opponents' bodies
++                 * meet cars and statics through 0x004046b0 too (traffic-field
++                 * L5 tick 1303), so their motion words are needed as well. */
++                if (sim_field_value(node, 0x2f4, 4, 1) != 0) {
+                     const uintptr_t half = (uint32_t)sim_field_value(node, 0x2fc, 4, 0);
+-                    static const int offs[] = {0x1c, 0x20,  0x24,  0x28,  0xc0,  0xec,  0xf0,
+-                                               0xf4, 0x108, 0x10c, 0x110, 0x114, 0x118, 0x2f4};
++                    static const int offs[] = {0x1c, 0x20,  0x24,  0x28,  0x34,  0x38,  0xc0,  0xec,  0xf0,
++                                               0xf4, 0x108, 0x10c, 0x110, 0x114, 0x118, 0x11c, 0x12c, 0x17c, 0x2f4};
+                     if (half && readable(half, 0x300))
+                         for (unsigned k = 0; k < sizeof offs / sizeof offs[0]; ++k) {
+-                            snprintf(key, sizeof key, "rider.0.body_%x", offs[k]);
++                            snprintf(key, sizeof key, "rider.%d.body_%x", slot, offs[k]);
+                             rr_log(key, RD32(half + offs[k]));
+                         }
+                 }

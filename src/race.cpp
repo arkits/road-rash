@@ -843,6 +843,124 @@ void Race::collide_traffic(Rider& r) {
         if (s.i32(0x2f4) != 0) return; // knocked off: stop scanning
     }
 }
+// Cars as outer nodes of 0x004368f0: a due car (+0x10 == tick, flags & 6)
+// within its half-length (+0x178 = 64) of mid-slice sweeps its own slice's
+// statics through 0x004373f0 like a rider (traffic-field slice capture tick
+// 3834: crossing car 13e2038 takes the static's separation, +3 position,
+// speed 1461 -> 1392). Runs before the rider-car pairs; both follow the
+// ascending walk only approximately (cars are not in the native scan list).
+void Race::collide_car_statics() {
+    if (!traffic_ || !live_schedule_) return;
+    constexpr int32_t car_half_length = 64;   // 0x00475698 +0x48
+    constexpr int32_t car_half_height = 8960; // 0x00475698 +0x4c
+    for (auto& car : traffic_->cars_mut()) {
+        if (!car.active || !car.collides) continue;
+        if (car.last_tick != ticks_ || (car.motion.u8(0xc0) & 6) != 6) continue;
+        if (std::abs(int32_t(uint32_t(car.position) & 0xff) - 0x80) >= car_half_length) continue;
+        Rider other;
+        other.bike = car.motion;
+        other.route = riders_[0].route;
+        other.sample = other.previous_sample = size_t(car.position >> 8);
+        Bike& q = other.bike;
+        q.i32(0x1c) = car.position;
+        q.i32(0x28) = car.lateral;
+        q.i32(0xec) = car.speed;
+        q.i32(0x174) = TrafficSystem::car_half_width(car);
+        q.i32(0x178) = car_half_length;
+        q.i32(0x17c) = car_half_height;
+        q.i32(0x194) = 1800;
+        static_car_ = &car;
+        const bool hit = sweep_statics(other);
+        static_car_ = nullptr;
+        if (!hit) continue;
+        car.motion = q;
+        car.position = q.i32(0x1c);
+        car.lateral = q.i32(0x28);
+        car.speed = q.i32(0xec);
+    }
+}
+// Crashed rider half (+0xc4 == 8) against cars. Crash entry sets the half's
+// flags to 7 (0x00403d60 `+0xc0 |= 3`), so 0x004368f0 pairs it with cars
+// like any other node: both +0x1a0 partner words, 0x00436a40 separation,
+// then each object's +0x1a4 callback in walk order: 0x0044efa0 for the car
+// (its horn draw needs the partner to be the player bike, which a half
+// never is) and 0x004046b0 for the half, whose randomized 0x00439270 move
+// draws rand() (traffic-field L5 tick 1303: car 13e1e28 vs rider 7 half).
+void Race::collide_traffic_half(Rider& owner) {
+    if (!traffic_ || !live_schedule_ || owner.finished || owner.frozen || !owner.crash_active ||
+        owner.half_frozen)
+        return;
+    constexpr int32_t car_half_length = 64;   // 0x00475698 +0x48
+    constexpr int32_t car_half_height = 8960; // 0x00475698 +0x4c
+    for (auto& car : traffic_->cars_mut()) {
+        if (!car.active || !car.collides) continue;
+        Bike& body = owner.crash_actor.motion;
+        if ((body.u8(0xc0) & 5) != 5) return; // not a contact candidate (flags 7 after entry)
+        const int32_t position = body.i32(0x1c), lateral = body.i32(0x28), height = body.i32(0x20);
+        const int32_t car_half_width = TrafficSystem::car_half_width(car);
+        const bool half_outer = position <= car.position;
+        const bool due = half_outer ? (owner.half_sched_last == ticks_ && (body.u8(0xc0) & 6) == 6)
+                                    : (car.last_tick == ticks_ && (car.motion.u8(0xc0) & 6) == 6);
+        if (!due) continue;
+        const auto& route = *routes_[owner.crash_actor.route];
+        if (owner.crash_actor.sample < route.size() && route[owner.crash_actor.sample].dual &&
+            owner.crash_actor.route != riders_[0].route)
+            continue; // cars run on the player's route (split-roadway half test)
+        if (std::abs(position - car.position) > body.i32(0x178) + car_half_length) continue;
+        if (std::abs(lateral - car.lateral) > body.i32(0x174) + car_half_width) continue;
+        // 0x004368f0 height: |(h1 - h2) - half2 + half1| <= half1 + half2.
+        const int32_t dz = (height - 0) - car_half_height + body.i32(0x17c);
+        if (std::abs(dz) > body.i32(0x17c) + car_half_height) continue;
+        Rider other;
+        other.bike = car.motion;
+        other.route = riders_[0].route;
+        other.sample = other.previous_sample = size_t(car.position >> 8);
+        Bike& q = other.bike;
+        if (q.i32(0xc4) != 0x10) {
+            q.i32(0xc4) = 0x10;
+            q.u8(0xc0) = 7;
+            for (int k = 0; k < 5; ++k)
+                q.i32(0x30 + 4 * k) = k == 0 ? car.position : k == 3 ? car.lateral : 0;
+            q.i32(0x108) = car.kind == 2 ? -car.speed : car.speed;
+        }
+        q.i32(0x1c) = car.position;
+        q.i32(0x28) = car.lateral;
+        q.i32(0xec) = car.speed;
+        q.i32(0x174) = car_half_width;
+        q.i32(0x178) = car_half_length;
+        q.i32(0x17c) = car_half_height;
+        q.i32(0x194) = 1800;
+        Rider detached;
+        detached.bike = body;
+        detached.route = owner.crash_actor.route;
+        detached.sample = owner.crash_actor.sample;
+        detached.previous_sample = owner.crash_actor.previous_sample;
+        if (half_outer)
+            separate(detached, 8, other, 0x10);
+        else
+            separate(other, 0x10, detached, 8);
+        car.motion = q;
+        car.position = q.i32(0x1c);
+        car.lateral = q.i32(0x28);
+        car.speed = q.i32(0xec);
+        auto car_response = [&] {
+            car.motion.u8(0x1f4) = 1;
+            if ((car.kind & 1) && car.motion.i32(0x1f8) == 0)
+                car.motion.i32(0x1f8) = 0xf0; // partner type 8 & 0xc
+        };
+        if (!half_outer) car_response();
+        contact_half_static(detached, owner, other);
+        if (half_outer) car_response();
+        owner.crash_actor.motion = detached.bike;
+        owner.crash_actor.route = detached.route;
+        owner.crash_actor.sample = detached.sample;
+        owner.crash_actor.previous_sample = detached.previous_sample;
+        for (int off = 0x180; off <= 0x1a0; off += 4) owner.half_object.i32(off) = detached.bike.i32(off);
+        owner.ride_animation = owner.crash_actor.animation;
+        sync_half_mirror(owner);
+        if (finish_q8_) owner.finish_distance = finish_q8_ - detached.bike.i32(0x1c);
+    }
+}
 // BORR span builder (plan 16 Task 2): the 0x00451cb0 lateral-slot walk over
 // a section's BORR profiles, keeping only slots strictly inside the road
 // edges (0x00454240 strictly-inside test) at sample fraction 0x80. The walk
@@ -1020,12 +1138,24 @@ void Race::ring_statics(int32_t sample, uint32_t section, uint32_t local, const 
 }
 
 void Race::prepare_static_boxes() {
-    // 0x00443a00 projects33 slices; 0x00438610 -> 0x0044b630 loads the
-    // collision boxes on their first draw. Preserve that lifetime in fixed
-    // simulation preparation so render frequency cannot change contacts.
-    const size_t first = camera_position() >> 8;
+    // 0x00438610 -> 0x0044b5f0/0x0044b630 load a slice's collision boxes on
+    // its first draw. The frame drawn after this tick uses the ring camera
+    // (DAT_004b6e5c, front - 0x5000) and reaches slices starting at most
+    // 0x1e00 past it. Record it here; the next tick's contacts see it
+    // (traffic-field slice capture: every rider slice with start <= previous
+    // camera + 0x1e00 loaded, none beyond, none before the first frame).
+    // Fixed simulation preparation, so render frequency cannot change contacts.
+    box_draw_pending_ = true;
+    box_draw_camera_ = ring_ ? ring_->front_q8() - 0x5000 : int32_t(camera_position());
+}
+
+void Race::apply_static_boxes() {
+    if (!box_draw_pending_) return;
+    box_draw_pending_ = false;
+    const int64_t camera = std::max<int32_t>(box_draw_camera_, 0);
+    const int64_t reach = camera + 0x1e00;
     for (auto& road : statics_)
-        for (size_t i = first; i < road.size() && i < first + view_slices; ++i)
+        for (size_t i = size_t(camera >> 8); i < road.size() && int64_t(i) * 256 <= reach; ++i)
             if (road[i].built && !road[i].boxes_ready) road.mut(i).boxes_ready = true;
 }
 
@@ -1068,6 +1198,9 @@ bool Race::sweep_statics(Rider& r, Rider* half_owner) {
         const int32_t base = bb.lateral * 0x100;
         for (const auto& box : bb.frame->boxes) {
             if (!overlaps(box, base)) continue;
+            // 0x00437750: a car (+0xc4 & 0x10) meets only type-0 billboards;
+            // the sweep still ends at the first overlap.
+            if (static_car_ && bb.type != 0) return true;
             // 0x00437750: types 0..2 build the static; 1 and 2 lower its
             // bottom to 0x2000 / 0x3fff under the top. Types 3+ dispatch
             // the type-2 marking object directly, without separation.
@@ -1136,6 +1269,14 @@ void Race::hit_static(Rider& r, int32_t lateral_units, const std::array<int32_t,
     b.i32(0x194) = 0x1000000;
     b.u8(0xc0) = uint8_t(b.u8(0xc0) | 0x10);        // native guard: the static never latches the finish
     if (half_owner) r.bike.i32(0x1a0) = 0x004c3e90; // original fixed static-object identity
+    if (static_car_) {
+        // 0x0044efa0 with the static as partner: never the player bike, so
+        // no horn draw; +0x1f8 = 0x3c (the static's +0xc4 = 1 has no 0xc bits).
+        separate(r, 0x10, o, 1);
+        r.bike.u8(0x1f4) = 1;
+        if ((static_car_->kind & 1) && r.bike.i32(0x1f8) == 0) r.bike.i32(0x1f8) = 0x3c;
+        return;
+    }
     separate(r, half_owner ? 8 : 4, o, 1);
     if (half_owner)
         contact_half_static(r, *half_owner, o);
@@ -2345,6 +2486,11 @@ void Race::crash_recovery(Rider& r, bool player, uint32_t controls) {
         r.half_object.u8(0xc0) &= 0xfc;
         r.stamina.current = r.stamina.max;
         r.crash_active = false;
+        // 0x00404560 tail: thunk 0x00407410 on the half, which now sits at
+        // the bike's position (0x004067d0 copy-back). Direct path with the
+        // finish known (traffic-field-body tick 2575: +0x1f8 1496540 ->
+        // 1496547, the 7-unit body-to-bike gap).
+        if (finish_q8_ != 0 && r.bike_slice_present) r.finish_distance = finish_q8_ - body.motion.i32(0x1c);
         return;
     }
     if (action == CrashRecoveryAction::wrecked) bike.i32(0x2f0) = 0;
@@ -3551,7 +3697,14 @@ bool Race::spawn_cop(int32_t slice_offset, int anchor_rider) {
     Rider& cop = riders_.back();
     const int index = int(riders_.size()) - 1;
     if (live_schedule_) init_live_rider(cop, 4); // template interval 4 (0x00464310 word 2)
-    spawn_brain(cop, riders_.size());            // 0x00405c80
+    // 0x00406b80 builds the rider (0x00405990 -> 0x00405c80 -> 0x004082f0)
+    // before it stores DAT_004642dc, so the spawn-time replan treats the
+    // new rider as an ordinary opponent: scan cap 0xa00, road-edge test,
+    // level speed words (traffic-field box capture tick 4096: a cop 39
+    // slices behind the player finds no target and starts in state 1).
+    cop.cop = false;
+    spawn_brain(cop, riders_.size()); // 0x00405c80
+    cop.cop = true;
     // 0x00406b80 tail: pursuit speed from +0x1bc[level], overwritten after the build.
     cop.brain.current_speed = w[0x1a4 / 4];
     cop.brain.current2 = w[0x1a0 / 4];
@@ -3626,10 +3779,10 @@ void Race::police_think(Rider& player) {
 // 0x004073a0: the cop is unlinked and freed. The cop is always the last
 // rider, so removing it leaves every other index intact.
 void Race::remove_cop() {
+    // 0x00437df0 prepass: unlink the cop that 0x004073a0 marked last tick
+    // (always the newest rider; riders built later never exist).
     cop_removal_pending_ = false;
-    const int index = cop_index();
-    if (index < 0) return;
-    siren_event(riders_.back(), false); // 0x004073a0 posts event 0x13 with no emitter
+    const int index = int(riders_.size()) - 1;
     schedule_.erase(std::remove_if(schedule_.begin(), schedule_.end(),
                                    [&](const ScheduleNode& n) { return n.rider == index; }),
                     schedule_.end());
@@ -4292,6 +4445,7 @@ void Race::update_halves() {
 
 void Race::countdown_step() {
     ++ticks_;
+    apply_static_boxes();
     controls_.fill(0); // countdown thinks see no input (schedule_pass(0, ...))
     // 0x00438930 stores the player bike's last run as creation tick - 1
     // (template interval 1), so its first scheduled tick sees dt 2
@@ -4608,6 +4762,8 @@ void Race::step(std::span<const uint32_t> words) {
         std::all_of(riders_.begin(), riders_.end(), [](const Rider& r) { return r.cop || r.finished; }))
         return;
     ++ticks_;
+    if (cop_removal_pending_) remove_cop(); // last tick's marked cop (0x00437df0 prepass)
+    apply_static_boxes();
     const bool trace =
         std::getenv("RR_SIM_TRACE_TICK") && ticks_ == std::atoi(std::getenv("RR_SIM_TRACE_TICK"));
     auto phase = [&](const char* label) {
@@ -4632,7 +4788,11 @@ void Race::step(std::span<const uint32_t> words) {
     if (!live_schedule_) update_halves();    // rider halves mirror their bikes before contacts
     phase("pedestrians");
     collide_riders();
-    for (size_t i = 0; i < riders_.size(); ++i) collide_traffic(riders_[i]);
+    collide_car_statics();
+    for (size_t i = 0; i < riders_.size(); ++i) {
+        collide_traffic(riders_[i]);
+        collide_traffic_half(riders_[i]);
+    }
     collide_pedestrians(); // pedestrians against cars
     if (live_schedule_) {
         sort_schedule();    // 0x004383e0 again after the 0x004368f0 contacts
@@ -4684,8 +4844,7 @@ void Race::step(std::span<const uint32_t> words) {
     phase("traffic");
     prepare_static_boxes();
     previous_camera_position_ = camera_position();
-    load_pedestrian_looks(); // the frame render after this step draws them
-    if (cop_removal_pending_) remove_cop();
+    load_pedestrian_looks();     // the frame render after this step draws them
     if (net_) update_handicap(); // 0x00442f60 runs on the networked tick path
 }
 } // namespace rr

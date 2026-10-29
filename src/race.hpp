@@ -503,6 +503,23 @@ class Race {
     int32_t lateral() const { return bike().i32(0x28) >> 8; }
     const std::vector<RouteSample>& route() const { return route_of(riders_[0]); }
     const std::vector<RouteSample>& route_of(const Rider& r) const { return *routes_[r.route]; }
+    // Oracle diagnostics: the rider's own slice static-collision state
+    // (0x004373f0 inputs): BORR count, first slot lateral, boxes loaded.
+    struct StaticSliceState {
+        bool built = false, boxes_ready = false;
+        int borr_count = 0, borr0 = 0, billboards = 0;
+    };
+    StaticSliceState static_slice_state(const Rider& r) const {
+        return static_slice_state(r.route, r.sample);
+    }
+    StaticSliceState static_slice_state(int route, size_t sample) const {
+        StaticSliceState out;
+        const auto& table = statics_[route];
+        if (sample >= table.size() || !table[sample].built) return out;
+        const auto& s = table[sample];
+        out = {true, s.boxes_ready, s.borr_count, s.borr_count ? s.borr[0] : 0, s.billboards};
+        return out;
+    }
     const std::vector<RouteSample>& route_for(int road) const { return *routes_[road]; }
     // Finish line 0x00454240/0x00406890/0x00437800: nonzero global finish
     // DAT_004b6e58 (Q8 position) ends the race when the actor's +0x1c
@@ -685,6 +702,7 @@ class Race {
     // every rider, player and AI. Enters crashes with reason 2 (animation
     // 29) through the crash module and queues the original sound events.
     void collide_traffic(Rider&);
+    void collide_traffic_half(Rider& owner); // crashed half (type 8) against cars
     void contact_car(Rider&, TrafficCar&);
     void crash_car(Rider&); // 0x00403d60 reason 2 (car contact, animation 29)
     void crash_reason(Rider&, int32_t reason, std::array<int32_t, 3> rider_impulse,
@@ -722,8 +740,13 @@ class Race {
     void contact_pedestrian(Rider&, Pedestrian&);  // 0x004049c0 short-object branch for the rider
     void pedestrian_voice(Pedestrian&, int which); // 0x00436830(0x16) with the MROF voice
     void contact_hazard(Rider&, int32_t hazard_lo_q8, int32_t hazard_hi_q8);
-    void prepare_static_boxes(); // original 33-slice draw preparation, no simulation RNG
+    void prepare_static_boxes(); // records this tick's frame draw (box loading), no simulation RNG
+    void apply_static_boxes();   // the previous frame's draw loads its collision boxes
+    bool box_draw_pending_ = false;
+    int32_t box_draw_camera_ = 0;
     bool sweep_statics(Rider&, Rider* half_owner = nullptr); // 0x004373f0 against the live ring slice
+    void collide_car_statics();                              // 0x004368f0 runs 0x004373f0 for due cars too
+    TrafficCar* static_car_ = nullptr; // the car whose sweep is running (0x0044efa0 callback)
     void hit_static(Rider&, int32_t lateral_units, const std::array<int32_t, 4>& box,
                     Rider* half_owner = nullptr);                      // 0x00437660
     void contact_half_static(Rider& body, Rider& owner, Rider& other); // 0x004046b0 crashed-half contact

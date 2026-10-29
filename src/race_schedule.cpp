@@ -241,7 +241,6 @@ void Race::schedule_pass(uint32_t controls, bool countdown) {
         run_cars(n.position);
         run_peds(n.position);
         Rider& r = riders_[size_t(n.rider)];
-        if (r.cop && cop_removal_pending_) continue; // 0x004073a0 already unlinked it
         if (n.type == 8) {
             if (r.half_sched_next <= ticks_) run_half_node(r, word(r), countdown);
         } else if (r.sched_next <= ticks_)
@@ -307,6 +306,17 @@ void Race::run_half_node(Rider& r, uint32_t controls, bool countdown) {
     r.half_sched_interval = schedule_interval(r, true);
     if (r.live && (r.half_mirror.lateral < -0xc8000 || r.half_mirror.lateral > 0xc8000))
         r.half_mirror.lateral = std::clamp<int32_t>(r.half_mirror.lateral, -0xc8000, 0xc8000);
+    // While crashed the half is the crash body, so the clamp lands on the
+    // body's own +0x28 and the walk-back starts from the edge (traffic-field
+    // slice capture tick 1923: original 819200 - 1002, native kept walking
+    // from the unclamped body).
+    if (r.live && r.crash_active) {
+        Bike& body = r.crash_actor.motion;
+        if (body.i32(0x28) < -0xc8000 || body.i32(0x28) > 0xc8000) {
+            body.i32(0x28) = std::clamp<int32_t>(body.i32(0x28), -0xc8000, 0xc8000);
+            r.half_object.i32(0x28) = body.i32(0x28);
+        }
+    }
     r.half_sched_next = ticks_ + r.half_sched_interval;
 }
 
@@ -488,6 +498,16 @@ void Race::park(Rider& r) {
     // 0x00406940 with edx 0 on a live opponent (+0x324 != 0).
     if (!r.live || human(r)) return; // humans never park (0x00406940 skips +0x324 == 0)
     if (r.cop) {                     // single player: 0x004073a0 deletes the cop instead of parking it
+        // 0x004073a0: siren off (event 0x13), DAT_004642dc = 0 at once, and
+        // 0x00437c10 marks the half and bike (0x00437be0: +0xc0 &= ~4,
+        // +0xc = +0x10 = tick + 100; then +0xc0 |= 8). The next scheduler
+        // prepass (0x00437df0) unlinks them, so the rider is still dumped on
+        // its deletion tick (traffic-field box capture tick 4104: bike_c =
+        // bike_10 = 4204, gone on 4105).
+        siren_event(r, false);
+        for (Bike* b : {&r.bike, &r.half_object}) b->u8(0xc0) = uint8_t((b->u8(0xc0) & 0xfb) | 8);
+        r.sched_next = r.sched_last = r.half_sched_next = r.half_sched_last = ticks_ + 100;
+        r.cop = false;
         cop_removal_pending_ = true;
         return;
     }
