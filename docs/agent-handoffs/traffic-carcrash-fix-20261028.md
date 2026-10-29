@@ -76,7 +76,9 @@ and immutable trace details are in main's traffic-carcrash-20261028.md.
 
 ## Checks / remaining acceptance
 
-Full Debug build passed. Full CTest still running; final result recorded below.
+Full Debug build passed. Isolated full CTest passed **118/118**, zero skips,
+475.48 seconds (`carcrash-full-ctest.log`). Main integration results are in
+traffic-carcrash-integrate-20261028.md.
 No native C++ LSP connector was available. Configured this owned build with
 CMAKE_EXPORT_COMPILE_COMMANDS=ON. clangd parsed/indexed race.cpp without
 compiler diagnostics, but its exhaustive ExtractFunction tweak checks returned
@@ -87,3 +89,24 @@ The visibility-load rule, split-road crossing-car removal branch, October 26
 post-2278 replay, and dedicated car/static callback coverage remain open.
 No Android, sanitizer or packaging gate yet. Shared proxy/docs/frontend edits
 were preserved. Private original install is retained until proxy integration.
+
+## Supersession of the October 26 height diagnosis
+
+The earlier statement that the body must be lowered below 17920 was incomplete.
+LLDB stopped after all geometry gates in collide_traffic_half on tick 1303:
+body height 22060, car +0x20 height **6147**, dz 14633 (within 7680+8960).
+The native contact now fires and matches that tick, including RNG and the
+half's contact mass word. The car's height was being treated as zero; the
+body itself did not need a tick-specific correction. Diagnostic log:
+`carcrash-body1303-height-lldb.log` (local). The debugger process was killed
+intentionally after inspecting the contact; the separate uninterrupted replay
+is the parity evidence (matches through tick 2278).
+
+A conditional LLDB breakpoint in hit_static for static_car_ did not fire in
+the matching box capture. Therefore it does not close car/static coverage.
+
+Final strict worker oracle receipt after the source commit:
+`analysis/agent-gates/oracle-e42fa17aed134268ae46aab41afecb39/receipt.json`
+(passed). Main integration's isolated renderer-allocation failure and passing
+rerun are retained in traffic-carcrash-integrate-20261028.md; the full main
+integration gate is not claimed green.
