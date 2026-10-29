@@ -49,9 +49,9 @@ each capture is a different race; all replay with one RNG anchor.
 
 | Capture | Baseline `541c3b2` | Now |
 | --- | --- | --- |
-| traffic-field-box | (new) | **4381 identical** (2 slice-load notes) |
+| traffic-field-box | (new) | **4381 identical** (2 slice-load notes; `+0xac` compared) |
 | traffic-field-slice | 1923 | **4381 identical** (21 slice-load notes) |
-| traffic-field-body | 2576 | 3068 (BORR hit, see open items) |
+| traffic-field-body | 2576 | **4381 identical** (second commit; first commit 3068) |
 | traffic-field (Oct 26) | 1303 | 1303 (see open items) |
 | solo-split-left/right, solo-script, fight | identical | identical (unchanged) |
 | contact / fight-steal / steal-vary | 3841 / 896 / 883 | same ticks (no regression) |
@@ -99,6 +99,25 @@ Police: every original police capture still matches in `police-test`
    `+0xc = +0x10 = tick + 100`); the rider is erased at the next step's
    start. box 4104: `bike_c = bike_10 = 4204`, flags 11, gone on 4105.
 
+Second commit (same session):
+
+8. **Far single-box widening honours `+0xac`**: `0x0044b630` writes
+   sub-slice `+0xac` (= `slice+0x60+0x4c`) with word `[3]` (the flags) of
+   the frame-2 texture record when it carries the `0xbc614e` magic, in the
+   same block that loads the boxes; `0x004373f0` widens a far single box
+   ×3 only when bit `0x4000` is clear. The slot rebuild (`0x00451cb0`) never
+   clears it, so native keeps `+0xac` per ring slot (`slot_ac_`). The old
+   note "never written by the ring" was wrong. body 3068 (lateral-1396
+   BORR, flags `0x4002`) passes. The first draw starts one slice behind the
+   camera slice (box capture: slot 49 loaded at start, seen stale on 177
+   and 305).
+9. **Ring slot lookup counts only built slices**: one helper
+   `ring_slot_sample` (newest same-residue sample below `front >> 8`) for
+   `plan_speed`'s lane words and `move()`'s slice reads. The previous
+   lane-word rule took the sample *at* the front, which is not built yet.
+   body 4278: oncoming car at 352 kept driving (target 2180), native had
+   stopped it on 480's lanes.
+
 Ported from disassembly, not yet exercised by any capture (kept, labelled):
 
 - `collide_traffic_half`: crashed halves (flags 7 after `0x00403d60`) pair
@@ -141,12 +160,8 @@ pass.
 
 ## Open items (next actions)
 
-1. body 3068: native player hits a widened single-box BORR slot (lateral
-   1396, slice 353, box `{-21504,-41472,19968,0}`) while airborne; the
-   original never hits it across 3068–3071. The `box` capture's
-   `slice_box*`/`slice_ac` keys allow comparing native boxes and the
-   `+0xac & 0x4000` widening gate directly; add that comparison next and
-   find which differs.
+1. (done in the second commit: body 3068 was the `+0xac` widening gate.)
+   The `box` capture's `slice_box0..3` keys are not compared yet.
 2. Oct 26 capture 1303: crashed-half vs car pair (above) blocked on the
    body height after a reason-2 car crash (native 22,060 at tick 1300).
    No later capture has had a car-crash body; capture one with the patch.
@@ -168,6 +183,9 @@ pass.
   `analysis/agent-gates/oracle-dcf968c97a864f799e934362b7e1918a/receipt.json`
   (in the worktree).
 - Replays in the results table, current build vs `541c3b2` baseline build.
+- Second commit: full Debug build, CTest **118/118**, oracle gate passed
+  (receipt `analysis/agent-gates/oracle-ca7aaeae21d74902b6eac521279b6937/receipt.json`
+  in the worktree).
 - Not run: Android, sanitizers, package gates (no platform code changed).
 
 ## Resources

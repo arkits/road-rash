@@ -270,6 +270,19 @@ int32_t TrafficSystem::schedule_interval(const TrafficCar& car, int32_t camera_q
     return d < 0x26 && d > -3 ? std::min(interval, 6) : std::min(interval * 4, 60);
 }
 
+// The 128-slot track ring holds, for each residue, the newest slice built so
+// far; build_slices builds samples strictly below front_q8 >> 8. A car's
+// slice words (+0x2c/+0x140) read whatever slice its slot holds now
+// (traffic-field body tick 4278: an oncoming car at sample 352 with the
+// front inside sample 480 still reads 352, which is rebuilt only once the
+// front passes 480).
+static int32_t ring_slot_sample(int32_t sample, int32_t front_q8, int32_t samples) {
+    const int32_t built_end = std::clamp(front_q8 >> 8, int32_t(0), samples);
+    int32_t s = sample;
+    while (s + 128 < built_end) s += 128;
+    return std::clamp(s, int32_t(0), samples - 1);
+}
+
 std::pair<int32_t, int32_t> TrafficSystem::plan_speed(TrafficCar& car, const std::vector<RouteSample>& route,
                                                       int32_t front_q8) {
     // 0x0044e710: scheduler dt participates in the stop-line lookahead.
@@ -397,13 +410,7 @@ std::pair<int32_t, int32_t> TrafficSystem::plan_speed(TrafficCar& car, const std
     // strict bound (count < -lane is outside).
     if (!(kind & 1)) {
         const int32_t nsamples = int32_t(route.size());
-        const int32_t front_sample = std::clamp(front_q8 >> 8, int32_t(0), nsamples - 1);
-        // Newest sample with residue r at/under the ring front.
-        auto slot_sample = [&](int32_t s) {
-            int32_t d = front_sample - s;
-            int32_t k = d >= 0 ? d / 128 : 0;
-            return std::clamp(s + 128 * k, int32_t(0), nsamples - 1);
-        };
+        auto slot_sample = [&](int32_t s) { return ring_slot_sample(s, front_q8, nsamples); };
         const RouteSample& slot_at = route[size_t(slot_sample(int32_t(sample)))];
         const RouteSample& link_at = route[size_t(slot_sample(int32_t(sample) + (kind == 0 ? 1 : -1)))];
         const int32_t right = div256(slot_at.path.right_q8); // +0x2c
@@ -504,7 +511,7 @@ void TrafficSystem::move(TrafficCar& car, const std::vector<RouteSample>& route,
     // (traffic-field slice capture tick 3834: crossing car at sample 427,
     // back 429, takes sample 555's surface class 3, accel -14 not -11).
     const bool in_window = car.position >= back_q8 && car.position < front_q8;
-    const size_t slot = car.position < back_q8 && sample + 128 < route.size() ? sample + 128 : sample;
+    const size_t slot = size_t(ring_slot_sample(int32_t(sample), front_q8, int32_t(route.size())));
     const RouteSample& at = route.at(slot);
     if (car.kind & 1) {
         // 0x0044dc10: inside the ring window a crossing car needs an

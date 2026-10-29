@@ -1154,9 +1154,19 @@ void Race::apply_static_boxes() {
     box_draw_pending_ = false;
     const int64_t camera = std::max<int32_t>(box_draw_camera_, 0);
     const int64_t reach = camera + 0x1e00;
-    for (auto& road : statics_)
-        for (size_t i = size_t(camera >> 8); i < road.size() && int64_t(i) * 256 <= reach; ++i)
-            if (road[i].built && !road[i].boxes_ready) road.mut(i).boxes_ready = true;
+    for (size_t k = 0; k < 2; ++k) {
+        auto& road = statics_[k];
+        for (size_t i = size_t(std::max<int64_t>((camera >> 8) - 1, 0));
+             i < road.size() && int64_t(i) * 256 <= reach; ++i)
+            if (road[i].built && !road[i].boxes_ready) {
+                road.mut(i).boxes_ready = true;
+                // 0x0044b630 writes +0xac only for an indexed frame-2 texture
+                // (0xbc614e record: word [3], the flags) that has boxes.
+                const AnimationFrame* frame = road[i].borr_frame;
+                if (road[i].borr_count && frame && !frame->boxes.empty() && frame->texture)
+                    slot_ac_[k][i & 127] = frame->texture->flags;
+            }
+    }
 }
 
 bool Race::sweep_statics(Rider& r, Rider* half_owner) {
@@ -1181,8 +1191,11 @@ bool Race::sweep_statics(Rider& r, Rider* half_owner) {
             for (const auto& box : boxes) {
                 std::array<int32_t, 4> b = box;
                 // Single-box objects far off the centre line are three times
-                // as wide (sub-slice +0xac bit 0x4000 never set by the ring).
-                if (std::abs(units) >= 0x400 && boxes.size() == 1) {
+                // as wide unless sub-slice +0xac has bit 0x4000. 0x0044b630
+                // loads +0xac with the boxes: word [3] (the flags) of the
+                // frame-2 texture record when it carries the 0xbc614e magic.
+                if (std::abs(units) >= 0x400 && boxes.size() == 1 &&
+                    (slice_ac(r.route, r.sample) & 0x4000) == 0) {
                     b[0] *= 3;
                     b[2] *= 3;
                 }

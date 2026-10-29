@@ -508,6 +508,7 @@ class Race {
     struct StaticSliceState {
         bool built = false, boxes_ready = false;
         int borr_count = 0, borr0 = 0, billboards = 0;
+        uint32_t ac = 0; // sub-slice +0xac (0x0044b630)
     };
     StaticSliceState static_slice_state(const Rider& r) const {
         return static_slice_state(r.route, r.sample);
@@ -517,7 +518,8 @@ class Race {
         const auto& table = statics_[route];
         if (sample >= table.size() || !table[sample].built) return out;
         const auto& s = table[sample];
-        out = {true, s.boxes_ready, s.borr_count, s.borr_count ? s.borr[0] : 0, s.billboards};
+        out = {true,         s.boxes_ready,          s.borr_count, s.borr_count ? s.borr[0] : 0,
+               s.billboards, slice_ac(route, sample)};
         return out;
     }
     const std::vector<RouteSample>& route_for(int road) const { return *routes_[road]; }
@@ -855,6 +857,10 @@ class Race {
         };
         std::array<Billboard, 2> billboard{};
     };
+    // Sub-slice +0xac per ring slot (128 slots per road): 0x0044b630 loads
+    // it with the boxes, and the slot rebuild (0x00451cb0) never clears it.
+    std::array<std::array<uint32_t, 128>, 2> slot_ac_{};
+    uint32_t slice_ac(int road, size_t sample) const { return slot_ac_[size_t(road)][sample & 127]; }
     CowVector<StaticSlice> statics_[2]; // mutable (ring builds), copy-on-write for snapshots
     StaticFrames static_frames_;
     Rider static_actor_{}; // 0x004c3e90 static hazard object (rebuilt per hit)

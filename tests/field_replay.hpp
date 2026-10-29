@@ -331,6 +331,14 @@ struct FieldReplay {
             check(f, p + "slice_3d", st.billboards);
             if (st.borr_count) {
                 check(f, p + "slice_6c", st.borr0);
+                // +0xac as 0x0044b630 loads it (box captures since Oct 28);
+                // a slice-load note (below) already covers a load-state gap.
+                const auto loaded_now = f.find(p + "slice_61");
+                if (f.count(p + "slice_ac") &&
+                    (loaded_now == f.end() || (loaded_now->second != 0) == st.boxes_ready))
+                    check(f, p + "slice_ac", st.ac);
+                else
+                    used.insert(p + "slice_ac");
                 const auto loaded = f.find(p + "slice_61");
                 used.insert(p + "slice_61");
                 // Box loading follows the previous frame's draw. Native loads
