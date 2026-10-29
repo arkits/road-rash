@@ -189,13 +189,7 @@ void CourseScene::apply_ring_terrain(uint32_t section, uint32_t local, const Pat
     if (slice.type != 1 && slice.type != 4) return;
     auto& t = terrain_.at(section).at(local);
     base_saved_.emplace(std::make_pair(section, local), t); // keeps the first (original) value
-    const uint8_t type = t.type;
-    t.walls = slice.walls;
-    t.points = slice.points;
-    t.shades = slice.shades;
-    if (slice.type == 4 && path.marking_flags && !(path.marking_flags & 0x40))
-        for (auto& point : t.points) point[1] = 0;
-    t.type = type;
+    ring_terrain_onto(t, path, slice);
 }
 const TerrainSlice& CourseScene::base_terrain(uint32_t section, uint32_t local) const {
     const auto it = base_saved_.find({section, local});
@@ -213,7 +207,7 @@ void ring_terrain_onto(TerrainSlice& t, const PathSample& path, const TerrainSli
     t.walls = slice.walls;
     t.points = slice.points;
     t.shades = slice.shades;
-    if (slice.type == 4 && path.marking_flags && !(path.marking_flags & 0x40))
+    if (slice.type == 4 && (path.marking_flags || path.zone_end) && !(path.marking_flags & 0x40))
         for (auto& point : t.points) point[1] = 0;
     t.type = type;
 }

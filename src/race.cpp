@@ -742,7 +742,11 @@ void Race::collide_traffic(Rider& r) {
         }
         if (std::abs(position - car.position) > half_length + car_half_length) continue;
         if (std::abs(lateral - car.lateral) > half_width + car_half_width) continue;
-        if (std::abs(height) > half_height + car_half_height) continue;
+        // 0x004368f0 compares the two vertical intervals. Separation can
+        // lift a car above ground, so its retained +0x20 is significant.
+        const int32_t car_height = live_schedule_ ? car.motion.i32(0x20) : 0;
+        const int32_t dz = (height - car_height) - car_half_height + half_height;
+        if (std::abs(dz) > half_height + car_half_height) continue;
         if (live_schedule_) {
             // Cars now retain the original mover image, so use both objects'
             // previous positions/velocities and the common 0x00436a40 law.
@@ -909,7 +913,7 @@ void Race::collide_traffic_half(Rider& owner) {
         if (std::abs(position - car.position) > body.i32(0x178) + car_half_length) continue;
         if (std::abs(lateral - car.lateral) > body.i32(0x174) + car_half_width) continue;
         // 0x004368f0 height: |(h1 - h2) - half2 + half1| <= half1 + half2.
-        const int32_t dz = (height - 0) - car_half_height + body.i32(0x17c);
+        const int32_t dz = (height - car.motion.i32(0x20)) - car_half_height + body.i32(0x17c);
         if (std::abs(dz) > body.i32(0x17c) + car_half_height) continue;
         Rider other;
         other.bike = car.motion;
@@ -1305,7 +1309,7 @@ void Race::contact_half_static(Rider& detached, Rider& owner, Rider& other) {
     const Bike& o = other.bike;
     auto& animation = owner.crash_actor.animation;
     const auto& library = *crash_library_;
-    if (o.i32(0xc4) != 2) {
+    if (o.i32(0xc4) != 2 && !(&other == &owner && o.i32(0xec) < 10 && o.i32(0x20) == 0)) {
         if (human(owner)) sound(SoundEvent::grunt_b, s); // event 4
         if (owner.bike.i32(0x2f4) != 2 || o.i32(0xec) >= 1700) {
             if (o.i32(0xc4) & 0x15) s.i32(0x20) = o.i32(0x17c) * 2;
@@ -4518,18 +4522,69 @@ void Race::collide_riders() {
     // (+0x178), and contacts those within the summed half-widths (+0x174),
     // on a shared road half, and within the height test on +0x17c.
     // Runtime flags are the template byte | 4: bikes and pedestrians (3)
-    // take both roles, rider halves (0) neither. Free cars stay in
+    // take both roles; uncrashed halves (4) take neither, crashed halves
+    // (7) take both. Free cars stay in
     // collide_traffic (not in this walk: their list order is approximate);
     // pedestrian pairs never contact: 0x004368f0 gates every pair on
     // (cat_a & cat_b & 3) != 0, and pedestrians are type 0x20 (& 3 == 0),
     // so two pedestrians pass through each other in the original too.
     build_scan_list();
     auto bike_of = [&](const ScanObject& o) -> Bike& {
-        return o.rider >= 0 ? riders_[size_t(o.rider)].bike
-                            : pedestrians_->pool()[size_t(o.pedestrian)].body.bike;
+        if (o.rider >= 0) {
+            Rider& r = riders_[size_t(o.rider)];
+            return o.type == 8 ? r.crash_actor.motion : r.bike;
+        }
+        return pedestrians_->pool()[size_t(o.pedestrian)].body.bike;
     };
-    auto rider_or_ped = [](const ScanObject& o) {
-        return (o.rider >= 0 && o.type == 4) || o.pedestrian >= 0;
+    auto rider_or_ped = [&](const ScanObject& o) {
+        return (o.rider >= 0 && (o.type == 4 || (o.type == 8 && riders_[size_t(o.rider)].crash_active))) ||
+               o.pedestrian >= 0;
+    };
+    auto half_pair = [&](const ScanObject& a, const ScanObject& b) {
+        Rider da, db;
+        auto actor = [&](const ScanObject& o, Rider& detached) -> Rider& {
+            Rider& r = riders_[size_t(o.rider)];
+            if (o.type != 8) return r;
+            detached.bike = r.crash_actor.motion;
+            detached.route = r.crash_actor.route;
+            detached.sample = r.crash_actor.sample;
+            detached.previous_sample = r.crash_actor.previous_sample;
+            return detached;
+        };
+        Rider& ar = actor(a, da);
+        Rider& br = actor(b, db);
+        // 0x00436a40 returns for the bike/half +0x144 relationship.
+        // Their callbacks still run (0x004368f0).
+        if (a.rider != b.rider) separate(ar, a.type, br, b.type);
+        auto respond = [&](const ScanObject& o, Rider& self, Rider& other) {
+            if (o.type == 8)
+                contact_half_static(self, riders_[size_t(o.rider)], other);
+            else if (a.rider == b.rider && self.bike.i32(0xec) < 10 && self.bike.i32(0x20) == 0) {
+                // 0x004049c0 skips to its tail for its own half when
+                // the bike is stationary on the ground.
+                self.bike.i32(0x184) = self.bike.i32(0x188) = self.bike.i32(0x18c) = 0;
+                self.bike.u8(0x19c) = 0;
+                self.bike.i32(0xec) = std::clamp(int32_t(self.bike.i32(0xec)), -1000, 30000);
+                self.bike.i32(0xf4) = std::clamp(int32_t(self.bike.i32(0xf4)), -10000, 0x600);
+            } else
+                contact(self, other);
+        };
+        respond(a, ar, br);
+        respond(b, br, ar);
+        auto save = [&](const ScanObject& o, Rider& detached) {
+            if (o.type != 8) return;
+            Rider& r = riders_[size_t(o.rider)];
+            r.crash_actor.motion = detached.bike;
+            r.crash_actor.route = detached.route;
+            r.crash_actor.sample = detached.sample;
+            r.crash_actor.previous_sample = detached.previous_sample;
+            for (int off = 0x180; off <= 0x1a0; off += 4) r.half_object.i32(off) = detached.bike.i32(off);
+            r.ride_animation = r.crash_actor.animation;
+            sync_half_mirror(r);
+            if (finish_q8_) r.finish_distance = finish_q8_ - detached.bike.i32(0x1c);
+        };
+        save(a, ar);
+        save(b, br);
     };
     for (size_t i = 0; i < scan_.size(); ++i) {
         const ScanObject a = scan_[i];
@@ -4557,10 +4612,9 @@ void Race::collide_riders() {
                     if (finish_q8_) owner.finish_distance = finish_q8_ - detached.bike.i32(0x1c);
                 }
             }
-            continue;
         }
         if (!rider_or_ped(a)) continue;
-        if (a.rider >= 0) {
+        if (a.rider >= 0 && a.type != 8) {
             const Rider& r = riders_[size_t(a.rider)];
             if (r.frozen || r.finished) continue;
             // 0x004368f0 outer: +0x10 == tick with flags & 6 == 6. Live
@@ -4569,12 +4623,13 @@ void Race::collide_riders() {
             // is 7, the overlapping frozen is 4 and must not contact).
             if ((r.bike.u8(0xc0) & 6) != 6) continue;
             if (live_schedule_ && r.sched_last != ticks_) continue;
-        } else {
+        } else if (a.pedestrian >= 0) {
             const auto& p = pedestrians_->pool()[size_t(a.pedestrian)];
             if (freeze_actors_ || p.last_tick != ticks_ || (p.body.bike.u8(0xc0) & 6) != 6) continue;
         }
         Bike& ab = bike_of(a);
-        if (a.rider >= 0 && std::abs(int32_t(uint32_t(ab.i32(0x1c)) & 0xff) - 0x80) < ab.i32(0x178))
+        if (a.rider >= 0 && a.type == 4 &&
+            std::abs(int32_t(uint32_t(ab.i32(0x1c)) & 0xff) - 0x80) < ab.i32(0x178))
             collide_hazards(riders_[size_t(a.rider)]);
         for (size_t j = i + 1; j < scan_.size(); ++j) {
             const ScanObject b = scan_[j];
@@ -4590,11 +4645,16 @@ void Race::collide_riders() {
                 a.rider >= 0 ? riders_[size_t(a.rider)] : pedestrians_->pool()[size_t(a.pedestrian)].body;
             const Rider& br =
                 b.rider >= 0 ? riders_[size_t(b.rider)] : pedestrians_->pool()[size_t(b.pedestrian)].body;
-            if (route_of(ar)[ar.sample].dual && ar.route != br.route) continue;
+            const int a_route = a.type == 8 ? ar.crash_actor.route : ar.route;
+            const int b_route = b.type == 8 ? br.crash_actor.route : br.route;
+            if (a.sample && a.sample->dual && a_route != b_route) continue;
             const int32_t dz = (ab.i32(0x20) - bb.i32(0x20)) - bb.i32(0x17c) + ab.i32(0x17c);
             if (std::abs(dz) > ab.i32(0x17c) + bb.i32(0x17c)) continue;
             if (a.rider >= 0 && b.rider >= 0) {
-                collide(riders_[size_t(a.rider)], riders_[size_t(b.rider)]);
+                if (a.type == 8 || b.type == 8)
+                    half_pair(a, b);
+                else
+                    collide(riders_[size_t(a.rider)], riders_[size_t(b.rider)]);
             } else if (a.rider >= 0 || b.rider >= 0) {
                 Rider& r = riders_[size_t(a.rider >= 0 ? a.rider : b.rider)];
                 Pedestrian& p = pedestrians_->pool()[size_t(a.rider >= 0 ? b.pedestrian : a.pedestrian)];
@@ -4614,8 +4674,12 @@ void Race::prepare_traffic_obstacles() {
     for (const auto& r : riders_) {
         if (route_of(r)[r.sample].dual && r.route != riders_[0].route) continue;
         const Bike& b = r.bike;
-        obstacles.push_back({b.i32(0x1c), b.i32(0x28), b.i32(0x108), b.i32(0x10c), 4});
-        if (r.crash_active) {
+        // 0x00449ce0 rejects nodes with a null +0x2c slice. Parking
+        // clears the bike and half slice pointers (0x00406940), even
+        // though both objects remain in the scheduler list.
+        if (r.bike_slice_present)
+            obstacles.push_back({b.i32(0x1c), b.i32(0x28), b.i32(0x108), b.i32(0x10c), 4});
+        if (r.crash_active && r.half_slice_present) {
             const Bike& f = r.crash_actor.motion;
             obstacles.push_back({f.i32(0x1c), f.i32(0x28), f.i32(0x108), f.i32(0x10c), 8});
         }

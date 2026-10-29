@@ -6,6 +6,24 @@
 #include <iostream>
 int main(int argc, char** argv) {
     try {
+        {
+            // 0x00452710 returns 0x80000000 at an event endpoint. Its
+            // low byte is zero, but 0x00454240 still flattens hill heights.
+            rr::TerrainSlice input, output;
+            input.type = output.type = 4;
+            for (auto& point : input.points) point = {100, -64};
+            rr::PathSample path{};
+            path.zone_end = true;
+            rr::ring_terrain_onto(output, path, input);
+            for (const auto& point : output.points)
+                if (point[1] != 0) throw std::runtime_error("Hill event endpoint not flattened");
+            path.zone_end = false;
+            rr::ring_terrain_onto(output, path, input);
+            if (output.points != input.points) throw std::runtime_error("Ordinary hill flattened");
+            path.marking_flags = 0x40;
+            rr::ring_terrain_onto(output, path, input);
+            if (output.points != input.points) throw std::runtime_error("Tunnel hill flattened");
+        }
         rr::Assets assets(RR_SOURCE_DIR "/../cdrom/ROADRASH");
         if (!assets.exists("DATA/COURSES/NAPA.CRS")) {
             std::cout << "No imported scene corpus\n";
