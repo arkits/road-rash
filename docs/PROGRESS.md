@@ -53,6 +53,24 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 29, 2026: plan 33 rewritten; first Linux native gate
+
+- Portability review of the build, sources, tests, tools and CI. Plan 33 now
+  holds 17 findings and the shared Part A groundwork (A1–A11). New child plans
+  [33a Linux and Steam Deck](plans/33a-linux-steam-deck.md) and
+  [33b Windows](plans/33b-windows.md) cover packaging, Deck Game Mode
+  (pad-only import, in-game file browser, Steam keyboard with a pad
+  fallback), MSVC, UTF-8 paths, the installer, CI and hardware acceptance.
+- First full native build and CTest on Linux (Debian trixie ARM64, Docker,
+  GCC 14.2, distribution SDL 3.2.10, disc mounted). Fixed the one build error
+  (`tests/world_renderer_test.cpp` missing `<algorithm>`). 117/121 tests pass,
+  including every simulation and oracle replay.
+- Open, with plan tasks: `oracle-actor-record` (plain `char` signedness, F15;
+  the same hazard applies to Android ARM64), `raster-rgb-alloc` (fog-path
+  checksum; not FP contraction; suspected libm, F16), `input` (distribution
+  SDL 3.2 too old, F17). Not run: Linux x86-64 full gate, Clang, Windows,
+  any device.
+
 ### October 26, 2026: plan 34 Task 3, snapshots, rollback, determinism matrix
 
 - `src/race_state.*`: `save_state`/`load_state`/`state_hash` over Race,

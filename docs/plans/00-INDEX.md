@@ -13,7 +13,7 @@ The October 14 snapshot below is historical. [../CURRENT_STATUS.md](../CURRENT_S
 - **Crashes:** walls `0x0043a610` and the crash/remount family `0x00403d60` are ported; rider, car and pedestrian contact are ported.
 - **Sound:** race MIDI, sirens and car engines play; exact AWE/MIDI timbre is open.
 - **Front end:** jukebox, sound mix and controls are implemented; driven-career saves round-trip. Mano-a-mano stays disabled until plan 34.
-- **Still not started:** Android hardware validation, Linux/Windows (plan 33) and online multiplayer (plan 34).
+- **Still not started:** Android hardware validation, Linux/Windows (plan 33; rewritten October 29 with Part A groundwork and child plans 33a/33b) and online multiplayer (plan 34).
 
 ## Where things stand (October 14, 2026)
 
@@ -133,7 +133,9 @@ The owner also asked for plans covering pedestrians, oil slicks, police and the 
 | **30** | [Test and build infrastructure](30-test-and-build-infrastructure.md) | **Done** (Tasks 1–5): labels/fast targets/guard, Checks, strict clean, ByteReader/ISO parser, build pruner | — |
 | **31** | [Docs and status hygiene](31-docs-and-status-hygiene.md) | **Done**: header/index refresh, handoff archive, doc checks in agent-tooling | — |
 | **32** | [Completion review follow-through](32-completion-review-next-steps.md) | New (October 14 review, [report](../agent-review/REVIEW-2026-10-14-COMPLETION.md)): R1 restart latch, R2/R3 interpolation, R4 pause texture, R5 side panels | Slice C is the active SIM work (this plan); A/B after it; D–G sequenced after parity/device evidence |
-| **33** | [Linux and Windows ports](33-linux-windows-ports.md) | New (October 17). Linux and Windows builds, packaging, CI and acceptance after macOS/Android; portability rules apply now | — |
+| **33** | [Linux, Steam Deck and Windows ports](33-linux-windows-ports.md) | Rewritten October 29 after a portability review (17 findings, first full Linux build). Part A shared groundwork (portable 128-bit math, total-order sorts, FP contraction off, UTF-8 paths, case-insensitive folder import, portable tests, static SDL + 3.4.12 pin, font fallback, host-neutral tools, byte signedness, deterministic libm) starts now; children [33a Linux/Steam Deck](33a-linux-steam-deck.md) and [33b Windows](33b-windows.md) follow | — |
+| 33a | [Linux and Steam Deck](33a-linux-steam-deck.md) | New (October 29). First Linux ARM64 gate 117/121 (findings F15–F17 in plan 33). Presets, sniper-runtime tarball/AppImage/Flatpak, pad-only import with an in-game browser, Deck defaults, Steam keyboard + pad fallback, CI, Deck acceptance | — |
+| 33b | [Windows](33b-windows.md) | New (October 29). MSVC/clang-cl/MinGW, vcpkg OpenSSL, static CRT+SDL, UTF-8 manifest, `%LOCALAPPDATA%` game data, GUI subsystem + log, zip + per-user Inno installer + signing hook, x64/ARM64 CI, hardware acceptance | — |
 | **34** | [Mano-a-mano online multiplayer](34-multiplayer.md) | **Active, in the definition of done** (owner, October 26). Modern design: deterministic simulation run by every client, rollback against a server-sealed input timeline, WebSocket and WebRTC DataChannel to `rr-netd` on the owner's VPS `agnee`; room codes and invite links; cross-play across Mac, Android, browser, Linux and Windows. Original trace: [../MULTIPLAYER.md](../MULTIPLAYER.md) | — |
 
 ### Order and dependencies
@@ -147,7 +149,7 @@ The owner also asked for plans covering pedestrians, oil slicks, police and the 
                                     └──► 21 enhanced visuals ───────┤
 22 toolchain hardening (any time; before 19 Task 6) ───────────────┤
 14 Android (Task 1 now; rest after 11) ─────────────────────────────┤
-33 Linux/Windows (after macOS complete) ───────────────────────────┤
+33 Part A now ──► 33a Linux/Deck + 33b Windows ──► device acceptance (after 17) ┤
 34 online mano-a-mano: 1 rules ──► 2 multi-human race ──► 3 rollback ┤
                        4 codecs ─┬► 5 rr-netd ──► 6 client ──► 7 front end
                                  └► 8 VPS ──► 9 WebRTC ──► 10 platforms ──► 11 acceptance
@@ -168,7 +170,7 @@ The owner also asked for plans covering pedestrians, oil slicks, police and the 
 - **Plan 22** (toolchain hardening) is independent and can run now; its ThreadSanitizer task should land before plan 19's threaded rasteriser.
 - **Plan 14 Task 1 (first device run and performance baseline) runs as soon as a device is attached.** It does not wait for the other plans.
 - **Plan 13** is independent of 10–12 except for its race-MIDI hook, which uses the race-start point that plan 11 touches.
-- **Plan 33** (Linux, Windows) starts once macOS is feature complete.
+- **Plan 33** (Linux, Steam Deck, Windows): Part A runs now (it fixes latent bugs on every platform). 33a/33b Tasks 1–3 follow Part A in parallel with the simulation plans; device acceptance (33a/33b Task 8) runs after plan 17. Plan 34 Task 10 Step 4 needs 33a/33b Task 6.
 - **Plan 15** runs last.
 
 ## How these plans handle reverse engineering

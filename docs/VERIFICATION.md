@@ -1,5 +1,30 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33: first Linux native gate (October 29, 2026)
+
+- Host: Docker `debian:trixie` `--platform linux/arm64` on the Apple-silicon
+  Mac; GCC 14.2.0, `libsdl3-dev` 3.2.10, OpenSSL 3.5.7, CMake + Ninja, Debug,
+  default options (network transport on). Source mounted read-only, disc
+  mounted read-only at `../cdrom`.
+- Configure passed. The first build failed on `tests/world_renderer_test.cpp:184`
+  (`std::copy_n` without `<algorithm>`); with that include added, the build
+  passed.
+- `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ctest -j6`: 117/121 passed
+  (129 s). Failures: `oracle-actor-record` (`char clip == -7`; char is
+  unsigned on ARM64 Linux), `raster-rgb-alloc` (pinned fog checksum
+  `0x861b81d25eb5f7db` differs), `input` (phone overlay pixel at 30,345 is
+  black under SDL 3.2.10), `agent-tooling` (doc check ran before the 33a/33b
+  index rows existed; `tools/doc_checks.py` passes now).
+- Diagnostic: a separate tree with `-DCMAKE_CXX_FLAGS=-ffp-contract=off`
+  (transport off) still fails `raster-rgb-alloc` and `input`, so FP
+  contraction is not the cause.
+- Logs (local, not committed):
+  `/private/tmp/claude-501/-Users-archit-Dev-rr/c7126a90-a6ef-4a85-b9a4-cffc8eda7b7d/scratchpad/linux/`
+  (`build3.log`, `ctest3.log`); Docker volumes `rr-plan33-linux-build`,
+  `rr-plan33-linux-fpc`.
+- Not run: Linux x86-64 full gate, Clang, Release, sanitizers, pinned static
+  SDL, display/audio hardware, Steam Deck, Windows.
+
 ## Plan 34 Task 3: snapshots, rollback, determinism (October 26, 2026)
 
 - `make verify-sim BUILD_DIR=build-p34`: passed after the shared-data and

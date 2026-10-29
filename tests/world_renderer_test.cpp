@@ -1,5 +1,6 @@
 #include "world_renderer.hpp"
 #include "golden.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 int main(int argc, char** argv) {
