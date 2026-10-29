@@ -9,10 +9,10 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 dist = Path(sys.argv[1]).resolve()
-roles = ['index.html', 'app.js', 'telemetry.js', 'style.css', 'rr-game.js', 'rr-game.wasm', 'references.json', 'LICENSES.txt', 'og-image.png']
+roles = ['index.html', 'app.js', 'telemetry.js', 'style.css', 'rr-game.js', 'rr-game.wasm', 'references.json', 'LICENSES.txt', 'og-image.png', 'favicon.ico']
 files = {p.name for p in dist.iterdir() if p.is_file()}
 allowed = set()
-stable = {'index.html', 'LICENSES.txt', 'og-image.png'}
+stable = {'index.html', 'LICENSES.txt', 'og-image.png', 'favicon.ico'}
 for role in roles:
     stem, extension = role.rsplit('.', 1)
     matches = {name for name in files if name == role or (

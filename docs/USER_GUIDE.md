@@ -68,10 +68,14 @@ picker/import flow still needs device validation.
 | Restart after finish | Enter | South button |
 | Quit desktop | Q | — |
 
-Android stays in landscape in either direction. Visible race buttons provide
+Android stays in landscape in either direction. New preferences enable widescreen
+(Match display); an existing saved aspect choice is preserved. Tap anywhere to
+skip the opening credits. After the Start video, the loading postcard advances
+automatically into the race, without another press. Visible race buttons provide
 LEFT/RIGHT steering, GAS, BRAKE, PUNCH, KICK, BACKHAND and PAUSE. Hold GAS
-with one finger and steer or attack with others; steering does not automatically
-accelerate. BRAKE takes priority over GAS. Slide off a button to release it.
+with one finger and steer or attack with others; the attack buttons sit on the
+left above steering. Steering does not automatically accelerate. BRAKE takes
+priority over GAS. Slide off a button to release it.
 The Touch settings page adjusts opacity and mirrors the layout for left-handed
 play. Other touch platforms use screen zones. A tap resumes while paused
 or restarts after a finish. Android Back pauses. Background/focus loss or

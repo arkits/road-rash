@@ -28,6 +28,14 @@ int main() {
     const rr::Settings g = rr::parse_settings(
         "video_mode=9\nmaster_volume=-1\nhires=yes\nnonsense\n=\nalias=" + std::string(40, 'x') + "\n");
     const rr::Settings d = rr::default_settings();
+#ifdef __ANDROID__
+    check(d.widescreen == rr::Widescreen::match, "Android defaults to display aspect");
+#else
+    check(d.widescreen == rr::Widescreen::off, "desktop retains original aspect default");
+#endif
+    check(rr::parse_settings("").widescreen == d.widescreen, "empty settings use platform aspect default");
+    check(rr::parse_settings("widescreen=0\n").widescreen == rr::Widescreen::off,
+          "saved explicit 4:3 choice is preserved");
     check(g.video_mode == d.video_mode && g.master_volume == d.master_volume &&
               g.high_resolution == d.high_resolution && g.alias.empty(),
           "invalid values ignored");
@@ -132,8 +140,7 @@ int main() {
         const rr::Settings g2 =
             rr::parse_settings("enh_draw_slices=40\nenh_fog=101\nenh_filter=3\nenh_widescreen=9\n");
         check(g2.enhancements.draw_slices == 33 && g2.enhancements.fog == 0 &&
-                  g2.enhancements.filter == rr::TextureFilter::nearest &&
-                  g2.widescreen == rr::Widescreen::off,
+                  g2.enhancements.filter == rr::TextureFilter::nearest && g2.widescreen == d.widescreen,
               "only 33/48/64 slices and in-range values accepted");
         check(rr::parse_settings("enh_widescreen=2\n").widescreen == rr::Widescreen::mode16x9,
               "old enh_widescreen migrates");

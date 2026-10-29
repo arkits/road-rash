@@ -15,7 +15,7 @@ cd "$root"
 emcmake cmake -S . -B "$build" -DCMAKE_BUILD_TYPE=Release -DRR_WEB_BROWSER=ON -DBUILD_TESTING=OFF
 cmake --build "$build" --target rr-game --parallel "${RR_BUILD_JOBS:-8}"
 mkdir -p "$dist"
-cp "$root/web/index.html" "$root/web/style.css" "$root/web/app.js" "$root/web/og-image.png" "$build/rr-game.js" "$build/rr-game.wasm" "$dist/"
+cp "$root/web/index.html" "$root/web/style.css" "$root/web/app.js" "$root/web/og-image.png" "$root/web/favicon.ico" "$build/rr-game.js" "$build/rr-game.wasm" "$dist/"
 python3 - "$root" "$dist" <<'PYTHON'
 import json, re, sys
 from pathlib import Path

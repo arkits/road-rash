@@ -108,7 +108,7 @@ int main() {
     touches.set_phone_controls(true);
     finger(SDL_EVENT_FINGER_DOWN, 1, 1, .91f, .84f); // gas
     finger(SDL_EVENT_FINGER_DOWN, 1, 2, .07f, .84f); // left
-    finger(SDL_EVENT_FINGER_DOWN, 1, 3, .91f, .66f); // punch
+    finger(SDL_EVENT_FINGER_DOWN, 1, 3, .07f, .66f); // punch
     check(touches.current().accelerate && touches.current().left && touches.current().punch,
           "phone gas, steering and combat work simultaneously");
     finger(SDL_EVENT_FINGER_DOWN, 1, 4, .81f, .84f); // brake

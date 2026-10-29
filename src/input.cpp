@@ -120,9 +120,9 @@ std::array<TouchButton, 8> phone_buttons(bool left_handed) {
         {TouchAction::right, 130, 345, 85, 65, "RIGHT"},
         {TouchAction::accelerate, 870, 345, 85, 65, "GAS"},
         {TouchAction::brake, 770, 345, 85, 65, "BRAKE"},
-        {TouchAction::punch, 870, 265, 85, 65, "PUNCH"},
-        {TouchAction::kick, 770, 265, 85, 65, "KICK"},
-        {TouchAction::backhand, 670, 265, 85, 65, "BACKHAND"},
+        {TouchAction::punch, 30, 265, 85, 65, "PUNCH"},
+        {TouchAction::kick, 130, 265, 85, 65, "KICK"},
+        {TouchAction::backhand, 230, 265, 85, 65, "BACKHAND"},
         {TouchAction::pause, 880, 20, 75, 40, "PAUSE"},
     }};
     if (left_handed)

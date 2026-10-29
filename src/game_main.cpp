@@ -809,6 +809,9 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
                 e.type == SDL_EVENT_FINGER_DOWN) {
                 float x = 0, y = 0;
                 if (e.type == SDL_EVENT_FINGER_DOWN) {
+                    // Credits have no clickable menu item. Treat a press anywhere
+                    // (including the side bars) like the keyboard Select action.
+                    if (fe.screen() == 7 || fe.screen() == 0x23) in.select = true;
                     int w = 0, h = 0;
                     SDL_GetWindowSize(window, &w, &h);
                     SDL_RenderCoordinatesFromWindow(renderer, e.tfinger.x * float(w), e.tfinger.y * float(h),
@@ -882,6 +885,14 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
         }
         SDL_RenderPresent(renderer);
         display.maybe_toggle();
+        // The original loading postcard is a Select prompt, not asynchronous
+        // loading. On phones show it once, then start without a second tap.
+        if (rr::kMobileDisplay && menu_frames < 0 && !lifecycle.state.paused() &&
+            fe.screen() == rr::screen_id::race_loading) {
+            rr::MenuInput start;
+            start.select = true;
+            fe.update(start, SDL_GetTicks());
+        }
     }
     settings.music_track = music.track();
     rr::save_settings(settings_path, settings);

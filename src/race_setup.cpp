@@ -4,6 +4,7 @@
 #include "career.hpp"
 #include "exe_tables.hpp"
 #include "scenery.hpp"
+#include <SDL3/SDL.h>
 #include <algorithm>
 #include <stdexcept>
 
@@ -67,6 +68,17 @@ RaceAssets load_race_assets(const Assets& assets, const std::vector<uint8_t>& ex
     // on every course. The race starts and finishes at race_bounds.
     if (config.level < 0 || config.level > 4) throw std::runtime_error("race setup: level out of range");
     RaceAssets out;
+    uint64_t stage_start = SDL_GetTicksNS();
+    const auto stage = [&](const char* name) {
+        const auto now = SDL_GetTicksNS();
+#ifdef __ANDROID__
+        SDL_Log("race load %s: %s %.1f ms", config.course.c_str(), name,
+                double(now - stage_start) / 1000000.0);
+#else
+        (void)name;
+#endif
+        stage_start = now;
+    };
     try {
         out.course =
             std::make_unique<Course>(read_course(assets.read("DATA/COURSES/" + config.course + ".CRS")));
@@ -128,6 +140,7 @@ RaceAssets load_race_assets(const Assets& assets, const std::vector<uint8_t>& ex
                 break;
             }
     }
+    stage("course and tables");
     try {
         out.scene = std::make_unique<CourseScene>(assets, exe, *out.course, config.course, 1, config.level);
     } catch (const std::exception& e) {
@@ -135,16 +148,19 @@ RaceAssets load_race_assets(const Assets& assets, const std::vector<uint8_t>& ex
             throw std::runtime_error("course scene " + config.course + ": " + e.what());
         out.scene.reset();
     }
+    stage("scene");
     try {
         out.hud = std::make_unique<Hud>(assets, exe, bike_index, config.metric);
     } catch (const std::exception& e) {
         throw std::runtime_error("dashboard: " + std::string(e.what()));
     }
+    stage("dashboard");
     try {
         out.actors = std::make_unique<ActorNodes>(assets, exe, config.high_resolution);
     } catch (const std::exception& e) {
         throw std::runtime_error("actors: " + std::string(e.what()));
     }
+    stage("actors");
     out.crash = read_crash_config(exe);
     out.police = read_police_config(exe);
     if (assets.exists("DATA/CARS/" + config.course + ".CAR")) {
@@ -159,8 +175,10 @@ RaceAssets load_race_assets(const Assets& assets, const std::vector<uint8_t>& ex
             out.vehicles.reset(); // game logs the course at fallback time (finding 2)
         }
     }
+    stage("traffic");
     out.attack_codes = std::make_unique<AttackCodes>(read_attack_codes(exe));
     out.personalities = read_personalities(exe);
+    stage("personalities");
     return out;
 }
 

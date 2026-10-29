@@ -60,6 +60,7 @@ Settings default_settings() {
     SDL_free(locales);
 #ifdef __ANDROID__
     s.display_mode = DisplayMode::fullscreen;
+    s.widescreen = Widescreen::match;
 #endif
     return s;
 }
