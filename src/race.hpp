@@ -508,7 +508,8 @@ class Race {
     struct StaticSliceState {
         bool built = false, boxes_ready = false;
         int borr_count = 0, borr0 = 0, billboards = 0;
-        uint32_t ac = 0; // sub-slice +0xac (0x0044b630)
+        uint32_t ac = 0;                           // sub-slice +0xac (0x0044b630)
+        std::optional<std::array<int32_t, 4>> box; // first loaded BORR box (+0x68)
     };
     StaticSliceState static_slice_state(const Rider& r) const {
         return static_slice_state(r.route, r.sample);
@@ -518,8 +519,9 @@ class Race {
         const auto& table = statics_[route];
         if (sample >= table.size() || !table[sample].built) return out;
         const auto& s = table[sample];
-        out = {true,         s.boxes_ready,          s.borr_count, s.borr_count ? s.borr[0] : 0,
-               s.billboards, slice_ac(route, sample)};
+        out = {true,         s.boxes_ready,           s.borr_count, s.borr_count ? s.borr[0] : 0,
+               s.billboards, slice_ac(route, sample), std::nullopt};
+        if (s.boxes_ready && s.borr_frame && !s.borr_frame->boxes.empty()) out.box = s.borr_frame->boxes[0];
         return out;
     }
     const std::vector<RouteSample>& route_for(int road) const { return *routes_[road]; }

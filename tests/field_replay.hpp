@@ -334,11 +334,18 @@ struct FieldReplay {
                 // +0xac as 0x0044b630 loads it (box captures since Oct 28);
                 // a slice-load note (below) already covers a load-state gap.
                 const auto loaded_now = f.find(p + "slice_61");
-                if (f.count(p + "slice_ac") &&
-                    (loaded_now == f.end() || (loaded_now->second != 0) == st.boxes_ready))
+                const bool load_agrees = loaded_now == f.end() || (loaded_now->second != 0) == st.boxes_ready;
+                if (f.count(p + "slice_ac") && load_agrees)
                     check(f, p + "slice_ac", st.ac);
                 else
                     used.insert(p + "slice_ac");
+                // First loaded box {left, bottom, right, top} (+0x68), dumped
+                // while +0x61 is set; a BORR slice with a loaded frame-2.
+                if (f.count(p + "slice_box0") && load_agrees && st.box) {
+                    for (int w = 0; w < 4; ++w)
+                        check(f, p + "slice_box" + std::to_string(w), (*st.box)[size_t(w)]);
+                } else
+                    for (int w = 0; w < 4; ++w) used.insert(p + "slice_box" + std::to_string(w));
                 const auto loaded = f.find(p + "slice_61");
                 used.insert(p + "slice_61");
                 // Box loading follows the previous frame's draw. Native loads
