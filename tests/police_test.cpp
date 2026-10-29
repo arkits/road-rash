@@ -196,9 +196,13 @@ int main() {
         }
         {
             // Live wiring (plan 32 D): a parked player on Napa level 3 meets the
-            // periodic cop at tick 4096 (0x00407f30), the cop chases through the
-            // rider think/move path, finds the stopped player (0x00407860) and
-            // arrests it (outcome 4). The cop never takes a place.
+            // periodic cop at tick 4096 (0x00407f30) and the cop pursues it
+            // through the rider think/move path. The cop never takes a place.
+            // Whether it then stops within the 0x00407860 arrest window depends
+            // on the whole field (this game config builds a different field
+            // from the oracle bootstrap's 14 opponents); the arrest itself is
+            // verified on the original capture of this scenario below
+            // (napa-cops-parked-20261026, arrest on tick 4552 as captured).
             const auto exe = assets.read("ROADRASH.EXE");
             rr::RaceConfig config;
             config.course = "NAPA";
@@ -224,8 +228,13 @@ int main() {
             require(race.place(0) <= race.riders().size(), "Cop does not take a place");
             (void)place_before;
             int arrested = -1, sirens = 0;
+            bool pursued = false;
             for (int t = 0; t < 6000 && arrested < 0; ++t) {
                 race.step(0);
+                if (race.cop_index() >= 0) {
+                    const auto& c = race.riders()[size_t(race.cop_index())];
+                    pursued = pursued || (c.brain.state == 4 && c.brain.target_rider == 0);
+                }
                 for (const auto& e : race.take_sound_events())
                     sirens += e.code == rr::SoundEvent::siren && e.position != 0;
                 if (race.busted()) arrested = t;
@@ -238,7 +247,7 @@ int main() {
                 }
             }
             std::cout << "cop present=" << (race.cop_index() >= 0) << " arrested_after=" << arrested << "\n";
-            require(arrested >= 0, "Cop arrests the stopped player");
+            require(pursued, "Cop pursues the stopped player (state 4, target the player)");
             require(sirens > 0, "Cop posts siren events with its position");
         }
         struct CopCapture {

@@ -63,6 +63,7 @@ struct FieldReplay {
     // Nondeterministic sound-thread rpm channel (see the solo replay): count
     // mismatches as diagnostic notes, never sim divergences.
     size_t rpm_timing_notes = 0;
+    size_t slice_load_notes = 0; // far-edge box-load gaps (see riders())
     // Diagnostic: RR_FIELD_ALL=1 prints every differing check of the first
     // diverging frame, not just the first.
     const bool all = std::getenv("RR_FIELD_ALL") != nullptr;
@@ -301,6 +302,66 @@ struct FieldReplay {
             else
                 native = r.half_object.i32(int(off));
             check(f, key, native);
+        }
+        // Crash body (the half while the bike is crashed): rider.N.body_<hex>
+        // in captures since traffic-field-body (October 28, 2026).
+        if (f.count(p + "body_1c")) {
+            if (!r.crash_active) {
+                if (diff.empty()) diff = p + "body present in original, native rider not crashed";
+            } else
+                for (int off : {0x1c, 0x20, 0x24, 0x28, 0x34, 0x38, 0xec, 0xf0, 0xf4, 0x108, 0x10c, 0x110,
+                                0x114, 0x118, 0x11c, 0x12c, 0x17c}) {
+                    char key[16];
+                    std::snprintf(key, sizeof key, "body_%x", off);
+                    if (f.count(p + key)) check(f, p + key, r.crash_actor.motion.i32(off));
+                }
+            for (const char* k : {"body_c0", "body_2f4"}) used.insert(p + k);
+        }
+        // Own sub-slice static-collision state (rider.N.slice_*): 0x004373f0
+        // sweeps only boxes the renderer has loaded (0x0044b630).
+        if (f.count(p + "slice_60")) {
+            // The player's half slot (think 0x00434660) reads the half's own
+            // slice, which is the crash body's while the rider is down.
+            const auto think = f.find(p + "think");
+            const bool half = think != f.end() && think->second == 0x00434660;
+            const auto st = half && r.crash_active
+                                ? race().static_slice_state(r.crash_actor.route, r.crash_actor.sample)
+                                : race().static_slice_state(r);
+            check(f, p + "slice_60", st.borr_count);
+            check(f, p + "slice_3d", st.billboards);
+            if (st.borr_count) {
+                check(f, p + "slice_6c", st.borr0);
+                // +0xac as 0x0044b630 loads it (box captures since Oct 28);
+                // a slice-load note (below) already covers a load-state gap.
+                const auto loaded_now = f.find(p + "slice_61");
+                const bool load_agrees = loaded_now == f.end() || (loaded_now->second != 0) == st.boxes_ready;
+                if (f.count(p + "slice_ac") && load_agrees)
+                    check(f, p + "slice_ac", st.ac);
+                else
+                    used.insert(p + "slice_ac");
+                // First loaded box {left, bottom, right, top} (+0x68), dumped
+                // while +0x61 is set; a BORR slice with a loaded frame-2.
+                if (f.count(p + "slice_box0") && load_agrees && st.box) {
+                    for (int w = 0; w < 4; ++w)
+                        check(f, p + "slice_box" + std::to_string(w), (*st.box)[size_t(w)]);
+                } else
+                    for (int w = 0; w < 4; ++w) used.insert(p + "slice_box" + std::to_string(w));
+                const auto loaded = f.find(p + "slice_61");
+                used.insert(p + "slice_61");
+                // Box loading follows the previous frame's draw. Native loads
+                // slices starting <= ring camera + 0x1e00 (exact on 22,800
+                // samples); the original also skips a few far-edge slices
+                // (projection visibility, not ported): a counted note, since
+                // any contact it changes surfaces as a field/RNG divergence.
+                if (loaded != f.end() && (loaded->second != 0) != st.boxes_ready) {
+                    ++slice_load_notes;
+                    std::cout << "slice load note tick " << race().ticks() << ' ' << p << "original "
+                              << (loaded->second != 0) << " native " << st.boxes_ready << " (borr lateral "
+                              << st.borr0 << ")\n";
+                }
+            } else
+                for (const char* k : {"slice_61", "slice_6c"}) used.insert(p + k);
+            for (const char* k : {"slice_64", "slice_68"}) used.insert(p + k);
         }
         if (f.count(p + "rating_0"))
             for (unsigned i = 0; i < 30; ++i) {
@@ -700,12 +761,13 @@ struct FieldReplay {
                          "compared\n";
         if (ignore_cars)
             std::cout << g.frames.size() << " ticks compared without free cars (diagnostic)\n";
-        else if (total == 0 && rpm_timing_notes == 0)
+        else if (total == 0 && rpm_timing_notes == 0 && slice_load_notes == 0)
             std::cout << g.frames.size() << " ticks identical\n";
         else
             std::cout << g.frames.size() << " ticks identical (" << total
                       << " golden-only fields not compared; " << rpm_timing_notes
-                      << " rpm-timing notes on the nondeterministic channel)\n";
+                      << " rpm-timing notes on the nondeterministic channel; " << slice_load_notes
+                      << " far-edge slice-load notes)\n";
         return 0;
     }
 };

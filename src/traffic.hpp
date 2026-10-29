@@ -120,6 +120,7 @@ struct IntersectionController {
     int32_t position_q8 = 0;          // +0x1c: zone-end slice, clamped into the ring window
     int32_t last_tick = 0, next_tick = 0; // +0x10 / +0xc scheduler words (interval 0x1e)
     int signals[4] = {-1, -1, -1, -1};    // +0xec/+0xf0/+0xf4/+0xf8: signal index 0, 1, 2, 3
+    bool pending_remove = false;          // 0x0041f1f0 marked; unlinked by the next prepass
 };
 class TrafficSystem {
   public:
@@ -127,10 +128,13 @@ class TrafficSystem {
     static constexpr size_t controller_pool = 10; // 0x00468ee4: 10 x 0x114
     static constexpr size_t signal_pool = 40;     // 0x00468ee0: 40 x 0x108
     // DAT_004b7ecc while 0x004552e0 builds the first ring (objects created
-    // there get +0xc next = 2, +0x10 last = 2 - interval); the player and
-    // grid built later by 0x00405600 see 0. Measured on the solo captures
-    // and on napa-field-l1-20261017 (controllers torn down on 2 + 30k).
-    uint32_t setup_tick = 2;
+    // there get +0xc next = 1, +0x10 last = 1 - interval); the player and
+    // grid built later by 0x00405600 see 0. Setup controllers think on
+    // 1 + 30k (police capture: 0x0041f040 at tick 751) and their teardown,
+    // marked on a think, unlinks one tick later (2 + 30k on the solo
+    // captures and napa-field-l1-20261017, tick 392). Earlier notes read the
+    // unlink tick as the creation phase (2); corrected October 28, 2026.
+    uint32_t setup_tick = 1;
     void set_setup_tick(uint32_t t) { setup_tick = t; }
     // Nulled-pool solo equivalent: the oracle zeroes the car pool count, so
     // 0x0044df60 returns on entry AFTER 0x0044dd90/0x0041f040 drew the lane
