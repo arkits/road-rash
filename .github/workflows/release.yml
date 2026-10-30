@@ -28,14 +28,19 @@ jobs:
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # package version from v* tags
 
       - name: Build and verify standalone app
         run: tools/build_macos_app.sh
 
       - name: Name the zip after the tag
         run: |
-          version=${GITHUB_REF_NAME#v}
-          [ "$GITHUB_REF_TYPE" = tag ] || version=dev-$(git rev-parse --short HEAD)
+          # Same scheme as the Windows packages: X.Y.Z at a v* tag, else X.Y.Z-g<commit>.
+          version=$(python3 -c "import sys; sys.path.insert(0, 'tools'); import build_windows_package as b; print(b.package_version()[0])")
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            case "$version" in *-g*) echo "tag $GITHUB_REF_NAME is not on HEAD"; exit 1;; esac
+          fi
           cp "build-release/Road Rash Native.zip" "RoadRashNative-$version-macos-arm64.zip"
 
       - name: Upload app zip
