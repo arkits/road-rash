@@ -1,5 +1,40 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Tasks 2–3: manifest, file safety, game executable (October 30, 2026)
+
+- Windows CI run `41027970095` (`port/plan33b-windows`), all jobs successful:
+  `msvc-x64` and `msvc-arm64` CTest 131/131 (35 disc/fixture/Linux-only
+  skips), `clang-cl-x64` and `msys2-clang64` unit 87/87; synthetic
+  determinism equal to the macOS reference on all four.
+- New Windows evidence in that run:
+  - `utf8_path`: settings save/load and a synthetic folder import under
+    `Tëst ディレクトリ` through the game's `std::string` paths. This needs
+    the UTF-8 code page from the embedded manifest.
+  - `first-run-smoke-unicode`: first run with `RR_PREF_OVERRIDE` in a
+    non-ASCII directory.
+  - `game-version`: `rr-game --version` output reaches CTest from the
+    GUI-subsystem executable.
+  - `platform_files`: a destination held without `FILE_SHARE_DELETE` for
+    150 ms is replaced after retries; a 3 s hold fails cleanly, keeping the
+    old file and removing the temporary.
+  - `system_fonts`: Segoe UI loads from `%WINDIR%\Fonts`.
+- Bugs found on the way:
+  - Run `41024878116`: a retried rename kept the first attempt's error code,
+    so `write_file_atomic` reported failure on all four jobs. Reproduced and
+    fixed under Wine.
+  - Run `41025942765`: a vcpkg applocal post-link race ("used by another
+    process"); applocal is now off for static triplets.
+  - Run `41026975309`: the platform_files holder thread raced the write on
+    MSYS2; the test now waits for the open handle.
+- Resources checked on the MinGW cross build with `objdump -p`: `rr-game.exe`
+  is subsystem 2 (Windows GUI) with ICON (4 images), GROUP_ICON, VERSIONINFO
+  and exactly one RT_MANIFEST. Test executables carry the manifest.
+- macOS after the changes: Debug CTest 131/131, 0 skipped. Android debug
+  gate passed (with `platform_game.cpp` added to the library sources).
+- Not run: anything on real Windows hardware (taskbar icon, Alt+F4,
+  fullscreen toggle, the log file location, a migration from a real
+  `%APPDATA%` import).
+
 ## Plan 33b Task 1: Windows native gate (October 30, 2026)
 
 - GitHub Actions workflow `Windows` (`.github/workflows/windows.yml`), run

@@ -53,6 +53,27 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: Windows manifest, file safety and executable (plan 33b Tasks 2–3)
+
+- `windows/rr-app.manifest` (UTF-8 code page, Per-Monitor-V2 DPI, long
+  paths, Windows 10/11) is embedded in every executable. Non-ASCII user
+  profiles work for settings, saves and import (`utf8_path`,
+  `first-run-smoke-unicode` on Windows CI).
+- `platform_files`:
+  - retrying renames for atomic writes and the import commit (antivirus locks);
+  - `%LOCALAPPDATA%` for the imported disc, with a one-time move from
+    `%APPDATA%` (saves and settings keep roaming).
+- `rr-game.exe`:
+  - GUI subsystem, with `--console` to attach to a terminal;
+  - `rr-game.log` / `rr-game.1.log`;
+  - the committed icon and VERSIONINFO (from `build_info.py --version-header`);
+  - `--version`.
+- Alt+Enter and Cmd+F toggle fullscreen during races too (previously
+  Alt+Enter restarted a finished race).
+- Windows CI green on MSVC x64/ARM64 (131/131), clang-cl and MSYS2.
+- Remaining: hardware observation (Task 3 Step 4, Task 8), Task 4 (input,
+  audio, pacing), Task 5 (packaging).
+
 ### October 30, 2026: Windows native gate (plan 33b Task 1)
 
 - Windows builds and tests on GitHub runners: MSVC x64 and native ARM64
