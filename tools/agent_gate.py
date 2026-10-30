@@ -100,8 +100,8 @@ def run_gate(args):
                     verify_flags = ['--run']
                     report['coverage']['install_test'] = 'CI only (it removes per-user game data)'
                 else:
-                    if 'CMAKE_SYSTEM_NAME:INTERNAL=Windows' not in (build / 'CMakeCache.txt').read_text() and \
-                            'CMAKE_SYSTEM_NAME:STRING=Windows' not in (build / 'CMakeCache.txt').read_text():
+                    systems = [p.read_text() for p in build.glob('CMakeFiles/*/CMakeSystem.cmake')]
+                    if not any('set(CMAKE_SYSTEM_NAME "Windows")' in text for text in systems):
                         raise RuntimeError('windows-package off Windows needs --build-dir of a MinGW cross build')
                     commands.append(['cmake', '--build', str(build), '--target', 'rr-game', '--parallel', str(args.jobs)])
                     verify_flags = ['--allow-mingw-crt'] + (['--run', '--wine', env['RR_WINE']] if env.get('RR_WINE') else [])
