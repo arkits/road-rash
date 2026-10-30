@@ -36,3 +36,7 @@ analysis/field-count-sessions.json
 analysis/sim-forensics
 
 web/node_modules/
+# Plan 33b: Windows CI binary cache and package output; keeps CI builds clean (no +dirty).
+.vcpkg-cache/
+/dist/
+/det.txt

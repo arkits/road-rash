@@ -100,7 +100,9 @@ def version_strings(pe):
 
 
 def check_exe(path, arch, commit, allow_mingw_crt):
-    pe = pefile.PE(str(path), fast_load=True)
+    # Parse from bytes: a memory-mapped file stays locked on Windows and would
+    # block running and deleting it.
+    pe = pefile.PE(data=path.read_bytes(), fast_load=True)
     if pe.FILE_HEADER.Machine != MACHINES[arch]:
         fail(f'{path.name}: machine 0x{pe.FILE_HEADER.Machine:04x}, expected {arch}')
     if pe.OPTIONAL_HEADER.Subsystem != pefile.SUBSYSTEM_TYPE['IMAGE_SUBSYSTEM_WINDOWS_GUI']:
@@ -260,7 +262,7 @@ def main():
                 fail('portable mode did not put rr-game.log in the data folder beside the exe')
             report['portable_log'] = 'data/rr-game.log'
         if args.installer:
-            setup = pefile.PE(str(args.installer), fast_load=True)
+            setup = pefile.PE(data=args.installer.read_bytes(), fast_load=True)
             strings = version_strings(setup)
             version = re.match(r'RoadRashNative-(\d+\.\d+\.\d+)', args.installer.name)
             if not version or not strings.get('FileVersion', '').startswith(version.group(1)):
