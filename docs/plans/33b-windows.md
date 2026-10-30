@@ -155,16 +155,35 @@ Windows CI caught a real bug in Step 3: a successful retry kept the first attemp
 
 **Files:** Create `windows/installer.iss`, `tools/build_windows_package.ps1`, `tools/verify_windows_package.py`, `tools/sign_windows.ps1`. Modify `tools/agent_gate.py` (a `windows-package` gate).
 
-- [ ] **Step 1: Portable zip.** `RoadRashNative-<version>-windows-<x64|arm64>.zip` contains `Road Rash Native\rr-game.exe`, the licences (SDL, network stack, DejaVu, project), `README.txt` and `portable.txt`. When `portable.txt` sits next to the exe, the pref path is `.\data\` instead of `%APPDATA%`, so the game runs from a USB stick. This is a native addition; document it.
-- [ ] **Step 2: Installer.** Inno Setup builds `RoadRashNative-<version>-setup-<arch>.exe`: a per-user install to `%LOCALAPPDATA%\Programs\Road Rash Native`, with no admin prompt. It adds a Start-menu shortcut, an optional desktop shortcut and an uninstaller that keeps saves and the imported disc unless the user ticks "remove game data".
-- [ ] **Step 3: Verifier.** `verify_windows_package.py` uses `pefile`, which the icon tool already needs. It checks:
+- [x] **Step 1: Portable zip.** `RoadRashNative-<version>-windows-<x64|arm64>.zip` contains `Road Rash Native\rr-game.exe`, the licences (SDL, network stack, DejaVu, project), `README.txt` and `portable.txt`. When `portable.txt` sits next to the exe, the pref path is `.\data\` instead of `%APPDATA%`, so the game runs from a USB stick. This is a native addition; document it.
+- [x] **Step 2: Installer.** Inno Setup builds `RoadRashNative-<version>-setup-<arch>.exe`: a per-user install to `%LOCALAPPDATA%\Programs\Road Rash Native`, with no admin prompt. It adds a Start-menu shortcut, an optional desktop shortcut and an uninstaller that keeps saves and the imported disc unless the user ticks "remove game data".
+- [x] **Step 3: Verifier.** `verify_windows_package.py` uses `pefile`, which the icon tool already needs. It checks:
   - the imports are on the allowlist, and the machine type (AMD64/ARM64) is right;
   - the manifest is embedded with the UTF-8 code page;
   - the version resource matches the commit;
   - no packaged file matches a reference hash or has disc-data magic;
   - the zip's `rr-game.exe --console --version` runs on the runner.
-- [ ] **Step 4: Signing hook.** `sign_windows.ps1` runs `signtool sign /fd sha256 /tr <timestamp URL> ...` on the exe and the installer when `RR_SIGN_CERT_THUMBPRINT` (or an Azure Trusted Signing profile) is configured, and is skipped otherwise. Which certificate, if any, is an owner decision, recorded in plan 15.
-- [ ] **Step 5:** Commit `windows: portable zip, per-user installer, verifier, signing hook`.
+- [x] **Step 4: Signing hook.** `sign_windows.ps1` runs `signtool sign /fd sha256 /tr <timestamp URL> ...` on the exe and the installer when `RR_SIGN_CERT_THUMBPRINT` (or an Azure Trusted Signing profile) is configured, and is skipped otherwise. Which certificate, if any, is an owner decision, recorded in plan 15.
+- [x] **Step 5:** Commit `windows: portable zip, per-user installer, verifier, signing hook`.
+
+**Task 5 result (October 30, 2026).** Done. On GitHub runners, each `package-<arch>` job:
+- builds Release;
+- runs the Release CTest (132/132 with disc/fixture skips) and the synthetic determinism check (equal to macOS);
+- builds the zip and installer, then verifies, launches and install-tests them.
+
+Both x64 and ARM64 pass (VERIFICATION.md "Plan 33b Task 5"). Differences from the steps above:
+- **Python, not PowerShell, for build and verify.** `tools/build_windows_package.py` is Python, so the same staging runs against a MinGW cross build on macOS and Linux. Only the signing hook is `tools/sign_windows.ps1`.
+- **Portable mode.** `portable_data_directory()` in `src/platform_files.*` sends pref, local data, the imported disc and the log to `<exe dir>\data` when `portable.txt` sits beside the exe. It applies on every desktop OS, not Android or the browser. `RR_PREF_OVERRIDE` still wins, and a portable copy never migrates or touches per-user data.
+- **Uninstall prompt.** "Remove game data" is a Yes/No prompt that defaults to No, Inno's equivalent of a checkbox. A silent uninstall keeps the data unless given `/PURGE=1`, which the CI install test uses.
+- **Licences.** The zip ships SDL, stb, libdatachannel, libjuice, usrsctp, plog and OpenSSL licences. There is no project licence file yet; choosing one is the owner's decision. DejaVu is not bundled: fonts come from the system (Part A Task A8).
+- **Import allowlist.** Generated from the real builds and reviewed: MSVC x64 and ARM64 import 14 system DLLs (`advapi32 bcrypt crypt32 gdi32 imm32 kernel32 ole32 oleaut32 setupapi shell32 user32 version winmm ws2_32`), no CRT. The MinGW cross build adds the UCRT `api-ms-win-crt-*` sets, allowed only with `--allow-mingw-crt`.
+- **Fixes found while verifying:**
+  - `rr-game --console --version` used to start the game, because only `--version --console` was recognised. Both orders now work (CTest `game-version-console`).
+  - `--console` no longer re-points streams that are already redirected to a pipe or file.
+  - CI builds were stamped `+dirty` because of the untracked `.vcpkg-cache`. It is ignored now (`.gitignore`), so CI version resources name a clean commit.
+- **`windows-package` gate** in `tools/agent_gate.py`. On Windows: preset Release build, CTest, package, launch. Off Windows: a MinGW cross build checked under `RR_WINE`. That is supplementary evidence only.
+
+Signing is wired but unconfigured. Which certificate to use, if any (a classic thumbprint or Azure Trusted Signing), is the owner's decision under plan 15. Until then builds are unsigned and SmartScreen warns (USER_GUIDE). Real-desktop install checks stay with Task 8.
 
 ### Task 6: Determinism and cross-play
 
@@ -178,7 +197,7 @@ Windows CI caught a real bug in Step 3: a successful retry kept the first attemp
 
 **Files:** Create `.github/workflows/windows.yml`. Modify `.github/workflows/release.yml`.
 
-- [ ] **Step 1: `windows.yml`.** *(Build and test jobs exist since October 30; the package build and the skip assertion come with Task 5.)* On push/PR to `main`:
+- [ ] **Step 1: `windows.yml`.** *(Build and test jobs exist since October 30; the `package-x64`/`package-arm64` jobs (Release build, CTest, package, verify, launch, install test) since Task 5. Still open: the assertion that only `disc`-labelled tests skipped.)* On push/PR to `main`:
   - `windows-2022` runs the `windows-msvc` build and `ctest`, asserting that only `disc`-labelled tests skipped;
   - `windows-clang-cl` and `windows-mingw` build checks;
   - `windows-11-arm` runs the `windows-msvc-arm64` build and `ctest`;
@@ -206,4 +225,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: Tasks 1–3 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 4, 5 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Tasks 1–3 and 5 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Task 7 Step 1 package jobs done; Tasks 4, 7 Step 2 (release.yml) and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

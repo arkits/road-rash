@@ -60,7 +60,9 @@ Still open (see `docs/CURRENT_STATUS.md` and `docs/PROGRESS.md`):
   GDI-hinting text shapes and that art mapping.
 - Android builds and packages but hardware validation (render, input,
   import, lifecycle, performance) is pending.
-- Linux/Windows builds do not exist yet.
+- Linux and Windows build and pass their tests (Linux in Docker; Windows
+  x64/ARM64 on GitHub runners, including the zip and installer packages), but
+  neither has been played on real hardware yet (plans 33a/33b).
 
 ## Browser build
 
@@ -185,6 +187,23 @@ Produces `build-release/Road Rash Native.app` and a ZIP with pinned static
 SDL3, ARM64 / macOS 13 baseline, bundled licences, ad-hoc signature, and no
 game data. Pushing a `v*` tag builds and attaches the same package via
 GitHub Actions.
+
+## Windows packaging
+
+From an MSVC developer prompt (`windows-msvc-arm64` for ARM64):
+
+```bat
+cmake --preset windows-msvc
+cmake --build build-windows-msvc --config Release
+python tools/build_windows_package.py --build-dir build-windows-msvc --arch x64
+python tools/verify_windows_package.py build-windows-msvc\package\RoadRashNative-<version>-windows-x64.zip --arch x64 --run
+```
+
+Produces a portable zip (`portable.txt` keeps data beside the exe) and, with
+Inno Setup 6.3+, a per-user installer, both with a static CRT and SDL, so
+they need no DLLs beyond Windows' own, and no game data. `tools/sign_windows.ps1` signs them when the owner sets
+`RR_SIGN_*`; otherwise they are unsigned and SmartScreen warns. The verifier
+needs `pip install pefile`. CI builds and install-tests both architectures.
 
 ## Docs map
 

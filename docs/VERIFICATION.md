@@ -1,5 +1,63 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Task 5: Windows packages (October 30, 2026)
+
+- Windows CI run `41113561902` (`port/plan33b-windows`, commit `cd554cb`):
+  all six jobs successful.
+  - `package-x64` (windows-2022) and `package-arm64` (windows-11-arm):
+    - Release CTest 132/132 (35 disc/fixture/Linux-only skips);
+    - synthetic determinism in Release equal to the macOS reference;
+    - `build_windows_package.py --installer require`, then
+      `verify_windows_package.py --run --installer --install-test`: PASS.
+  - Debug jobs: `msvc-x64` and `msvc-arm64` 132/132; `clang-cl-x64` and
+    `msys2-clang64` unit 88/88; determinism equal on all four.
+- What the verifier established on each architecture:
+  - **Zip:** exactly `Road Rash Native/{rr-game.exe, README.txt,
+    portable.txt, licenses/*}` (7 licences). No disc extensions, none of the
+    341 reference SHA-256 hashes, no ISO or AVI magic.
+  - **`rr-game.exe`:** machine AMD64 or ARM64, GUI subsystem; one manifest
+    (UTF-8 code page, PerMonitorV2, longPathAware); icon group;
+    ProductVersion `0.0.0 (cd554cb2f417)`, with no `+dirty`.
+  - **Imports:** 14 system DLLs, identical on both architectures:
+    `advapi32 bcrypt crypt32 gdi32 imm32 kernel32 ole32 oleaut32 setupapi
+    shell32 user32 version winmm ws2_32`. No CRT or SDL DLL.
+  - **Launch:** the unzipped `rr-game.exe --console --version` printed a
+    Release build of the current source, and portable mode wrote
+    `data/rr-game.log` beside it.
+  - **Install test:**
+    1. The silent install went to `%LOCALAPPDATA%\Programs\Road Rash
+       Native`, with a Start-menu shortcut, no `portable.txt`, an exe
+       byte-identical to the zip's, and a log in
+       `%LOCALAPPDATA%\RoadRashNative\RoadRash`.
+    2. The silent uninstall removed the program and shortcut and kept the
+       data.
+    3. A reinstall followed by an uninstall with `/PURGE=1` removed the
+       data too.
+- Earlier runs on the branch found:
+  - Runs `41109866741` and `41112058693`:
+    - version stamped `+dirty` (untracked `.vcpkg-cache`);
+    - pefile's file mapping blocked temp cleanup;
+    - the install test reinstalled while the first uninstaller was still
+      finishing (it now waits for the folder to go);
+    - `mixer-device` failed once on MSYS2 with a 100 ms first-callback
+      bound (now 5 s, with messages).
+  - Local: `rr-game --console --version` started the game instead of
+    printing the version. Fixed; CTest `game-version-console`.
+- Local supplement (not Windows acceptance):
+  - The MinGW GCC Release cross build passed
+    `verify_windows_package.py --allow-mingw-crt --run` under Wine
+    (`--wine`): 23 imports including the UCRT API sets, launched, portable
+    log present.
+  - The `agent_gate.py windows-package` profile on that build passed
+    (3/3 steps).
+  - `sign_windows.ps1` without `RR_SIGN_*` prints "signing skipped" and exits
+    0; `-Check` exits 1.
+  - macOS Debug CTest 132/132, 0 skipped.
+- Not run:
+  - signing with a real certificate (none is configured; owner decision);
+  - the interactive uninstall prompt;
+  - SmartScreen, and installing on real Windows desktops (Task 8).
+
 ## Plan 33b Tasks 2–3: manifest, file safety, game executable (October 30, 2026)
 
 - Windows CI run `41027970095` (`port/plan33b-windows`), all jobs successful:

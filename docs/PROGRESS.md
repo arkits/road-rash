@@ -53,6 +53,39 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: Windows packages (plan 33b Task 5)
+
+- `tools/build_windows_package.py` stages a Release `rr-game.exe` into
+  `RoadRashNative-<version>-windows-<arch>.zip` (`Road Rash Native\` with
+  README, licences and `portable.txt`). With Inno Setup it also builds
+  `RoadRashNative-<version>-setup-<arch>.exe` (`windows/installer.iss`):
+  - per user, with no admin prompt;
+  - Start-menu shortcut, plus an optional desktop shortcut;
+  - the uninstaller keeps game data unless the user asks to remove it.
+- Portable mode, a native addition: `portable.txt` beside the exe keeps all
+  data in `<exe dir>\data` (`portable_data_directory()`).
+- `tools/verify_windows_package.py` (pefile) checks:
+  - the layout;
+  - the machine type and GUI subsystem;
+  - the system-DLL import allowlist;
+  - the manifest settings;
+  - the icon and the version naming the commit;
+  - no disc data (extensions, the 341 reference hashes, ISO and AVI magic).
+
+  It also launches the exe (portable log in `data\`) and, on CI, runs a
+  silent install, launch, keep-data uninstall and `/PURGE=1` uninstall.
+- `tools/sign_windows.ps1`: signtool by thumbprint or Azure Trusted Signing
+  when `RR_SIGN_*` is set; skipped otherwise. No certificate is configured
+  (owner decision).
+- Windows CI `package-x64` / `package-arm64`: Release build and CTest,
+  determinism, package, verify, install test. `windows-package` gate profile.
+- Fixes: `--console --version` started the game (now either order);
+  `--console` kept redirected streams; CI builds stamped `+dirty` by the
+  untracked vcpkg cache; `mixer-device` gave the first audio callback only
+  100 ms (now 5 s).
+- Remaining: real-desktop install and SmartScreen checks (Task 8), release
+  workflow assets (Task 7 Step 2), signing certificate (owner), Task 4.
+
 ### October 30, 2026: Windows manifest, file safety and executable (plan 33b Tasks 2–3)
 
 - `windows/rr-app.manifest` (UTF-8 code page, Per-Monitor-V2 DPI, long
@@ -72,7 +105,7 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
   Alt+Enter restarted a finished race).
 - Windows CI green on MSVC x64/ARM64 (131/131), clang-cl and MSYS2.
 - Remaining: hardware observation (Task 3 Step 4, Task 8), Task 4 (input,
-  audio, pacing), Task 5 (packaging).
+  audio, pacing), Task 5 (packaging; done later the same day).
 
 ### October 30, 2026: Windows native gate (plan 33b Task 1)
 
