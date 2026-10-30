@@ -40,9 +40,30 @@ Windows 11, x64 or ARM64. Build with CMake presets from an MSVC developer
 prompt: `cmake --preset windows-msvc` (ARM64: `windows-msvc-arm64`), then
 `cmake --build --preset windows-msvc`. The game is
 `build-windows-msvc\Debug\rr-game.exe`; it has no console window, so run
-`rr-game.exe --version --console` from a terminal to see output. Packages,
-installer and signing are not built yet (plan 33b Task 5), and the game has
-not yet been played on real Windows hardware.
+`rr-game.exe --version --console` from a terminal to see output. Windows 7
+and 8.1 are not supported. The game has not yet been played on real Windows
+hardware.
+
+Windows packages (plan 33b Task 5): after a Release build
+(`cmake --build build-windows-msvc --config Release`),
+`python tools/build_windows_package.py --build-dir build-windows-msvc --arch x64`
+writes `RoadRashNative-<version>-windows-<arch>.zip` and, when Inno Setup 6.3+
+is installed, `RoadRashNative-<version>-setup-<arch>.exe`. Check them with
+`python tools/verify_windows_package.py <zip> --arch x64 --run` (needs
+`pip install pefile`). CI builds both for x64 and ARM64.
+- **Portable zip:** unzip the `Road Rash Native` folder anywhere, including a
+  USB stick, and run `rr-game.exe`. Because `portable.txt` sits next to the
+  exe, saves, settings, the imported disc and logs go to the `data` folder
+  beside it. Delete `portable.txt` to use the per-user folders below. This
+  portable mode is a native addition; the original had none.
+- **Installer:** installs for the current user only, with no administrator
+  prompt, to `%LOCALAPPDATA%\Programs\Road Rash Native`. It adds a Start-menu
+  shortcut and, if you tick it, a desktop shortcut. Uninstalling asks whether
+  to remove your game data and keeps it unless you say yes; a silent
+  uninstall keeps it unless run with `/PURGE=1`.
+- **SmartScreen:** builds are not code-signed unless the owner configures
+  signing (`tools/sign_windows.ps1`, `RR_SIGN_*`), so Windows shows "Windows
+  protected your PC" on first launch. Choose "More info", then "Run anyway".
 
 ## Importing your disc
 
@@ -65,7 +86,8 @@ variable changes the root for isolated developer runs.
 
 **Problem reports on Windows:** attach
 `%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log` (this run) and
-`rr-game.1.log` (the previous run).
+`rr-game.1.log` (the previous run); a portable copy keeps them in its `data`
+folder.
 
 A mismatch or missing file leaves the existing destination intact. The first
 run screen displays the error. Android's actual Storage Access Framework

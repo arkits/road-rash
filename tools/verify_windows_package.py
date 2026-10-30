@@ -200,11 +200,16 @@ def install_test(installer, zip_exe, expected):
         log = local / 'RoadRash' / 'rr-game.log'
         if not log.is_file():
             fail(f'installed game wrote no log at {log}')
-        uninstaller = target / 'unins000.exe'
-        args = [str(uninstaller), *flags] + (['/PURGE=1'] if purge else [])
+        uninstallers = sorted(target.glob('unins*.exe'))
+        if not uninstallers:
+            fail(f'no uninstaller in {target}: {sorted(p.name for p in target.iterdir())}')
+        args = [str(uninstallers[-1]), *flags] + (['/PURGE=1'] if purge else [])
         subprocess.run(args, check=True, timeout=300)
-        if not wait_gone(exe) or not wait_gone(shortcut):
-            fail('uninstall left the program or its shortcut behind')
+        # The uninstaller returns at once and finishes from a temporary copy
+        # of itself; the install folder disappears only when it is done, so
+        # wait for that before the next round reinstalls.
+        if not wait_gone(target, 120) or not wait_gone(shortcut):
+            fail(f'uninstall left the program folder or its shortcut behind: {target}')
         if purge and (not wait_gone(local) or not wait_gone(roaming)):
             fail('/PURGE=1 uninstall kept game data')
         if not purge and not log.is_file():

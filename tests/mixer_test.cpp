@@ -24,15 +24,26 @@ int main(int argc, char**) {
                 std::cerr << SDL_GetError() << '\n';
                 result = 1;
             }
+            // The audio thread publishes the voice's cursor on its first
+            // callback; allow a loaded CI runner up to 5 s to get there.
             uint64_t position = 999;
-            for (int i = 0; i < 100 && !mixer.cursor(voice, position); ++i) SDL_Delay(1);
-            if (!mixer.cursor(voice, position) || position != 0) result = 1;
+            for (int i = 0; i < 5000 && !mixer.cursor(voice, position); ++i) SDL_Delay(1);
+            if (!mixer.cursor(voice, position) || position != 0) {
+                std::cerr << "FAIL paused voice cursor at frame 0 after the first callback\n";
+                result = 1;
+            }
             SDL_Event removed{};
             removed.type = SDL_EVENT_AUDIO_DEVICE_REMOVED;
             removed.adevice.recording = false;
             mixer.pause(true);
-            if (!mixer.handle(removed) || !mixer.device_open()) result = 1;
-            if (!mixer.cursor(voice, position) || position != 0) result = 1;
+            if (!mixer.handle(removed) || !mixer.device_open()) {
+                std::cerr << "FAIL device reopened after removal: " << SDL_GetError() << '\n';
+                result = 1;
+            }
+            if (!mixer.cursor(voice, position) || position != 0) {
+                std::cerr << "FAIL cursor kept across the device change\n";
+                result = 1;
+            }
             mixer.retire(&sound);
         }
         SDL_Quit();
