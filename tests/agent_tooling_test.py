@@ -145,14 +145,21 @@ class Tooling(unittest.TestCase):
     def test_strict_acceptance_requires_replay_capability_and_match(self):
         fixture = self.write('human.tsv', trace(0))
         atomic_json(str(fixture) + '.receipt.json', validate_trace(fixture, True))
-        binary = self.write('replay', '#!' + sys.executable + '\nimport sys\n'
-                            'print("human-controls-single-anchor" if "--capabilities" in sys.argv else "2 ticks identical")\n')
-        binary.chmod(0o755)
+        def fake_replay(body):
+            # A shebang script is the replay binary on POSIX; Windows runs a
+            # .cmd wrapper around the same script (plan 33b).
+            script = self.write('replay.py', '#!' + sys.executable + '\n' + body)
+            script.chmod(0o755)
+            if os.name != 'nt':
+                return script
+            return self.write('replay.cmd', f'@"{sys.executable}" "{script}" %*\r\n')
+        binary = fake_replay('import sys\n'
+                             'print("human-controls-single-anchor" if "--capabilities" in sys.argv else "2 ticks identical")\n')
         with patch('verify_sim.reference_hash', return_value=EXE):
             report, code = verify(binary, [fixture], self.root)
             self.assertEqual(code, 0)
             self.assertTrue(report['acceptance_met'])
-            binary.write_text('#!' + sys.executable + '\nprint("not a real replay")\n')
+            fake_replay('print("not a real replay")\n')
             report, code = verify(binary, [fixture], self.root)
             self.assertEqual(code, 1)
 

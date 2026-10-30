@@ -45,7 +45,8 @@ int main() {
         fb.clear(0);
         rr::render_nodes_threaded(fb, scene.nodes, mode, 16, pool);
         const size_t n = c.count();
-        std::cout << "steady-state allocations: " << n << '\n';
+        std::cout << "steady-state allocations: " << n << (n ? " (sizes: " + c.sizes_text() + ")" : "")
+                  << '\n';
         check(n == 0, "zero allocations in steady state");
     }
     check(checksum_idx(fb) == first, "checksum stable across frames");

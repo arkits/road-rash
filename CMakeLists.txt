@@ -109,14 +109,14 @@ if(RR_FUZZ)
 endif()
 include(cmake/net.cmake) # plan 34
 if(ANDROID)
-    set(RR_GAME_SOURCES src/game_main.cpp src/road_draw.cpp src/import_ui.cpp src/race_overlay.cpp src/race_helpers.cpp src/game_types.cpp src/race_screen.cpp)
+    set(RR_GAME_SOURCES src/game_main.cpp src/road_draw.cpp src/import_ui.cpp) # race_* and game_types are in rr-resource (plan 33b: lld-link rejects the duplicates)
     # The Android build ships the playable game.
     add_library(main SHARED ${RR_GAME_SOURCES})
     set(RR_VIEWER main)
 else()
     # Node configurations build tests only; RR_WEB_BROWSER adds the playable
     # rr-game target above, with browser-specific imports and Asyncify.
-    set(RR_GAME_SOURCES src/game_main.cpp src/road_draw.cpp src/import_ui.cpp src/race_overlay.cpp src/race_helpers.cpp src/game_types.cpp src/race_screen.cpp)
+    set(RR_GAME_SOURCES src/game_main.cpp src/road_draw.cpp src/import_ui.cpp)
     if(NOT EMSCRIPTEN)
     add_executable(rr-import src/import_main.cpp)
     target_link_libraries(rr-import PRIVATE rr-resource)
@@ -173,6 +173,8 @@ else()
             "${CMAKE_SOURCE_DIR}/tools/verify_sim.py" --mode diagnostic
             --binary "$<TARGET_FILE:oracle-sim-test>"
             --report "${CMAKE_BINARY_DIR}/oracle-diagnostic.json")
+        # verify_sim exits 77 when the git-ignored fixture is absent (CI hosts).
+        set_tests_properties(oracle-sim PROPERTIES SKIP_RETURN_CODE 77)
         # Live-field capture (plan 10 Tasks 6/7): full2400 tick replay; skipped without the git-ignored capture.
         add_test(NAME oracle-sim-field COMMAND ${Python3_EXECUTABLE}
             "${CMAKE_SOURCE_DIR}/tools/verify_sim.py" --mode diagnostic
@@ -361,6 +363,12 @@ else()
         # `sim` = simulation coverage; `disc` = reads the disc (77 without it);
         # everything else gets `unit` from the loop below (Review Focus 1).
         include(cmake/net_tests.cmake) # plan 34
+        if(CMAKE_CROSSCOMPILING_EMULATOR AND NOT EMSCRIPTEN)
+            # Plan 33b: the Python replay driver launches the cross-built
+            # binary itself, so give it the emulator (Wine for MinGW builds).
+            set_property(TEST oracle-sim oracle-sim-field oracle-sim-field-schema2 oracle-sim-field-l5
+                         APPEND PROPERTY ENVIRONMENT "RR_SIM_EMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}")
+        endif()
         set(RR_SLOW_TESTS hires-render race-soak course_scene race_setup raster-rgb widescreen oracle-scene oracle-terrain oracle-terrain-medly)
         set(RR_SIM_TESTS oracle-sim oracle-sim-field oracle-sim-field-schema2 oracle-sim-field-l5 race race_schedule car_contact frozen_state race-soak race_setup bike crash traffic actor_traffic pedestrian police sim_fields track_ring)
         set(RR_DISC_TESTS oracle-road oracle-scene oracle-terrain oracle-terrain-medly oracle-raster hires-render raster-rgb widescreen polygon text frontend
@@ -375,6 +383,11 @@ else()
             set_property(TEST ${t} APPEND PROPERTY LABELS disc)
         endforeach()
         get_property(RR_ALL_TESTS DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY TESTS)
+        if(CMAKE_HOST_WIN32)
+            # Plan 33b: the Python test drivers read UTF-8 sources and docs;
+            # Windows Python otherwise defaults to the ANSI code page.
+            set_property(TEST ${RR_ALL_TESTS} APPEND PROPERTY ENVIRONMENT "PYTHONUTF8=1")
+        endif()
         foreach(t ${RR_ALL_TESTS})
             get_property(RR_LBL TEST ${t} PROPERTY LABELS)
             if(NOT RR_LBL)

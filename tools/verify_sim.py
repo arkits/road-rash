@@ -32,6 +32,8 @@ def run_binary(binary, args, timeout):
     cmd = [str(binary)] + args
     if Path(binary).suffix == '.js':
         cmd = node_prefix() + cmd
+    elif os.environ.get('RR_SIM_EMULATOR'):  # plan 33b: cross builds (e.g. MinGW .exe under Wine)
+        cmd = [os.environ['RR_SIM_EMULATOR']] + cmd
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 

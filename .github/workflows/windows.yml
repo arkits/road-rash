@@ -27,6 +27,7 @@ permissions:
 
 env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+  PYTHONUTF8: '1' # Python tools read UTF-8 sources/docs (Windows default is the ANSI code page)
 
 jobs:
   msvc:
@@ -34,14 +35,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: msvc-x64, runner: windows-2022, preset: windows-msvc, tests: all}
-          - {name: msvc-arm64, runner: windows-11-arm, preset: windows-msvc-arm64, tests: all}
-          - {name: clang-cl-x64, runner: windows-2022, preset: windows-clang-cl, tests: unit}
+          - {name: msvc-x64, runner: windows-2022, preset: windows-msvc, arch: x64, tests: all}
+          - {name: msvc-arm64, runner: windows-11-arm, preset: windows-msvc-arm64, arch: arm64, tests: all}
+          - {name: clang-cl-x64, runner: windows-2022, preset: windows-clang-cl, arch: x64, tests: unit}
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
       - name: Locate or bootstrap vcpkg
         shell: pwsh
         run: |

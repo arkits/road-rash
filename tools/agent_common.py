@@ -66,6 +66,20 @@ def source_identity(root=ROOT):
 
 
 def pid_alive(pid):
+    if os.name == 'nt':
+        # Plan 33b: os.kill(pid, 0) calls TerminateProcess on Windows; query instead.
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: exists, not ours
+        try:
+            code = wintypes.DWORD()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(int(pid), 0)
         return True
@@ -75,11 +89,19 @@ def pid_alive(pid):
         return True
 
 
+def user_tag():
+    """Per-local-user suffix for shared state directories (uid on POSIX, login name on Windows)."""
+    if hasattr(os, 'getuid'):
+        return str(os.getuid())
+    import getpass
+    return getpass.getuser()
+
+
 class ResourceClaims:
     """One registry per local user; overlapping absolute paths conflict across worktrees."""
     def __init__(self, directory=None):
         self.directory = Path(directory or os.environ.get('RR_AGENT_STATE',
-                                  str(Path(tempfile.gettempdir()) / f'rr-agent-resources-{os.getuid()}')))
+                                  str(Path(tempfile.gettempdir()) / f'rr-agent-resources-{user_tag()}')))
         self.path = self.directory / 'claims.json'
 
     @contextlib.contextmanager

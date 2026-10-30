@@ -157,17 +157,22 @@ def capture(args):
             log = Path(tmp) / 'wine.log'
             started = time.time()
             with log.open('w') as f:
+                group = ({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt'
+                         else {'start_new_session': True})
                 proc = subprocess.Popen([str(wine), str(install / 'ROADRASH.EXE')], cwd=install, env=env,
-                                        stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
+                                        stdout=f, stderr=subprocess.STDOUT, **group)
                 try:
                     code = proc.wait(timeout=args.timeout)
                 except (subprocess.TimeoutExpired, KeyboardInterrupt):
                     # Only the process group created for this capture is stopped.
-                    os.killpg(proc.pid, signal.SIGTERM)
+                    if os.name == 'nt':
+                        proc.terminate()
+                    else:
+                        os.killpg(proc.pid, signal.SIGTERM)
                     try:
                         proc.wait(timeout=5)
                     except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid, signal.SIGKILL)
+                        proc.kill() if os.name == 'nt' else os.killpg(proc.pid, signal.SIGKILL)
                         proc.wait()
                     code = 124
             failed_dir = output.parent / 'failed-captures' / tag
