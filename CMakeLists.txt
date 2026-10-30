@@ -11,6 +11,9 @@ if(RR_BUNDLE_SDL AND NOT ANDROID)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Minimum macOS version" FORCE)
 endif()
 project(RoadRashNative LANGUAGES C CXX)
+if(MSVC)
+    include(cmake/msvc.cmake) # plan 33b
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(Threads REQUIRED)
 add_custom_target(rr-build-provenance
@@ -403,7 +406,14 @@ if(RR_BENCH_DASH AND NOT ANDROID)
 endif()
 option(RR_STRICT_WARNINGS "Zero first-party warnings at -Wall -Wextra -Wshadow -Wconversion" OFF)
 if(RR_STRICT_WARNINGS)
-    add_compile_options(-Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
+    if(MSVC)
+        # Plan 33b: /W4 covers shadowing (C4456-C4459) and narrowing
+        # conversions (C4244, C4267); signed/unsigned (C4245, C4389) stays off
+        # like -Wno-sign-conversion.
+        add_compile_options(/W4 /wd4245 /wd4389)
+    else()
+        add_compile_options(-Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
+    endif()
 endif()
 option(RR_BENCH_RENDER "Build the rr-bench-render synthetic render benchmark" OFF)
 if(RR_BENCH_RENDER AND NOT ANDROID)

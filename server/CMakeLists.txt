@@ -15,7 +15,9 @@ endif()
 add_library(rr-netd-core STATIC ${CMAKE_CURRENT_LIST_DIR}/room.cpp ${CMAKE_CURRENT_LIST_DIR}/sealer.cpp)
 target_include_directories(rr-netd-core PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(rr-netd-core PUBLIC rr-net)
-if(RR_NET_TRANSPORT)
+# Plan 33b Task 1: the daemon uses POSIX sockets/signals and is deployed on
+# Linux only; the room/sealer core and its tests build everywhere.
+if(RR_NET_TRANSPORT AND NOT WIN32)
     if(NOT RR_NETD_REVISION)
         execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
                         OUTPUT_VARIABLE RR_NETD_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)

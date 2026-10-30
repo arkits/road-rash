@@ -1,0 +1,7 @@
+{
+  "$comment": "Plan 33b: OpenSSL for libdatachannel (plan 34 transport) on Windows. Static triplets x64-windows-static / arm64-windows-static match the static CRT in cmake/msvc.cmake. Other platforms do not use vcpkg.",
+  "name": "road-rash-native",
+  "version-string": "0",
+  "dependencies": ["openssl"],
+  "builtin-baseline": "c6b301c0f1f2c3ded695fc1bd6aca02724032267"
+}

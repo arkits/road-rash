@@ -1,0 +1,74 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 22, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug"}
+    },
+    {
+      "name": "linux-gcc",
+      "inherits": "base",
+      "description": "Plan 33a: Linux GCC debug gate (pinned SDL when the system SDL is older than 3.4)",
+      "generator": "Ninja",
+      "cacheVariables": {"CMAKE_C_COMPILER": "gcc", "CMAKE_CXX_COMPILER": "g++", "RR_STRICT_WARNINGS": "ON"},
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux"}
+    },
+    {
+      "name": "linux-clang",
+      "inherits": "linux-gcc",
+      "description": "Plan 33a: Linux Clang debug gate",
+      "cacheVariables": {"CMAKE_C_COMPILER": "clang", "CMAKE_CXX_COMPILER": "clang++"}
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "toolchainFile": "$env{VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {"RR_STATIC_SDL": "ON", "OPENSSL_USE_STATIC_LIBS": "ON"},
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}
+    },
+    {
+      "name": "windows-msvc",
+      "inherits": "windows-base",
+      "description": "Plan 33b: MSVC x64 (release toolchain)",
+      "architecture": "x64",
+      "cacheVariables": {"VCPKG_TARGET_TRIPLET": "x64-windows-static"}
+    },
+    {
+      "name": "windows-msvc-arm64",
+      "inherits": "windows-base",
+      "description": "Plan 33b: MSVC native ARM64",
+      "architecture": "ARM64",
+      "cacheVariables": {"VCPKG_TARGET_TRIPLET": "arm64-windows-static"}
+    },
+    {
+      "name": "windows-clang-cl",
+      "inherits": "windows-msvc",
+      "description": "Plan 33b: clang-cl x64 build check",
+      "toolset": "ClangCL"
+    },
+    {
+      "name": "windows-mingw",
+      "inherits": "base",
+      "description": "Plan 33b: MSYS2 clang64 build check (run inside the CLANG64 shell)",
+      "generator": "Ninja",
+      "cacheVariables": {"RR_STATIC_SDL": "ON"},
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}
+    }
+  ],
+  "buildPresets": [
+    {"name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Debug"},
+    {"name": "windows-msvc-arm64", "configurePreset": "windows-msvc-arm64", "configuration": "Debug"},
+    {"name": "windows-clang-cl", "configurePreset": "windows-clang-cl", "configuration": "Debug"}
+  ],
+  "testPresets": [
+    {"name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Debug",
+     "output": {"outputOnFailure": true}, "execution": {"jobs": 4, "timeout": 1800}},
+    {"name": "windows-msvc-arm64", "configurePreset": "windows-msvc-arm64", "configuration": "Debug",
+     "output": {"outputOnFailure": true}, "execution": {"jobs": 4, "timeout": 1800}}
+  ]
+}
