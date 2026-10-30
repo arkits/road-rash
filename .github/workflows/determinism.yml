@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15 # macos-14 retires November 2, 2026 (runner-images#13518)
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

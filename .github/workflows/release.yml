@@ -15,7 +15,7 @@ concurrency:
 jobs:
   macos-arm64:
     name: Build macOS ARM64 release
-    runs-on: macos-14
+    runs-on: macos-15 # macos-14 retires November 2, 2026 (runner-images#13518)
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v4
