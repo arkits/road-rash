@@ -57,6 +57,10 @@ struct TextureEdge64 {
 };
 struct RasterScratch64 {
     std::vector<TextureEdge64> rows;
+    // draw_textured_quad_wide workspace, grown only. Owned per band (not
+    // thread_local), so a render worker that first meets the wide path in a
+    // later frame does not allocate then (plan 33b: render-threads-alloc).
+    std::vector<TextureEdge64> saved_left, saved_right, side_rows, seg_rows;
     explicit RasterScratch64(int height = 0) { resize(height); }
     void resize(int height);
 };

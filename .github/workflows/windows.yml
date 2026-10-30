@@ -71,6 +71,12 @@ jobs:
       - name: Unit tests
         if: matrix.tests == 'unit'
         run: ctest --test-dir build-${{ matrix.preset }} -C Debug -L unit --output-on-failure -j 4
+      - name: Determinism (synthetic 8-human race vs the macOS reference)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Filter rr-determinism.exe build-${{ matrix.preset }} | Select-Object -First 1
+          & $exe.FullName --synthetic > det.txt
+          python -c "import sys;a=open('det.txt').read().split();b=open('tests/data/determinism_synthetic.txt').read().split();print('determinism: ${{ matrix.name }}', 'matches' if a==b else 'DIFFERS');sys.exit(a!=b)"
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,3 +109,7 @@ jobs:
         run: cmake --build build-windows-mingw --parallel
       - name: Unit tests
         run: ctest --test-dir build-windows-mingw -L unit --output-on-failure -j 4
+      - name: Determinism (synthetic 8-human race vs the macOS reference)
+        run: |
+          build-windows-mingw/Debug/rr-determinism.exe --synthetic > det.txt 2>/dev/null || build-windows-mingw/rr-determinism.exe --synthetic > det.txt
+          python -c "import sys;a=open('det.txt').read().split();b=open('tests/data/determinism_synthetic.txt').read().split();print('determinism: msys2-clang64', 'matches' if a==b else 'DIFFERS');sys.exit(a!=b)"

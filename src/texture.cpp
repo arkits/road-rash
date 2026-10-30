@@ -241,9 +241,11 @@ void draw_textured_quad_wide(Framebuffer& fb, const std::array<TextureVertexWide
     if (bottom == vertices[first].y) return;
     const int64_t empty_sentinel = empty_edge_value();
     const size_t rows = scratch.rows.size();
-    // Reused per-thread workspace (same-thread set-and-use only; never
-    // captured across threads). Grown only.
-    thread_local std::vector<TextureEdge64> saved_left, saved_right, side_rows, seg_rows;
+    // Reused workspace in the caller's per-band scratch. Grown only.
+    auto& saved_left = scratch.saved_left;
+    auto& saved_right = scratch.saved_right;
+    auto& side_rows = scratch.side_rows;
+    auto& seg_rows = scratch.seg_rows;
     if (saved_left.size() < rows) {
         saved_left.resize(rows);
         saved_right.resize(rows);

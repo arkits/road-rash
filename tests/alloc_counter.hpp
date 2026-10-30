@@ -14,6 +14,7 @@ inline std::atomic<bool> counting{false};
 inline std::atomic<size_t> sizes[16];
 struct CountAllocs { // RAII: counts operator new calls in scope
     CountAllocs() {
+        for (auto& s : sizes) s = 0;
         allocations = 0;
         counting = true;
     }
