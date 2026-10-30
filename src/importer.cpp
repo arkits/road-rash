@@ -1,6 +1,7 @@
 #include "importer.hpp"
 #include "import_job.hpp"
 #include "iso9660.hpp"
+#include "platform_files.hpp"
 #include "sha256.hpp"
 #include "utf8_path.hpp"
 #include <SDL3/SDL.h>
@@ -129,7 +130,9 @@ class FilesystemSink : public ImportSink {
         if (fs::exists(destination_))
             fs::remove(
                 destination_); // previously checked empty; remove refuses a raced-in nonempty directory
-        fs::rename(staging_, destination_);
+        // Plan 33b: retried on Windows, where scanners briefly lock new files.
+        if (!rename_with_retry(staging_, destination_, error))
+            throw std::runtime_error("Cannot move the verified import into place: " + error.message());
         return true;
     }
     void abort() override {
@@ -155,9 +158,16 @@ std::string data_root() {
         return path_to_utf8(path_from_utf8(override_path) / "game" / "ROADRASH");
     char* pref = SDL_GetPrefPath("RoadRashNative", "RoadRash");
     if (!pref) throw std::runtime_error(SDL_GetError());
-    const std::string result = path_to_utf8(path_from_utf8(pref) / "game" / "ROADRASH");
+    const fs::path roaming_game = path_from_utf8(pref) / "game";
     SDL_free(pref);
-    return result;
+    // Plan 33b Task 2: the 518 MB imported disc lives in machine-local data
+    // (%LOCALAPPDATA% on Windows; the same pref path elsewhere). A tree that an
+    // earlier build imported into the roaming profile is moved there once.
+    const fs::path local_game = path_from_utf8(local_data_directory()) / "game";
+    std::error_code error;
+    if (local_game != roaming_game && !fs::exists(local_game, error) && fs::is_directory(roaming_game, error))
+        migrate_directory(roaming_game, local_game);
+    return path_to_utf8(local_game / "ROADRASH");
 }
 ImportResult import_game(const std::string& source, const std::string& dest,
                          const std::function<void(const ImportProgress&)>& progress) {

@@ -35,6 +35,15 @@ arguments. Version name comes from the latest Git tag, falling back to
 `0.1-research`. Hardware acceptance remains pending; builds and signatures
 alone do not establish Android runtime behavior.
 
+Windows (in development, plan 33b): Windows 10 version 1903 or later, or
+Windows 11, x64 or ARM64. Build with CMake presets from an MSVC developer
+prompt: `cmake --preset windows-msvc` (ARM64: `windows-msvc-arm64`), then
+`cmake --build --preset windows-msvc`. The game is
+`build-windows-msvc\Debug\rr-game.exe`; it has no console window, so run
+`rr-game.exe --version --console` from a terminal to see output. Packages,
+installer and signing are not built yet (plan 33b Task 5), and the game has
+not yet been played on real Windows hardware.
+
 ## Importing your disc
 
 First launch presents the import screen. Select the ISO (or an extracted
@@ -47,8 +56,16 @@ cache is removed after commit or cancellation.
 Imported data is under SDL's application preference directory,
 `RoadRashNative/RoadRash/game/ROADRASH`. On macOS this is normally
 `~/Library/Application Support/RoadRashNative/RoadRash/game/ROADRASH`.
-Android uses the application's private storage. The `RR_PREF_OVERRIDE`
-environment variable changes the root for isolated developer runs.
+Android uses the application's private storage. On Windows the imported disc
+goes to `%LOCALAPPDATA%\RoadRashNative\RoadRash\game\ROADRASH`, which does
+not roam, while saves and settings stay in the roaming
+`%APPDATA%\RoadRashNative\RoadRash`; a disc imported there by an earlier
+build is moved once on first start. The `RR_PREF_OVERRIDE` environment
+variable changes the root for isolated developer runs.
+
+**Problem reports on Windows:** attach
+`%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log` (this run) and
+`rr-game.1.log` (the previous run).
 
 A mismatch or missing file leaves the existing destination intact. The first
 run screen displays the error. Android's actual Storage Access Framework

@@ -1,4 +1,5 @@
 #include "atomic_file.hpp"
+#include "platform_files.hpp"
 #include "utf8_path.hpp"
 #include <cstdio>
 #include <system_error>
@@ -22,7 +23,7 @@ bool write_file_atomic(const std::filesystem::path& path, const void* data, size
 #endif
     ok = std::fclose(f) == 0 && ok;
     std::error_code ec;
-    if (ok) std::filesystem::rename(tmp, path, ec);
+    if (ok) rename_with_retry(tmp, path, ec); // plan 33b: retried on Windows
     if (!ok || ec) {
         std::filesystem::remove(tmp, ec);
         return false;

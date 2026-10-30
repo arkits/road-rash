@@ -92,7 +92,7 @@ Not yet run on Linux: x86-64 (only ARM64 here), Clang, Release, sanitizers, the 
 **Files:** Create `tools/build_linux_package.sh`, `tools/verify_linux_package.py`, `linux/road-rash-native.desktop.in`, `linux/org.roadrash.nativeport.metainfo.xml`. Modify `CMakeLists.txt` (install rules), `tools/agent_gate.py` (a `linux-package` gate).
 
 - [ ] **Step 1: Container build.** `tools/build_linux_package.sh [x86_64|aarch64]` runs `cmake --preset linux-release` in the sniper SDK image, pinned by digest (ARM64 uses the matching sniper arm64 SDK if Valve publishes one; otherwise a Debian 11 container with the same flags, recorded as such). OpenSSL builds static from a pinned tarball.
-- [ ] **Step 2: Tarball.** `RoadRashNative-<version>-linux-<arch>.tar.gz` contains `road-rash-native/` with `rr-game`, `LICENSE`, `SDL-LICENSE.txt`, the network licences from `third_party/`, the DejaVu licence, `README.txt`, the `.desktop` file and `icon.png`. The icon is derived at build time by `tools/extract_app_icon.py` from the builder's local disc, following the Android/web policy, and is never committed. Without a disc the package uses a generic placeholder icon, and the release workflow fails if that placeholder would be published.
+- [ ] **Step 2: Tarball.** `RoadRashNative-<version>-linux-<arch>.tar.gz` contains `road-rash-native/` with `rr-game`, `LICENSE`, `SDL-LICENSE.txt`, the network licences from `third_party/`, the DejaVu licence, `README.txt`, the `.desktop` file and `icon.png`. `icon.png` is the committed `assets/app-icon/roadrash.png` (owner exception; see its README).
 - [ ] **Step 3: AppImage.** `RoadRashNative-<version>-<arch>.AppImage` wraps the same tree with `AppRun`, built with the static type-2 runtime, so it needs no `libfuse2`. It embeds update information only if the owner chooses a release channel (owner decision; default none).
 - [ ] **Step 4: Verifier.** `verify_linux_package.py` checks:
   - no file matches a reference hash, and none is an ISO/AVI/RRA/BOB by magic;
@@ -162,7 +162,7 @@ Not yet run on Linux: x86-64 (only ARM64 here), Clang, Release, sanitizers, the 
   - `ubuntu-24.04` and `ubuntu-24.04-arm` run `cmake --preset linux-gcc` + build + `ctest` (no disc, so disc tests skip with 77, and the job asserts that only `disc`-labelled tests skipped);
   - a `linux-clang` build;
   - the package build in the sniper container plus `verify_linux_package.py`.
-- [ ] **Step 2: `release.yml`.** Tag builds attach the tarball and AppImage for x86-64 and ARM64, and the x86-64 Flatpak bundle, next to the macOS zip. The icon step needs the disc, which CI does not have. The release job therefore uses the icon PNG from a private repository secret, holding the derived icon, never game data. Record that owner decision, or publish with the generic icon if the owner declines.
+- [ ] **Step 2: `release.yml`.** Tag builds attach the tarball and AppImage for x86-64 and ARM64, and the x86-64 Flatpak bundle, next to the macOS zip. The icon is committed, so CI needs no disc and no secret for it.
 - [ ] **Step 3:** Commit `ci: Linux native gate, packages and release artefacts`.
 
 ### Task 8: Acceptance on hardware

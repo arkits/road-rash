@@ -63,7 +63,7 @@ Debian trixie, `linux/arm64` Docker on the Apple-silicon host, GCC 14.2.0, distr
 - Paths that cross the SDL boundary are UTF-8. Convert them with `rr::path_from_utf8` / `rr::path_to_utf8` (A4), never with `std::filesystem::path(const char*)` or `.string()`.
 - Disc files are found case-insensitively at import and stored upper-case. Runtime reads use the stored upper-case names.
 - Tools and tests must not assume `fish`, Homebrew paths, `sysctl` or BSD `sed`/`stat` flags. CTest drivers are C++ or Python, never shell.
-- No game data, disc-derived dumps or upscaled art in any package. The app icon follows the existing Android/web policy (`tools/extract_app_icon.py`, derived locally at build time, never committed).
+- No game data, disc-derived dumps or upscaled art in any package. The app icon is the one exception: `assets/app-icon/roadrash.ico`/`.png`, extracted from the disc EXE and committed at the owner's explicit request (see `assets/app-icon/README.md`); every platform package uses those files. (Corrected October 30: the review wrongly said the icon was never committed.)
 
 ---
 

@@ -34,6 +34,13 @@ int main() {
     rr::RaceActionContext done = quick;
     done.finished = true;
     check(rr::race_action(key(SDLK_RETURN), done) == A::restart, "Enter after finish restarts (finding 1)");
+    {
+        SDL_Event alt_enter = key(SDLK_RETURN);
+        alt_enter.key.mod = SDL_KMOD_LALT;
+        check(rr::race_action(alt_enter, done) == A::toggle_fullscreen &&
+                  rr::race_action(alt_enter, quick) == A::toggle_fullscreen,
+              "Alt+Enter toggles fullscreen in a race instead of restarting (plan 33b)");
+    }
     check(rr::race_action(button(7, SDL_GAMEPAD_BUTTON_SOUTH), done) == A::restart, "pad South restarts");
     check(rr::race_action(button(8, SDL_GAMEPAD_BUTTON_SOUTH), done) == A::none, "other pad ignored");
     SDL_Event tap{};

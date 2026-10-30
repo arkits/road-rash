@@ -277,6 +277,9 @@ void RaceScreen::event(const SDL_Event& e) {
     case RaceAction::restart:
         restart_ = true;
         return;
+    case RaceAction::toggle_fullscreen:
+        display_.toggle_fullscreen();
+        return;
     case RaceAction::none:
     case RaceAction::demo_exit:
         break;

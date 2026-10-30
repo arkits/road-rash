@@ -3,6 +3,11 @@
 
 namespace rr {
 RaceAction race_action(const SDL_Event& e, const RaceActionContext& c) {
+    // Native window shortcut, in every race state (menus handle it in game_main).
+    if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
+        ((e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT)) ||
+         (e.key.key == SDLK_F && (e.key.mod & SDL_KMOD_GUI))))
+        return RaceAction::toggle_fullscreen;
     // Demo: any input exits quietly.
     if (c.demo && ((e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) ||
                    e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || e.type == SDL_EVENT_GAMEPAD_ADDED ||

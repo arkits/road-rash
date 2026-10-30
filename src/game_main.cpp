@@ -14,6 +14,7 @@
 #include "game_types.hpp"
 #include "lifecycle.hpp"
 #include <SDL3/SDL_main.h>
+#include "platform_game.hpp"
 #include "utf8_path.hpp"
 #include "assets.hpp"
 #include "bob.hpp"
@@ -903,7 +904,10 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
 }
 
 int main(int argc, char** argv) {
-    if (argc == 2 && std::string(argv[1]) == "--build-info") {
+    rr::platform_game_startup(argc, argv); // plan 33b: Windows console attach + log file
+    // --version (plan 33b) is an alias; --console may accompany it on Windows.
+    if ((argc == 2 || (argc == 3 && std::string(argv[2]) == "--console")) &&
+        (std::string(argv[1]) == "--build-info" || std::string(argv[1]) == "--version")) {
         std::puts(rr::build_info_json);
         return 0;
     }

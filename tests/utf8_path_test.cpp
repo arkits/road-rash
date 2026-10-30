@@ -3,6 +3,9 @@
 // conversion; on POSIX the helpers are identity).
 #include "atomic_file.hpp"
 #include "check.hpp"
+#include "importer.hpp"
+#include "settings.hpp"
+#include "sha256.hpp"
 #include "temp_dir.hpp"
 #include "utf8_path.hpp"
 #include <SDL3/SDL.h>
@@ -45,6 +48,34 @@ int main() {
     std::error_code error;
     fs::rename(file, renamed, error);
     check(!error && fs::exists(renamed), "rename between Unicode names");
+    // Plan 33b Task 2 Step 2: the game's std::string (UTF-8) paths for
+    // settings and import. On Windows these go through narrow CRT/STL calls,
+    // so this passes only with the UTF-8 active-code-page manifest.
+    const std::string settings_path = rr::path_to_utf8(dir / "settings.txt");
+    rr::Settings settings;
+    settings.mini_dash = 2;
+    settings.video_mode = 1;
+    check(rr::save_settings(settings_path, settings), "settings save under a Unicode profile path");
+    const rr::Settings loaded = rr::load_settings(settings_path);
+    check(loaded.mini_dash == 2 && loaded.video_mode == 1, "settings load back from the Unicode path");
+    const fs::path disc = dir / "disc" / "ROADRASH";
+    fs::create_directories(disc / "DATA");
+    {
+        std::FILE* f = rr::open_file(disc / "ROADRASH.EXE", "wb");
+        std::fputs("exe", f);
+        std::fclose(f);
+    }
+    {
+        std::FILE* f = rr::open_file(disc / "DATA" / "NAPA.CRS", "wb");
+        std::fputs("crs", f);
+        std::fclose(f);
+    }
+    const std::vector<rr::ReferenceHash> hashes = {{"ROADRASH.EXE", rr::sha256({'e', 'x', 'e'})},
+                                                   {"DATA/NAPA.CRS", rr::sha256({'c', 'r', 's'})}};
+    const auto imported =
+        rr::import_game(rr::path_to_utf8(dir / "disc"), rr::path_to_utf8(dir / "game" / "ROADRASH"), hashes);
+    check(imported.ok && fs::exists(dir / "game" / "ROADRASH" / "DATA" / "NAPA.CRS"),
+          "folder import from and into Unicode paths");
     fs::remove_all(root, error);
     return check.finish("utf8_path");
 }

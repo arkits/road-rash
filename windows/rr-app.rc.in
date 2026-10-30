@@ -1,0 +1,3 @@
+// Plan 33b Task 2: embeds windows/rr-app.manifest as the application
+// manifest (RT_MANIFEST 24, CREATEPROCESS_MANIFEST_RESOURCE_ID 1).
+1 24 "@RR_APP_MANIFEST@"

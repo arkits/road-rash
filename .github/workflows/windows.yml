@@ -18,6 +18,8 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'vcpkg.json'
+      - 'windows/**'
+      - 'assets/app-icon/**'
       - '.github/workflows/windows.yml'
   pull_request:
   workflow_dispatch:

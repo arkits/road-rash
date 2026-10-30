@@ -34,6 +34,34 @@ def write_header(path, info):
         path.write_text(content)
 
 
+def release_version():
+    """(major, minor, patch) from the newest v* tag; 0.0.0 before the first release."""
+    import re
+    import subprocess
+    try:
+        tag = subprocess.run(['git', 'describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*'], cwd=ROOT,
+                             capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return 0, 0, 0
+    m = re.match(r'v(\d+)\.(\d+)(?:\.(\d+))?', tag)
+    return (int(m[1]), int(m[2]), int(m[3] or 0)) if m else (0, 0, 0)
+
+
+def write_version_header(path, info):
+    """Plan 33b Task 3: macros for the Windows VERSIONINFO resource."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    major, minor, patch = release_version()
+    commit = (info.get('commit') or 'unknown')[:12]
+    dirty = '+dirty' if info.get('dirty') else ''
+    lines = [f'#define RR_VERSION_MAJOR {major}', f'#define RR_VERSION_MINOR {minor}',
+             f'#define RR_VERSION_PATCH {patch}', f'#define RR_VERSION_STRING "{major}.{minor}.{patch}"',
+             f'#define RR_PRODUCT_VERSION_STRING "{major}.{minor}.{patch} ({commit}{dirty})"']
+    content = '\n'.join(lines) + '\n'
+    if not path.exists() or path.read_text() != content:
+        path.write_text(content)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', default='Debug')
@@ -41,6 +69,7 @@ def main():
     p.add_argument('--cache', type=Path)
     p.add_argument('--header', type=Path)
     p.add_argument('--manifest', type=Path)
+    p.add_argument('--version-header', type=Path, help='Windows VERSIONINFO macros (plan 33b)')
     p.add_argument('--check', type=Path, help='verify manifest source matches current tree')
     args = p.parse_args()
     info = identity(args.config, args.compiler, args.cache)
@@ -55,6 +84,8 @@ def main():
             write_header(args.header, info)
         if args.manifest:
             atomic_json(args.manifest, info)
+        if args.version_header:
+            write_version_header(args.version_header, info)
         print(json.dumps(info, sort_keys=True))
 
 

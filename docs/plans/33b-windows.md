@@ -86,7 +86,7 @@ Local supplement (**not** Windows acceptance): `cmake/toolchains/mingw-w64-x86_6
 | `vcpkg.json`, `vcpkg-configuration.json` | OpenSSL for libdatachannel, baseline pinned; static triplets `x64-windows-static`, `arm64-windows-static` |
 | `cmake/msvc.cmake` | MSVC/clang-cl options: `/utf-8 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /bigobj /fp:precise`, `/W4` strict mapping, `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS` |
 | `windows/rr-game.manifest` | UTF-8 active code page, Per-Monitor-V2 DPI awareness, `longPathAware`, supportedOS Win10/11 |
-| `windows/rr-game.rc.in` | Icon (built from the locally derived icon), VERSIONINFO from `build_info.py`, manifest |
+| `windows/rr-game.rc.in` | Icon (`assets/app-icon/roadrash.ico`), VERSIONINFO from `build_info.py`; the manifest is `windows/rr-app.manifest` via `rr-app.rc.in` in every executable |
 | `windows/installer.iss` | Inno Setup per-user installer (no admin), Start-menu shortcut, uninstaller keeps user data unless asked |
 | `src/platform_windows.cpp/.hpp` | Local-app-data path, retry-safe rename, file log, crash dump hook |
 | `src/atomic_file.cpp`, `src/importer.cpp` | `_commit` flush; rename retry; game-data location |
@@ -125,7 +125,7 @@ Local supplement (**not** Windows acceptance): `cmake/toolchains/mingw-w64-x86_6
 
 - [ ] **Step 1: No console.** Set `WIN32_EXECUTABLE ON` for `rr-game` only. `SDL_main.h` is already included, so SDL provides `WinMain`. CLI tools and tests stay console programs. `rr-game --console` attaches to the parent console (`AttachConsole(ATTACH_PARENT_PROCESS)`) so `--version`, `--bench` and smoke output print when started from a terminal.
 - [ ] **Step 2: Logging.** `SDL_SetLogOutputFunction` writes to `%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log`, keeping the last 2 runs, as well as `OutputDebugString`. USER_GUIDE tells users to attach this log to bug reports.
-- [ ] **Step 3: Resources.** The icon `.ico` (16–256 px) comes from `tools/extract_app_icon.py` at build time, as on Android and the web, and is never committed. The build falls back to a generic icon without a disc and refuses to publish that fallback. `VERSIONINFO` uses the version and commit from `build_info.py`. The `ProductName` is "Road Rash Native".
+- [ ] **Step 3: Resources.** The icon is the committed `assets/app-icon/roadrash.ico` (the original 16/32/48 px group; owner exception, see its README). `VERSIONINFO` uses the version and commit from `build_info.py`. The `ProductName` is "Road Rash Native".
 - [ ] **Step 4: Window behaviour.** Alt+Enter toggles fullscreen and Alt+F4 quits through the normal quit path (saves flushed). Fullscreen uses SDL3's borderless desktop mode, with `SDL_HINT_WINDOWS_RAW_KEYBOARD` left at the default. Check that the taskbar icon and title match.
 - [ ] **Step 5: Fonts.** Part A Task A8 (`%WINDIR%\Fonts`, bundled fallback). Check that the import screen renders with Segoe UI.
 - [ ] **Step 6:** Commit `windows: GUI subsystem, log file, icon and version resources`.
@@ -174,7 +174,7 @@ Local supplement (**not** Windows acceptance): `cmake/toolchains/mingw-w64-x86_6
   - the package build plus `verify_windows_package.py`.
 
   Cache vcpkg binary packages through GitHub Actions cache.
-- [ ] **Step 2: `release.yml`.** Tags attach the x64 and ARM64 zips and installers, signed when the owner's signing secrets exist. The icon follows the same owner decision as 33a Task 7.
+- [ ] **Step 2: `release.yml`.** Tags attach the x64 and ARM64 zips and installers, signed when the owner's signing secrets exist. The icon is committed, so no owner decision is needed for it.
 - [ ] **Step 3:** Commit `ci: Windows native gate, toolchain checks, packages`.
 
 ### Task 8: Acceptance on hardware

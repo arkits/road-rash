@@ -19,6 +19,17 @@ int main() {
         check(dejavu && noto, "Linux searches the Arch/SteamOS DejaVu and Noto locations");
 #endif
     }
+#if defined(_WIN32)
+    // Plan 33b Task 3 Step 5: the import screen's face is Segoe UI from %WINDIR%\Fonts.
+    {
+        const auto body = rr::system_font_candidates(rr::FontWeight::body);
+        size_t size = 0;
+        void* data = SDL_LoadFile(body.front().path.c_str(), &size);
+        check(data && size > 0 && body.front().path.find("segoeui.ttf") != std::string::npos,
+              "Windows loads Segoe UI for the import screen");
+        SDL_free(data);
+    }
+#endif
     SDL_setenv_unsafe("RR_FONT_SEARCH", "none", 1);
     const auto packaged = rr::system_font_candidates(rr::FontWeight::bold);
     check(packaged.size() == 1 && packaged[0].path.find("DejaVuSans-Bold.ttf") != std::string::npos,
