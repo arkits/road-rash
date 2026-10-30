@@ -60,6 +60,17 @@ int main() {
               fs::exists(root / "roaming2" / "game" / "x"),
           "migration refuses an existing destination and keeps the source");
 
+    // Plan 33b Task 5: portable mode only when portable.txt sits beside the exe.
+    write_text(root / "exe" / "rr-game.exe", "");
+    check(rr::portable_data_directory_in(root / "exe").empty() && !fs::exists(root / "exe" / "data"),
+          "no portable.txt: not portable, nothing created");
+    write_text(root / "exe" / "portable.txt", "");
+    const std::string portable = rr::portable_data_directory_in(root / "exe");
+    check(rr::path_from_utf8(portable) == root / "exe" / "data" && fs::is_directory(root / "exe" / "data"),
+          "portable.txt: data lives in <exe dir>/data");
+    // The test binary has no portable.txt beside it, so the real lookup is off.
+    check(rr::portable_data_directory().empty(), "test executable is not portable");
+
     const std::string local = rr::local_data_directory();
     check(!local.empty() && fs::is_directory(rr::path_from_utf8(local)), "local data directory exists");
 #if defined(_WIN32)

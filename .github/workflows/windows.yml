@@ -1,7 +1,9 @@
-# Plan 33b Tasks 1 and 7: Windows native gate. MSVC x64 is the release
+# Plan 33b Tasks 1, 5 and 7: Windows native gate. MSVC x64 is the release
 # toolchain (full build + CTest); ARM64 builds natively on the Windows ARM
 # runner; clang-cl and MSYS2 clang64 are build checks that also run the unit
-# tests. No game data on CI, so disc tests exit 77 (skipped).
+# tests. The package jobs build Release, test it, then build, verify and
+# install-test the portable zip and per-user installer for x64 and ARM64.
+# No game data on CI, so disc tests exit 77 (skipped).
 name: Windows
 
 on:
@@ -115,3 +117,70 @@ jobs:
         run: |
           build-windows-mingw/Debug/rr-determinism.exe --synthetic > det.txt 2>/dev/null || build-windows-mingw/rr-determinism.exe --synthetic > det.txt
           python -c "import sys;a=open('det.txt').read().split();b=open('tests/data/determinism_synthetic.txt').read().split();print('determinism: msys2-clang64', 'matches' if a==b else 'DIFFERS');sys.exit(a!=b)"
+
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x64, runner: windows-2022, preset: windows-msvc}
+          - {arch: arm64, runner: windows-11-arm, preset: windows-msvc-arm64}
+    name: package-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release version from v* tags
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - name: Locate or bootstrap vcpkg
+        shell: pwsh
+        run: |
+          if (-not $env:VCPKG_INSTALLATION_ROOT -or -not (Test-Path "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe")) {
+            git clone --quiet https://github.com/microsoft/vcpkg.git C:\vcpkg
+            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+            "VCPKG_INSTALLATION_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}
+      - name: Inno Setup and pefile
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          python -m pip install --disable-pip-version-check pefile
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build Release
+        run: cmake --build build-${{ matrix.preset }} --config Release --parallel
+      - name: Test Release
+        run: ctest --test-dir build-${{ matrix.preset }} -C Release --output-on-failure -j 4 --timeout 1800 --output-junit ctest-release.xml
+      - name: Determinism (Release, synthetic race vs the macOS reference)
+        shell: pwsh
+        run: |
+          & build-${{ matrix.preset }}\Release\rr-determinism.exe --synthetic > det.txt
+          python -c "import sys;a=open('det.txt').read().split();b=open('tests/data/determinism_synthetic.txt').read().split();print('determinism: release-${{ matrix.arch }}', 'matches' if a==b else 'DIFFERS');sys.exit(a!=b)"
+      - name: Package
+        run: python tools/build_windows_package.py --build-dir build-${{ matrix.preset }} --config Release --arch ${{ matrix.arch }} --out dist --installer require
+      - name: Verify, launch and install-test
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter "RoadRashNative-*-windows-${{ matrix.arch }}.zip" | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "RoadRashNative-*-setup-${{ matrix.arch }}.exe" | Select-Object -First 1
+          python tools/verify_windows_package.py $zip.FullName --arch ${{ matrix.arch }} --run --installer $setup.FullName --install-test --print-imports
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package-${{ matrix.arch }}
+          path: |
+            dist/*.zip
+            dist/*.exe
+            build-${{ matrix.preset }}/ctest-release.xml
+          if-no-files-found: error

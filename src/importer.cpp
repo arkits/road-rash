@@ -156,6 +156,10 @@ const std::vector<ReferenceHash>& reference_hashes() {
 std::string data_root() {
     if (const char* override_path = SDL_getenv("RR_PREF_OVERRIDE"))
         return path_to_utf8(path_from_utf8(override_path) / "game" / "ROADRASH");
+    // Plan 33b Task 5: a portable install keeps its disc beside the executable
+    // and never migrates (or touches) a per-user tree.
+    if (std::string portable = portable_data_directory(); !portable.empty())
+        return path_to_utf8(path_from_utf8(portable) / "game" / "ROADRASH");
     char* pref = SDL_GetPrefPath("RoadRashNative", "RoadRash");
     if (!pref) throw std::runtime_error(SDL_GetError());
     const fs::path roaming_game = path_from_utf8(pref) / "game";

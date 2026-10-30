@@ -42,11 +42,20 @@ void SDLCALL log_output(void*, int category, SDL_LogPriority priority, const cha
 } // namespace
 
 void platform_game_startup(int argc, char** argv) {
+    // A GUI-subsystem process has no console. `--console` attaches to the
+    // parent's, but only for streams that are not already redirected to a
+    // pipe or file (for example `rr-game --console --version > out.txt`).
+    const auto redirected = [](DWORD which) {
+        const HANDLE h = ::GetStdHandle(which);
+        return h && h != INVALID_HANDLE_VALUE && ::GetFileType(h) != FILE_TYPE_UNKNOWN;
+    };
+    // Checked before attaching, which may install console handles.
+    const bool out_redirected = redirected(STD_OUTPUT_HANDLE), err_redirected = redirected(STD_ERROR_HANDLE);
     for (int i = 1; i < argc; ++i)
         if (std::strcmp(argv[i], "--console") == 0 && ::AttachConsole(ATTACH_PARENT_PROCESS)) {
             std::FILE* stream = nullptr;
-            freopen_s(&stream, "CONOUT$", "w", stdout);
-            freopen_s(&stream, "CONOUT$", "w", stderr);
+            if (!out_redirected) freopen_s(&stream, "CONOUT$", "w", stdout);
+            if (!err_redirected) freopen_s(&stream, "CONOUT$", "w", stderr);
         }
     try {
         const std::filesystem::path dir = path_from_utf8(local_data_directory());

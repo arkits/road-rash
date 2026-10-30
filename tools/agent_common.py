@@ -47,7 +47,7 @@ def source_identity(root=ROOT):
     inputs = []
     for name in files:
         p = Path(name)
-        if not (p.parts[0] in {'src', 'tests', 'tools', 'cmake', 'third_party', 'macos', 'oracle', 'android'}
+        if not (p.parts[0] in {'src', 'tests', 'tools', 'cmake', 'third_party', 'macos', 'windows', 'oracle', 'android'}
                 or name in {'CMakeLists.txt', 'Makefile'}):
             continue
         if 'build' in p.parts or '.gradle' in p.parts or '.cxx' in p.parts:

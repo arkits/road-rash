@@ -22,4 +22,14 @@ std::string local_data_directory();
 // sizes) before `from` is removed. Returns false and leaves `from` intact on
 // any failure. Used once to move an imported disc out of the roaming profile.
 bool migrate_directory(const std::filesystem::path& from, const std::filesystem::path& to);
+
+// Plan 33b Task 5: portable mode, a native addition. When `portable.txt` sits
+// next to the executable, saves, settings, the imported disc and logs all live
+// in `<executable directory>/data` (created on demand) instead of the per-user
+// folders, so the game runs from a USB stick. Returns that directory (UTF-8,
+// no trailing separator), or "" when not portable. Desktop only: Android and
+// the browser never are. RR_PREF_OVERRIDE still takes precedence over it.
+std::string portable_data_directory();
+// The same decision for an explicit executable directory (testable).
+std::string portable_data_directory_in(const std::filesystem::path& executable_directory);
 } // namespace rr

@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import platform
 import sys
 import time
 import uuid
@@ -79,6 +80,39 @@ def run_gate(args):
                     command += ['-PreleaseDebugSigning=true']
                     report['signing'] = 'local debug key; not owner-signed release'
                 commands.append(command)
+            elif args.profile == 'windows-package':
+                # Plan 33b Task 5. On Windows: the MSVC preset's Release build,
+                # its CTest, then package and launch. Elsewhere: an existing
+                # MinGW cross build (--build-dir), packaged and checked; that
+                # is supplementary evidence, never Windows acceptance.
+                report['configuration'] = 'Release'
+                sys.path.insert(0, str(ROOT / 'tools'))
+                import build_windows_package
+                arch = 'arm64' if platform.machine().lower() in {'arm64', 'aarch64'} and os.name == 'nt' else 'x64'
+                if os.name == 'nt':
+                    preset = 'windows-msvc-arm64' if arch == 'arm64' else 'windows-msvc'
+                    build = ROOT / f'build-{preset}'
+                    report['build_directory'] = str(build)
+                    commands += [['cmake', '--preset', preset],
+                                 ['cmake', '--build', str(build), '--config', 'Release', '--parallel', str(args.jobs)],
+                                 ['ctest', '--test-dir', str(build), '-C', 'Release', '--output-on-failure',
+                                  '-j', '4', '--output-junit', str(output / 'ctest.xml')]]
+                    verify_flags = ['--run']
+                    report['coverage']['install_test'] = 'CI only (it removes per-user game data)'
+                else:
+                    if 'CMAKE_SYSTEM_NAME:INTERNAL=Windows' not in (build / 'CMakeCache.txt').read_text() and \
+                            'CMAKE_SYSTEM_NAME:STRING=Windows' not in (build / 'CMakeCache.txt').read_text():
+                        raise RuntimeError('windows-package off Windows needs --build-dir of a MinGW cross build')
+                    commands.append(['cmake', '--build', str(build), '--target', 'rr-game', '--parallel', str(args.jobs)])
+                    verify_flags = ['--allow-mingw-crt'] + (['--run', '--wine', env['RR_WINE']] if env.get('RR_WINE') else [])
+                    report['coverage']['windows'] = 'cross-built and checked off Windows; not Windows acceptance'
+                version, _ = build_windows_package.package_version()
+                dist = output / 'dist'
+                commands.append([sys.executable, ROOT / 'tools/build_windows_package.py', '--build-dir', build,
+                                 '--arch', arch, '--out', dist])
+                commands.append([sys.executable, ROOT / 'tools/verify_windows_package.py',
+                                 dist / f'RoadRashNative-{version}-windows-{arch}.zip', '--arch', arch, *verify_flags])
+                report['artifact'] = str(dist / f'RoadRashNative-{version}-windows-{arch}.zip')
             elif args.profile == 'package':
                 env['RR_PACKAGE_BUILD_DIR'] = str(build)
                 commands.append([ROOT / 'tools/build_macos_app.sh'])
@@ -135,7 +169,8 @@ def run_gate(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('profile', choices=['native', 'sanitizers', 'oracle', 'android-debug', 'android-release', 'package'])
+    p.add_argument('profile', choices=['native', 'sanitizers', 'oracle', 'android-debug', 'android-release', 'package',
+                                       'windows-package'])
     p.add_argument('--build-dir', type=Path)
     p.add_argument('--output', type=Path)
     p.add_argument('--jobs', type=int, default=os.cpu_count() or 4)

@@ -2,6 +2,7 @@
 #include "game_types.hpp"
 #include <cstdlib>
 #include "lifecycle.hpp"
+#include "platform_files.hpp"
 #include "raster_rgb.hpp"
 #include "view_state.hpp"
 #include <SDL3/SDL.h>
@@ -273,6 +274,8 @@ void Game::present_online(const RaceInstance& source, int seat) {
 }
 std::string pref_directory() {
     if (const char* o = SDL_getenv("RR_PREF_OVERRIDE")) return o;
+    if (std::string portable = portable_data_directory(); !portable.empty())
+        return portable; // plan 33b Task 5
     char* p = SDL_GetPrefPath("RoadRashNative", "RoadRash");
     if (!p) throw std::runtime_error(SDL_GetError());
     std::string s = p;

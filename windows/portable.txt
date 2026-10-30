@@ -1,0 +1,5 @@
+Road Rash Native portable mode.
+
+While this file sits next to rr-game.exe, saves, settings, the imported disc
+and logs are kept in the "data" folder beside it. Delete this file to use the
+per-user folders (%APPDATA% and %LOCALAPPDATA%\RoadRashNative) instead.

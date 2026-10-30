@@ -42,7 +42,27 @@ bool rename_with_retry(const fs::path& from, const fs::path& to, std::error_code
 #endif
 }
 
+std::string portable_data_directory_in(const fs::path& executable_directory) {
+    std::error_code ec;
+    if (executable_directory.empty() || !fs::is_regular_file(executable_directory / "portable.txt", ec))
+        return {};
+    const fs::path dir = executable_directory / "data";
+    fs::create_directories(dir, ec);
+    if (ec) throw std::runtime_error("Cannot create portable data directory: " + path_to_utf8(dir));
+    return path_to_utf8(dir);
+}
+
+std::string portable_data_directory() {
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    return {};
+#else
+    const char* base = SDL_GetBasePath(); // cached by SDL; not freed
+    return base ? portable_data_directory_in(path_from_utf8(base)) : std::string();
+#endif
+}
+
 std::string local_data_directory() {
+    if (std::string portable = portable_data_directory(); !portable.empty()) return portable;
 #if defined(_WIN32)
     PWSTR folder = nullptr;
     if (SUCCEEDED(::SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &folder))) {
