@@ -53,6 +53,12 @@
   - `sign_windows.ps1` without `RR_SIGN_*` prints "signing skipped" and exits
     0; `-Check` exits 1.
   - macOS Debug CTest 132/132, 0 skipped.
+- On `main` after the merge (`5fa0554`): Windows and browser deploy passed.
+  The determinism matrix's macOS job was cancelled by a scheduled `macos-14`
+  runner brownout (the image retires November 2, 2026). `determinism.yml`
+  and `release.yml` now use `macos-15`. Run `41116328025` (`443347d`) passed
+  macOS, Linux x86-64 and wasm32. `release.yml` on `macos-15` runs only on
+  the next `v*` tag.
 - Not run:
   - signing with a real certificate (none is configured; owner decision);
   - the interactive uninstall prompt;
