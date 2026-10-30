@@ -106,6 +106,12 @@ std::unique_ptr<Channel> ws_connect(const std::string& url) {
 }
 
 std::unique_ptr<Channel> ws_connect(const std::string& url, RtcOptions options) {
+    // Reject what cannot be a WebSocket URL here: libdatachannel may treat
+    // such text as a host name and fail only after a DNS lookup and the
+    // connection timeout.
+    const bool scheme = url.rfind("ws://", 0) == 0 || url.rfind("wss://", 0) == 0;
+    if (!scheme || url.find_first_of(" \t\r\n") != std::string::npos)
+        return std::make_unique<FailedChannel>();
     rtc::WebSocket::Configuration config;
     config.maxMessageSize = max_message_bytes;
     config.connectionTimeout = std::chrono::milliseconds(10000);
