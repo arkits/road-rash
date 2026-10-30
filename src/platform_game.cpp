@@ -52,7 +52,8 @@ void platform_game_startup(int argc, char** argv) {
     // Checked before attaching, which may install console handles.
     const bool out_redirected = redirected(STD_OUTPUT_HANDLE), err_redirected = redirected(STD_ERROR_HANDLE);
     for (int i = 1; i < argc; ++i)
-        if (std::strcmp(argv[i], "--console") == 0 && ::AttachConsole(ATTACH_PARENT_PROCESS)) {
+        if (std::strcmp(argv[i], "--console") == 0 && !(out_redirected && err_redirected) &&
+            ::AttachConsole(ATTACH_PARENT_PROCESS)) {
             std::FILE* stream = nullptr;
             if (!out_redirected) freopen_s(&stream, "CONOUT$", "w", stdout);
             if (!err_redirected) freopen_s(&stream, "CONOUT$", "w", stderr);

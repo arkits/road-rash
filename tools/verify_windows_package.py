@@ -143,12 +143,19 @@ def run_version(exe, wine, expected):
     command = [wine, str(exe)] if wine else [str(exe)]
     env = dict(os.environ)
     env.pop('RR_PREF_OVERRIDE', None)  # portable mode must decide the location
-    out = subprocess.run([*command, '--console', '--version'], capture_output=True, text=True, timeout=120, env=env)
-    if out.returncode != 0:
-        fail(f'{exe} --version exited {out.returncode}: {out.stderr.strip()[-400:]}')
-    match = re.search(r'\{.*\}', out.stdout, re.S)
+    # Output goes to files, not pipes: under Wine a lingering wineserver can
+    # hold a pipe open long after the game exited.
+    with tempfile.TemporaryFile('w+') as stdout, tempfile.TemporaryFile('w+') as stderr:
+        code = subprocess.run([*command, '--console', '--version'], stdout=stdout, stderr=stderr,
+                              timeout=120, env=env).returncode
+        stdout.seek(0)
+        stderr.seek(0)
+        text, errors = stdout.read(), stderr.read()
+    if code != 0:
+        fail(f'{exe} --version exited {code}: {errors.strip()[-400:]}')
+    match = re.search(r'\{.*\}', text, re.S)
     if not match:
-        fail(f'{exe} --version printed no JSON: {out.stdout[-400:]!r}')
+        fail(f'{exe} --version printed no JSON: {text[-400:]!r}')
     info = json.loads(match.group(0))
     for key in ['commit', 'source_sha256']:
         if info.get(key) != expected[key]:
