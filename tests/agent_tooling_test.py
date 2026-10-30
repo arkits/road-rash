@@ -182,6 +182,7 @@ class Tooling(unittest.TestCase):
                                   scenario='scenario', session='test-capture', timeout=2)
         return args, digest
 
+    @unittest.skipIf(os.name == 'nt', 'Wine-prefix oracle capture runs on macOS/Linux hosts (plan 33b)')
     def test_failed_capture_preserves_accepted_and_releases_resources(self):
         for body in ['out.write_text("# rr-oracle 1\\n")\n',
                      'out.write_text(GOOD)\nraise SystemExit(8)\n']:
@@ -203,6 +204,7 @@ class Tooling(unittest.TestCase):
                 finally:
                     self.root = saved
 
+    @unittest.skipIf(os.name == 'nt', 'Wine-prefix oracle capture runs on macOS/Linux hosts (plan 33b)')
     def test_capture_publish_receipt_and_immutable_run(self):
         args, digest = self.setup_fake_capture('out.write_text(GOOD)\n')
         with patch('oracle_capture.reference_hash', return_value=digest), \

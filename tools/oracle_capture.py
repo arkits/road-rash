@@ -109,6 +109,10 @@ def publish_capture(trace, output, receipt, companions=()):
 
 
 def capture(args):
+    if os.name == 'nt':
+        # The capture builds a Wine prefix (dosdevices symlinks) around the
+        # original executable; it runs on macOS/Linux hosts only (plan 33b).
+        raise SystemExit('oracle_capture: Wine-prefix captures run on macOS or Linux hosts, not Windows')
     workspace = args.workspace.resolve()
     prefix = args.prefix.resolve() if args.prefix else workspace / 'prefix'
     install = args.install.resolve() if args.install else prefix / 'drive_c/ElectronicArts/RoadRashOracle'
