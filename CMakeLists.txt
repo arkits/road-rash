@@ -395,7 +395,12 @@ else()
         set(RR_SLOW_TESTS hires-render race-soak course_scene race_setup raster-rgb widescreen oracle-scene oracle-terrain oracle-terrain-medly)
         set(RR_SIM_TESTS oracle-sim oracle-sim-field oracle-sim-field-schema2 oracle-sim-field-l5 race race_schedule car_contact frozen_state race-soak race_setup bike crash traffic actor_traffic pedestrian police sim_fields track_ring)
         set(RR_DISC_TESTS oracle-road oracle-scene oracle-terrain oracle-terrain-medly oracle-raster hires-render raster-rgb widescreen polygon text frontend
-            native_screens sound music pe-strings-corpus career-corpus wav-corpus race-soak race_setup course_scene)
+            native_screens sound music pe-strings-corpus career-corpus wav-corpus race-soak race_setup course_scene
+            game-race-wiring oracle-patch)
+        # Plan 33b Task 7: tests that need git-ignored local captures under
+        # analysis/oracle (exit 77 without them). CI may skip only `disc`,
+        # `fixture` and host-specific (`posix`) tests (tools/ctest_skip_check.py).
+        set(RR_FIXTURE_TESTS oracle-sim oracle-sim-field oracle-sim-field-schema2 oracle-sim-field-l5 career-save-corpus)
         foreach(t ${RR_SLOW_TESTS})
             set_property(TEST ${t} APPEND PROPERTY LABELS slow)
         endforeach()
@@ -404,6 +409,9 @@ else()
         endforeach()
         foreach(t ${RR_DISC_TESTS})
             set_property(TEST ${t} APPEND PROPERTY LABELS disc)
+        endforeach()
+        foreach(t ${RR_FIXTURE_TESTS})
+            set_property(TEST ${t} APPEND PROPERTY LABELS fixture)
         endforeach()
         get_property(RR_ALL_TESTS DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY TESTS)
         if(CMAKE_HOST_WIN32)

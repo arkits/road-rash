@@ -81,5 +81,6 @@ if(RR_NET_TRANSPORT)
 endif()
 if(NOT EMSCRIPTEN)
     add_test(NAME net_deploy COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/net_deploy_test.py)
-    set_tests_properties(net_deploy PROPERTIES SKIP_RETURN_CODE 77) # deploy.py is Linux-only (fcntl)
+    # deploy.py needs fcntl: a unit test on POSIX hosts, skipped (77) on Windows.
+    set_tests_properties(net_deploy PROPERTIES SKIP_RETURN_CODE 77 LABELS "unit;posix")
 endif()

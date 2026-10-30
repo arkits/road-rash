@@ -167,6 +167,15 @@ def run_version(exe, wine, expected):
     return info
 
 
+def check_signature(path):
+    """Authenticode signature valid and timestamped (Windows only)."""
+    script = (f"$s = Get-AuthenticodeSignature -LiteralPath '{path}'; "
+              "Write-Output \"$($s.Status) $([bool]$s.TimeStamperCertificate)\"")
+    out = subprocess.run(['pwsh', '-NoProfile', '-Command', script], capture_output=True, text=True).stdout.split()
+    if out != ['Valid', 'True']:
+        fail(f'{path.name}: Authenticode signature {out}; expected Valid with a timestamp')
+
+
 def wait_gone(path, seconds=60):
     deadline = time.time() + seconds
     while path.exists() and time.time() < deadline:
@@ -230,6 +239,8 @@ def main():
     p.add_argument('--install-test', action='store_true', help='silent install/uninstall (Windows CI only)')
     p.add_argument('--allow-mingw-crt', action='store_true', help='MinGW cross build check: allow msvcrt.dll')
     p.add_argument('--print-imports', action='store_true')
+    p.add_argument('--require-signature', action='store_true',
+                   help='exe and installer must carry a valid timestamped Authenticode signature (Windows)')
     args = p.parse_args()
 
     commit = args.commit or subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
@@ -256,6 +267,13 @@ def main():
         report['exe'] = check_exe(exe, args.arch, commit, args.allow_mingw_crt)
         if args.print_imports:
             print('\n'.join(report['exe']['imports']))
+        if args.require_signature:
+            if os.name != 'nt':
+                fail('--require-signature runs only on Windows')
+            check_signature(exe)
+            if args.installer:
+                check_signature(args.installer.resolve())
+            report['signature'] = 'valid, timestamped'
         if args.run:
             if os.name != 'nt' and not args.wine:
                 fail('--run needs a Windows host or --wine')

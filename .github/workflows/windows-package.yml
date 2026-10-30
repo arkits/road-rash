@@ -1,0 +1,131 @@
+# Plan 33b Tasks 5 and 7: Windows Release build, tests, packages and their
+# verification for one architecture. Called by windows.yml (every push) and
+# release.yml (v* tags). Signs when the owner's RR_SIGN_PFX_* secrets exist;
+# otherwise the packages are unsigned.
+name: Windows package
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+      preset:
+        type: string
+        required: true
+      artifact:
+        description: name of the uploaded zip + installer artifact
+        type: string
+        required: true
+      release_tag:
+        description: v* tag the package version must equal (release builds)
+        type: string
+        default: ''
+    secrets:
+      RR_SIGN_PFX_BASE64:
+        required: false
+      RR_SIGN_PFX_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+  PYTHONUTF8: '1'
+
+jobs:
+  package:
+    name: package-${{ inputs.arch }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release version from v* tags
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ inputs.arch }}
+      - name: Locate or bootstrap vcpkg
+        shell: pwsh
+        run: |
+          if (-not $env:VCPKG_INSTALLATION_ROOT -or -not (Test-Path "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe")) {
+            git clone --quiet https://github.com/microsoft/vcpkg.git C:\vcpkg
+            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+            "VCPKG_INSTALLATION_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ inputs.preset }}-${{ hashFiles('vcpkg.json') }}
+      - name: Inno Setup and pefile
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          python -m pip install --disable-pip-version-check pefile
+      - name: Import signing certificate (owner secrets only)
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.RR_SIGN_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.RR_SIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:PFX) { Write-Output 'no signing certificate configured; packages stay unsigned'; exit 0 }
+          $path = Join-Path $env:RUNNER_TEMP 'rr-sign.pfx'
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:PFX))
+          $password = ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $path
+          "RR_SIGN_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Configure
+        run: cmake --preset ${{ inputs.preset }}
+      - name: Build Release
+        run: cmake --build build-${{ inputs.preset }} --config Release --parallel
+      - name: Test Release
+        run: ctest --test-dir build-${{ inputs.preset }} -C Release --output-on-failure -j 4 --timeout 1800 --output-junit ctest-release.xml
+      - name: Only disc, fixture and host-specific tests skipped
+        run: python tools/ctest_skip_check.py --build-dir build-${{ inputs.preset }} -C Release --junit build-${{ inputs.preset }}/ctest-release.xml
+      - name: Determinism (Release, synthetic race vs the macOS reference)
+        shell: pwsh
+        run: |
+          & build-${{ inputs.preset }}\Release\rr-determinism.exe --synthetic > det.txt
+          python -c "import sys;a=open('det.txt').read().split();b=open('tests/data/determinism_synthetic.txt').read().split();print('determinism: release-${{ inputs.arch }}', 'matches' if a==b else 'DIFFERS');sys.exit(a!=b)"
+      - name: Package
+        run: python tools/build_windows_package.py --build-dir build-${{ inputs.preset }} --config Release --arch ${{ inputs.arch }} --out dist --installer require
+      - name: Verify, launch and install-test
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $zip = Get-ChildItem dist -Filter "RoadRashNative-*-windows-${{ inputs.arch }}.zip" | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "RoadRashNative-*-setup-${{ inputs.arch }}.exe" | Select-Object -First 1
+          if ($env:RELEASE_TAG) {
+            if ($env:RELEASE_TAG -notmatch '^v(\d+)\.(\d+)(?:\.(\d+))?') { throw "unexpected release tag $($env:RELEASE_TAG)" }
+            $patch = if ($Matches[3]) { $Matches[3] } else { '0' }
+            $expected = "RoadRashNative-$($Matches[1]).$($Matches[2]).$patch-windows-${{ inputs.arch }}.zip"
+            if ($zip.Name -ne $expected) { throw "package $($zip.Name) does not match tag $($env:RELEASE_TAG) ($expected)" }
+          }
+          $signature = @()
+          if ($env:RR_SIGN_CERT_THUMBPRINT) { $signature = @('--require-signature') }
+          python tools/verify_windows_package.py $zip.FullName --arch ${{ inputs.arch }} --run --installer $setup.FullName --install-test --print-imports @signature
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: |
+            dist/*.zip
+            dist/*.exe
+          if-no-files-found: error
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}-ctest
+          path: build-${{ inputs.preset }}/ctest-release.xml
+          if-no-files-found: ignore
