@@ -53,6 +53,22 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: Windows release assets and CI skip check (plan 33b Task 7)
+
+- `release.yml`: a `v*` tag builds the macOS app and the Windows x64/ARM64
+  zips and installers (shared `windows-package.yml`), then publishes them in
+  one job with `SHA256SUMS.txt`. File names carry the tag's version.
+  `workflow_dispatch` runs everything except the publish step.
+- Windows packages are signed on CI when the owner adds the
+  `RR_SIGN_PFX_BASE64` / `RR_SIGN_PFX_PASSWORD` secrets; the verifier then
+  requires valid, timestamped signatures.
+- `tools/ctest_skip_check.py`: Windows CI fails when a test outside the
+  `disc`/`fixture`/`posix` labels skips. Six tests were relabelled to say
+  what they need.
+- macOS packaging: bounded build parallelism, a 900 s per-test timeout, a
+  90-minute release job cap; macOS jobs on `macos-15`.
+- Remaining: Task 4, Task 8 (hardware), the signing certificate (owner).
+
 ### October 30, 2026: Windows packages (plan 33b Task 5)
 
 - `tools/build_windows_package.py` stages a Release `rr-game.exe` into

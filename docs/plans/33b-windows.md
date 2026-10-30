@@ -197,15 +197,30 @@ Signing is wired but unconfigured. Which certificate to use, if any (a classic t
 
 **Files:** Create `.github/workflows/windows.yml`. Modify `.github/workflows/release.yml`.
 
-- [ ] **Step 1: `windows.yml`.** *(Build and test jobs exist since October 30; the `package-x64`/`package-arm64` jobs (Release build, CTest, package, verify, launch, install test) since Task 5. Still open: the assertion that only `disc`-labelled tests skipped.)* On push/PR to `main`:
+- [x] **Step 1: `windows.yml`.** On push/PR to `main`:
   - `windows-2022` runs the `windows-msvc` build and `ctest`, asserting that only `disc`-labelled tests skipped;
   - `windows-clang-cl` and `windows-mingw` build checks;
   - `windows-11-arm` runs the `windows-msvc-arm64` build and `ctest`;
   - the package build plus `verify_windows_package.py`.
 
   Cache vcpkg binary packages through GitHub Actions cache.
-- [ ] **Step 2: `release.yml`.** Tags attach the x64 and ARM64 zips and installers, signed when the owner's signing secrets exist. The icon is committed, so no owner decision is needed for it.
-- [ ] **Step 3:** Commit `ci: Windows native gate, toolchain checks, packages`.
+- [x] **Step 2: `release.yml`.** Tags attach the x64 and ARM64 zips and installers, signed when the owner's signing secrets exist. The icon is committed, so no owner decision is needed for it.
+- [x] **Step 3:** Commit `ci: Windows native gate, toolchain checks, packages`.
+
+**Task 7 result (October 30, 2026).** Done, with these choices:
+- **Skip assertion.** `tools/ctest_skip_check.py` reads CTest's JSON test list (labels) and the JUnit result, and fails when a test outside the `disc`, `fixture` and `posix` labels skipped. It runs after the MSVC x64/ARM64 Debug CTest and the Release CTest in the package jobs. Five mislabelled tests were corrected rather than allowed:
+  - `game-race-wiring` and `oracle-patch` read the disc, so they are `disc`;
+  - `oracle-sim*` (4) and `career-save-corpus` need git-ignored captures under `analysis/oracle`, so they get the new `fixture` label;
+  - `net_deploy` needs `fcntl`, so it is `unit;posix`.
+
+  The CI skips are now 35 = disc 29 + fixture 5 + posix 1. Those six tests leave the clang-cl/MSYS2 `unit` subset, which drops from 88 to 85; they had been skipping there anyway.
+- **Shared package workflow.** `.github/workflows/windows-package.yml` is reusable: Release build, CTest, skip check, determinism, package, then verify, launch and install-test. `windows.yml` (every push) and `release.yml` (tags) both call it.
+- **Release assets and signing.** `release.yml` builds the macOS app and the Windows x64/ARM64 packages, then one job publishes them all with `SHA256SUMS.txt`:
+  - `RoadRashNative-<X.Y.Z>-macos-arm64.zip`;
+  - `-windows-<arch>.zip` and `-setup-<arch>.exe` for each Windows architecture.
+
+  The Windows job fails if the package version differs from the tag (`vX.Y` reads as `X.Y.0`). Signing on CI imports an owner PFX from the `RR_SIGN_PFX_BASE64` / `RR_SIGN_PFX_PASSWORD` secrets; the verifier then requires valid, timestamped Authenticode signatures on the exe and the installer. Azure Trusted Signing stays a local `sign_windows.ps1` option. A manual run (`workflow_dispatch`) is a dry run: it builds and checks everything and publishes nothing.
+- **macOS runner.** The release and determinism macOS jobs moved to `macos-15`, because `macos-14` images retire on November 2, 2026.
 
 ### Task 8: Acceptance on hardware
 
@@ -225,4 +240,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: Tasks 1–3 and 5 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Task 7 Step 1 package jobs done; Tasks 4, 7 Step 2 (release.yml) and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Tasks 1–3, 5 and 7 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 4 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

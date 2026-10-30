@@ -50,7 +50,10 @@ Windows packages (plan 33b Task 5): after a Release build
 writes `RoadRashNative-<version>-windows-<arch>.zip` and, when Inno Setup 6.3+
 is installed, `RoadRashNative-<version>-setup-<arch>.exe`. Check them with
 `python tools/verify_windows_package.py <zip> --arch x64 --run` (needs
-`pip install pefile`). CI builds both for x64 and ARM64.
+`pip install pefile`). CI builds both for x64 and ARM64. GitHub releases
+(`v*` tags) attach the macOS zip, both Windows zips and both installers, plus
+`SHA256SUMS.txt`. Windows files are signed only when the owner has added the
+`RR_SIGN_PFX_BASE64` and `RR_SIGN_PFX_PASSWORD` repository secrets.
 - **Portable zip:** unzip the `Road Rash Native` folder anywhere, including a
   USB stick, and run `rr-game.exe`. Because `portable.txt` sits next to the
   exe, saves, settings, the imported disc and logs go to the `data` folder

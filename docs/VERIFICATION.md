@@ -1,5 +1,51 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Task 7: CI skip check and release assets (October 30, 2026)
+
+- Windows CI run `41120901367` (branch, commit `91fb572`): all six jobs
+  passed.
+  - The new skip check passed after the Debug CTest on MSVC x64/ARM64 and
+    after the Release CTest in both package jobs: "132 tests, 35 skipped
+    (disc 29, fixture 5, posix 1)".
+  - clang-cl and MSYS2 unit tests: 85/85.
+  - Negative check run locally: a JUnit file with `platform_files` (labelled
+    `unit`) marked as skipped makes `ctest_skip_check.py` exit 1.
+- Release dry runs (`workflow_dispatch` on `main`; the publish step is
+  skipped, no release created):
+  - `41123154604`: cancelled after 50 minutes in the macOS job. GitHub keeps
+    no log for a cancelled job.
+  - `41129918354`, `90f782b`, failed. Its log showed two problems:
+    - the macOS build alone took 69 minutes: `build_macos_app.sh` used a bare
+      `--parallel` (unbounded `make -j`) on the runner;
+    - `net_ws` "malformed URL fails" timed out: `not a url` reached
+      libdatachannel, which failed only after DNS and its 10 s timeout.
+
+    Fixes: CPU-count jobs plus a 900 s per-test timeout; `ws_connect`
+    rejects anything without a `ws://` or `wss://` prefix, or with
+    whitespace, at once.
+  - `41139932100` (`4a8a0bf`): success, with the macOS job down to 4.5
+    minutes.
+  - `41141212670` (`fa546bf`): success, with the final naming. The publish
+    job checked exactly one of each asset and wrote `SHA256SUMS.txt` for:
+    - `RoadRashNative-0.0.0-gfa546bf-macos-arm64.zip`;
+    - `-windows-x64.zip` and `-windows-arm64.zip`;
+    - `-setup-x64.exe` and `-setup-arm64.exe`.
+
+    Each Windows job also ran the Release CTest, the skip check,
+    determinism, the verifier and the install test. "Publish GitHub
+    Release" was skipped; `gh release list` is empty.
+- Tag version check, run locally with a temporary unpushed tag `v9.8`:
+  `package_version()` gives `9.8.0`, matching the workflow's tag-derived
+  name `RoadRashNative-9.8.0-windows-x64.zip`. The tag was deleted.
+- Regression from the relabelling: the wasm determinism configure on `main`
+  (`91fb572`, `4a8a0bf`) failed. `set_property` named `game-race-wiring`,
+  which the browser build does not define. The label loops now skip
+  missing tests; locally the wasm configure and `determinism_matrix.sh
+  wasm` pass, and macOS still lists disc 30 and fixture 5.
+- Not run:
+  - a real `v*` tag release (publishing is the owner's call);
+  - signing with real secrets (none configured).
+
 ## Plan 33b Task 5: Windows packages (October 30, 2026)
 
 - Windows CI run `41113561902` (`port/plan33b-windows`, commit `cd554cb`):
