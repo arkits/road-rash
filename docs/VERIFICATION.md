@@ -1,5 +1,35 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Task 1: Windows native gate (October 30, 2026)
+
+- GitHub Actions workflow `Windows` (`.github/workflows/windows.yml`), run
+  `41018820912` on `port/plan33b-windows`, all jobs successful:
+  - `msvc-x64` (MSVC 19.44.35229, `windows-2022`, preset `windows-msvc`, Debug,
+    static CRT, static SDL 3.4.18, vcpkg OpenSSL `x64-windows-static`): CTest
+    128/128 passed, 35 skipped (28 disc-labelled, the git-ignored oracle
+    fixtures, `oracle-patch`, `net_deploy`).
+  - `msvc-arm64` (MSVC 19.51.36260, VS 18, native ARM64 on `windows-11-arm`):
+    128/128 passed, the same 35 skipped.
+  - `clang-cl-x64` (Clang 19.1.5): build plus `-L unit` 84/84.
+  - `msys2-clang64` (Clang 22.1.8, libc++): build plus `-L unit` 84/84.
+  - `rr-determinism --synthetic` equals `tests/data/determinism_synthetic.txt`
+    on all four.
+- Earlier rounds: `41013464975` (MSVC x64 built on the first try, 125/128:
+  `oracle-sim` without its fixture, POSIX-only Python, `net_deploy`; ARM64 VS
+  generator missing; clang-cl duplicate symbols), `41015360373` (only
+  `agent-tooling`), `41016975934` (intermittent `render-threads-alloc` on MSVC
+  x64/ARM64 and MSYS2, diagnosed with the new allocation sizes: four 23,040-byte
+  `thread_local` vectors plus MSVC debug proxies).
+- macOS after these changes: Debug `ctest -j6` 128/128, 0 skipped; Android
+  debug gate (`agent_gate.py android-debug`) passed with the trimmed
+  `RR_GAME_SOURCES`; `render_threads_alloc-test` passed 3 of 3 repeated runs.
+- Local supplement, not Windows acceptance: MinGW GCC 14 cross-build
+  (`cmake/toolchains/mingw-w64-x86_64.cmake`, network transport off) under
+  Wine Staging with a private prefix and the disc: 125/125, 0 skipped,
+  including `oracle-sim`, `oracle-sim-field`, `-schema2` and `-l5`.
+- Not run: any test on real Windows hardware with the disc (Task 1 Step 7),
+  the Windows disc determinism race, packaging, display/audio/controllers.
+
 ## Plan 33 Part A: portability groundwork (October 29, 2026)
 
 Worktree `port/plan33-part-a` (baseline `c9eb240`). Logs are local in that

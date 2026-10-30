@@ -26,6 +26,39 @@
 - MSVC fails on `__int128` (F1). Expected next failures from the audit: `<unistd.h>` in tests (F6), POSIX sockets in `server/main.cpp` (F10), GCC flags under the `RR_*` options (F8).
 - No Windows machine is attached to this workspace. Local iteration can cross-compile with llvm-mingw and run CTest under the existing Wine install as a quick check, but **Wine results never count as Windows acceptance**. Acceptance uses GitHub Windows runners for builds and tests, and real hardware for the device checklist.
 
+### Task 1 result (October 30, 2026)
+
+**The Windows native gate is green on GitHub runners** (workflow `Windows`, run `41018820912`, branch `port/plan33b-windows`). No disc is on CI, so disc and fixture tests exit 77.
+
+| Job | Toolchain | Result |
+| --- | --- | --- |
+| `msvc-x64` | MSVC 19.44 (VS 2022 17.14), `windows-2022` | 128/128, 35 skipped |
+| `msvc-arm64` | MSVC 19.51 (VS 18), native ARM64, `windows-11-arm` | 128/128, 35 skipped |
+| `clang-cl-x64` | clang-cl 19.1.5 | unit tests 84/84 |
+| `msys2-clang64` | Clang 22.1.8, libc++ | unit tests 84/84 |
+
+The synthetic determinism hashes match the macOS reference on all four. The skips are:
+- the 28 disc-labelled tests;
+- the git-ignored oracle fixtures;
+- `oracle-patch` (needs the original EXE);
+- `net_deploy` (Linux-only deploy tool).
+
+Four CI rounds found and fixed:
+- **Duplicate objects.** `rr-game` re-listed `race_*`/`game_types` sources already in `rr-resource`. `lld-link` rejected the duplicates.
+- **Visual Studio version.** The VS generator found no VS 2022 on the ARM image (it has VS 18). The presets now use Ninja Multi-Config inside `ilammy/msvc-dev-cmd`.
+- **POSIX-only Python tooling:**
+  - `os.getuid` → `user_tag()`;
+  - `pid_alive` used `os.kill(pid, 0)`, which **terminates** the process on Windows; it now queries the process instead;
+  - `fcntl` in the Linux deploy tool → `net_deploy` skips on Windows;
+  - the Wine-prefix capture tool and its tests are macOS/Linux-only;
+  - the shebang fake replay gets a `.cmd` wrapper.
+- **Missing fixture.** `oracle-sim` now skips (77) without its git-ignored fixture.
+- **A real intermittent bug on every platform:** `render-threads-alloc` failed when a render worker first drew a wide quad in a later frame. Four `thread_local` 960-row vectors in `draw_textured_quad_wide` were sized then, plus a 16-byte MSVC debug proxy for each. The workspace now lives in the pool's per-band `RasterScratch64`.
+
+Local supplement (**not** Windows acceptance): `cmake/toolchains/mingw-w64-x86_64.cmake` cross-builds everything with MinGW GCC 14 on macOS. Under Wine, with the disc, it passed **125/125 with 0 skipped**, including all four oracle-sim replays (`verify_sim.py` honours `RR_SIM_EMULATOR`).
+
+**Open in Task 1:** Step 7, the disc run on a real Windows machine. It is blocked because no Windows machine is attached and CI must not hold game data.
+
 ## Global constraints
 
 - **Minimum OS:** Windows 10 1903 (build 18362) x64, because the UTF-8 active code page in the manifest needs it. Windows 11 ARM64 is native, not emulated. Windows 7/8.1 are not supported; record that in USER_GUIDE.
@@ -67,14 +100,14 @@
 
 **Files:** Create `cmake/msvc.cmake`, `vcpkg.json`, `vcpkg-configuration.json`; add the Windows presets to `CMakePresets.json`. Modify `CMakeLists.txt`, `cmake/net.cmake`, `server/CMakeLists.txt`.
 
-- [ ] **Step 1: Compiler options (F8).** `cmake/msvc.cmake` is included when `MSVC` is set. Under MSVC, `RR_STRICT_WARNINGS` maps to `/W4 /permissive-`, with the warning numbers that correspond to `-Wshadow`/`-Wconversion` (C4456–C4459, C4244, C4267), and `/WX` follows the plan 22 ratchet. `RR_TSAN` and `RR_FUZZ` fail at configure time under MSVC with a clear message. ASan is available as `/fsanitize=address` behind `RR_ASAN`.
-- [ ] **Step 2: Server split (F10).** `server/CMakeLists.txt` builds `rr-netd-core` (room, sealer) on every platform and the `rr-netd` executable only `if(NOT WIN32)`. The `server_room`, `server_sealer` and `server_hostile` tests stay on Windows if they use only the core. A test that needs the POSIX HTTP listener exits 77 on Windows with the reason.
-- [ ] **Step 3: OpenSSL.** Use vcpkg manifest mode with the `x64-windows-static` / `arm64-windows-static` triplets. libdatachannel links the static OpenSSL. `RR_NET_TRANSPORT=OFF` still builds without vcpkg, for quick local work.
-- [ ] **Step 4: Static CRT and SDL.** `CMAKE_MSVC_RUNTIME_LIBRARY` is static. `RR_STATIC_SDL=ON` (Part A Task A7) is the default in `windows-release` and allowed in Debug.
-- [ ] **Step 5: Build and test.** Run `cmake --preset windows-msvc`, build, then `ctest` on the `windows-2022` runner (no disc). Fix each failure at its root. Part A Tasks A1/A4/A6 are prerequisites. The `oracle/` C tests (`patch_test.c`, `actor_record_buffer_test.c`) must compile as C under MSVC; fix any GNU C there.
-- [ ] **Step 6: Toolchain checks.** `windows-clang-cl` and `windows-mingw` (MSYS2 clang64) build everything and run the unit-labelled tests. Neither is a release toolchain; they exist to catch MSVC-only assumptions in both directions.
-- [ ] **Step 7: Disc run.** On a Windows machine with the disc (owner hardware, or a self-hosted runner if the owner approves), run the full suite with the disc. Every oracle and pixel golden equals macOS.
-- [ ] **Step 8:** Record everything in VERIFICATION.md. Commit `windows: MSVC native gate`.
+- [x] **Step 1: Compiler options (F8).** `cmake/msvc.cmake` is included when `MSVC` is set. *(Done. The presets use Ninja Multi-Config in an MSVC developer environment, not the VS generator, so any VS version works.)* Under MSVC, `RR_STRICT_WARNINGS` maps to `/W4 /permissive-`, with the warning numbers that correspond to `-Wshadow`/`-Wconversion` (C4456–C4459, C4244, C4267), and `/WX` follows the plan 22 ratchet. `RR_TSAN` and `RR_FUZZ` fail at configure time under MSVC with a clear message. ASan is available as `/fsanitize=address` behind `RR_ASAN`.
+- [x] **Step 2: Server split (F10).** `server/CMakeLists.txt` builds `rr-netd-core` (room, sealer) on every platform and the `rr-netd` executable only `if(NOT WIN32)`. The `server_room`, `server_sealer` and `server_hostile` tests stay on Windows if they use only the core. A test that needs the POSIX HTTP listener exits 77 on Windows with the reason.
+- [x] **Step 3: OpenSSL.** Use vcpkg manifest mode with the `x64-windows-static` / `arm64-windows-static` triplets. libdatachannel links the static OpenSSL. `RR_NET_TRANSPORT=OFF` still builds without vcpkg, for quick local work.
+- [x] **Step 4: Static CRT and SDL.** `CMAKE_MSVC_RUNTIME_LIBRARY` is static. `RR_STATIC_SDL=ON` (Part A Task A7) is the default in `windows-release` and allowed in Debug.
+- [x] **Step 5: Build and test.** Run `cmake --preset windows-msvc`, build, then `ctest` on the `windows-2022` runner (no disc). Fix each failure at its root. Part A Tasks A1/A4/A6 are prerequisites. The `oracle/` C tests (`patch_test.c`, `actor_record_buffer_test.c`) must compile as C under MSVC; fix any GNU C there.
+- [x] **Step 6: Toolchain checks.** `windows-clang-cl` and `windows-mingw` (MSYS2 clang64) build everything and run the unit-labelled tests. Neither is a release toolchain; they exist to catch MSVC-only assumptions in both directions.
+- [ ] **Step 7: Disc run.** *(Blocked October 30: no Windows machine with the disc.)* On a Windows machine with the disc (owner hardware, or a self-hosted runner if the owner approves), run the full suite with the disc. Every oracle and pixel golden equals macOS.
+- [x] **Step 8:** Record everything in VERIFICATION.md. Commit `windows: MSVC native gate`.
 
 ### Task 2: Unicode paths, file safety and data location
 
@@ -126,7 +159,7 @@
 
 **Files:** Modify `tools/determinism_matrix.py`, `.github/workflows/determinism.yml`, `docs/plans/34-multiplayer.md`.
 
-- [ ] **Step 1:** Add `windows-msvc-x64`, `windows-clang-cl-x64` and `windows-msvc-arm64` jobs to the matrix, synthetic on CI. Run the disc race wherever a disc is available.
+- [ ] **Step 1:** *(Synthetic part done October 30: every Windows CI job compares `rr-determinism --synthetic` with the reference, and all four match. Disc race open, blocked with Task 1 Step 7.)* Add `windows-msvc-x64`, `windows-clang-cl-x64` and `windows-msvc-arm64` jobs to the matrix, synthetic on CI. Run the disc race wherever a disc is available.
 - [ ] **Step 2:** Plan 34 cross-play: a Windows client in a room with macOS, Linux and browser clients. Results agree and hashes match. Confirm that Windows Defender Firewall shows no prompt, because connections are outgoing only. Record it in plan 34 Task 10 Step 4.
 - [ ] **Step 3:** Commit `windows: determinism matrix and cross-play`.
 
@@ -134,7 +167,7 @@
 
 **Files:** Create `.github/workflows/windows.yml`. Modify `.github/workflows/release.yml`.
 
-- [ ] **Step 1: `windows.yml`.** On push/PR to `main`:
+- [ ] **Step 1: `windows.yml`.** *(Build and test jobs exist since October 30; the package build and the skip assertion come with Task 5.)* On push/PR to `main`:
   - `windows-2022` runs the `windows-msvc` build and `ctest`, asserting that only `disc`-labelled tests skipped;
   - `windows-clang-cl` and `windows-mingw` build checks;
   - `windows-11-arm` runs the `windows-msvc-arm64` build and `ctest`;
@@ -162,4 +195,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: not started. Part A (plan 33) first. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Task 1 done except the disc run on real Windows (Step 7, blocked: no device); Task 6 Step 1 synthetic part done; Tasks 2–5 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

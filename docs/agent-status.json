@@ -106,7 +106,7 @@
     {
       "area": "Linux/Windows",
       "implementation": "Plan 33 Part A portability groundwork done (portable 128-bit math, FP contraction off, deterministic libm, total-order sorts, UTF-8 paths, case-insensitive folder import, static SDL 3.4.18, font discovery, host-neutral tools)",
-      "verification": "Linux ARM64 (Debian trixie, GCC 14, Docker): full suite builds; 127/128 plus sim/disc 44/44 with fixtures; macOS and Linux render identical enhanced frames; no Windows compile yet",
+      "verification": "Linux ARM64 (Debian trixie, GCC 14, Docker): full suite builds; 127/128 plus sim/disc 44/44 with fixtures; macOS and Linux render identical enhanced frames; Windows CI (plan 33b Task 1): MSVC x64 and ARM64 128/128 (disc tests skipped), clang-cl and MSYS2 unit 84/84, synthetic determinism equal to macOS; no Windows disc run yet",
       "remaining": "33a Linux x86-64/Clang gate, packages, Steam Deck; 33b MSVC build, packages; CI and hardware acceptance on both",
       "evidence": [
         "plans/33-linux-windows-ports.md"

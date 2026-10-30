@@ -53,6 +53,26 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: Windows native gate (plan 33b Task 1)
+
+- Windows builds and tests on GitHub runners: MSVC x64 and native ARM64
+  128/128, clang-cl and MSYS2 clang64 unit 84/84, with synthetic determinism
+  identical to macOS on all four.
+- Added:
+  - `cmake/msvc.cmake` (static CRT, `/utf-8`, `/permissive-`, `/EHsc`, `/bigobj`, `/W4` mapping);
+  - Ninja Multi-Config Windows presets and `vcpkg.json` (pinned OpenSSL);
+  - `rr-netd` builds on Linux/macOS only;
+  - the MinGW cross toolchain file;
+  - the `Windows` workflow.
+- Fixed along the way:
+  - duplicate `rr-game` objects;
+  - POSIX-only Python tooling, including a `pid_alive` that would have killed the process on Windows;
+  - CI skips;
+  - a cross-platform intermittent `render-threads-alloc` failure: the wide-quad workspace moved from `thread_local` into the per-band scratch.
+- Remaining: disc run and disc determinism on real Windows (no device), then
+  Tasks 2–5 (manifest/UTF-8, executable resources, input/pacing, packaging)
+  and Task 8.
+
 ### October 29, 2026: plan 33 Part A, portability groundwork
 
 - All eleven Part A tasks are done ([plan 33](plans/33-linux-windows-ports.md)
