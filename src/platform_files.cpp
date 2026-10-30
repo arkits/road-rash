@@ -24,8 +24,10 @@ bool rename_with_retry(const fs::path& from, const fs::path& to, std::error_code
 #if defined(_WIN32)
     int delay_ms = 10;
     for (int attempt = 0; attempt < 10; ++attempt) {
-        if (::MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        if (::MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            ec.clear(); // an earlier attempt's error must not survive a successful retry
             return true;
+        }
         const DWORD error = ::GetLastError();
         ec.assign(int(error), std::system_category());
         if (error != ERROR_ACCESS_DENIED && error != ERROR_SHARING_VIOLATION && error != ERROR_LOCK_VIOLATION)
