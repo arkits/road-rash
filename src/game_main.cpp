@@ -64,6 +64,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace {
 const char* const course_names[] = {"NAPA", "CITY", "HIWAY", "CANYN", "MEDLY"};
@@ -905,11 +906,16 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
 
 int main(int argc, char** argv) {
     rr::platform_game_startup(argc, argv); // plan 33b: Windows console attach + log file
-    // --version (plan 33b) is an alias; --console may accompany it on Windows.
-    if ((argc == 2 || (argc == 3 && std::string(argv[2]) == "--console")) &&
-        (std::string(argv[1]) == "--build-info" || std::string(argv[1]) == "--version")) {
-        std::puts(rr::build_info_json);
-        return 0;
+    // --version (plan 33b) is an alias; --console may accompany it, before or
+    // after, on Windows.
+    {
+        std::vector<std::string> rest;
+        for (int i = 1; i < argc; ++i)
+            if (std::string(argv[i]) != "--console") rest.emplace_back(argv[i]);
+        if (rest.size() == 1 && (rest[0] == "--build-info" || rest[0] == "--version")) {
+            std::puts(rr::build_info_json);
+            return 0;
+        }
     }
     std::string root, screenshot, video, net_invite, net_server;
     bool rtc = false;

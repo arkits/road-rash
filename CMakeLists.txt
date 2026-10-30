@@ -166,6 +166,9 @@ else()
         # Plan 33b: also proves a GUI-subsystem rr-game.exe reaches CTest's stdout.
         add_test(NAME game-version COMMAND rr-game --version)
         set_tests_properties(game-version PROPERTIES PASS_REGULAR_EXPRESSION "\"commit\": \"[0-9a-f]+\"")
+        # Plan 33b Task 5: the package verifier's form, --console first.
+        add_test(NAME game-version-console COMMAND rr-game --console --version)
+        set_tests_properties(game-version-console PROPERTIES PASS_REGULAR_EXPRESSION "\"commit\": \"[0-9a-f]+\"" TIMEOUT 60)
         add_test(NAME first-run-smoke COMMAND rr-game --first-run-smoke)
         set_tests_properties(first-run-smoke PROPERTIES ENVIRONMENT "RR_PREF_OVERRIDE=${CMAKE_BINARY_DIR}/first-run-test-pref")
         # Plan 33b Task 2 Step 2: the same first run under a non-ASCII profile path.
