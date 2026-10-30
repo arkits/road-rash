@@ -4,7 +4,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 build_dir=${RR_PACKAGE_BUILD_DIR:-"$root/build-release"}
 cmake -S "$root" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DRR_BUNDLE_SDL=ON
 cmake --build "$build_dir" --parallel
-ctest --test-dir "$build_dir" --output-on-failure --output-junit "$build_dir/package-ctest.xml"
+ctest --test-dir "$build_dir" --output-on-failure --timeout 900 --output-junit "$build_dir/package-ctest.xml"
 # Stamp the commit the bundle was built from (plan 11a Task 4), so the verifier
 # can fail a stale app. The plist is part of the sealed resources, so re-sign.
 app="$build_dir/Road Rash Native.app"
