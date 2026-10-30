@@ -113,22 +113,33 @@ Local supplement (**not** Windows acceptance): `cmake/toolchains/mingw-w64-x86_6
 
 **Files:** Create `windows/rr-game.manifest`, `src/platform_windows.cpp/.hpp`, `tests/platform_windows_test.cpp`. Modify `src/atomic_file.cpp`, `src/importer.cpp`, `src/game_types.cpp`, `CMakeLists.txt`.
 
-- [ ] **Step 1: Manifest.** Set `<activeCodePage>UTF-8</activeCodePage>`, `<dpiAwareness>PerMonitorV2</dpiAwareness>`, `<longPathAware>true</longPathAware>`, and the Windows 10/11 `supportedOS` GUIDs. Embed it in `rr-game.exe` and in every test executable, so tests see the same code page as the game.
-- [ ] **Step 2: Unicode test.** Run `utf8_path_test` (Part A Task A4), plus a full first-run smoke with `RR_PREF_OVERRIDE=%TEMP%\Tëst ディレクトリ`: import a synthetic disc, save settings, save and load a career.
-- [ ] **Step 3: Atomic writes.** Flush with `_commit(_fileno(f))` before rename. If the rename fails with access denied or a sharing violation, retry up to 10 times with 10–200 ms backoff, then fail cleanly and keep the old file. Test it by holding the destination open without `FILE_SHARE_DELETE` in a test thread.
-- [ ] **Step 4: Game data location.** On Windows, `game_directory()` returns `%LOCALAPPDATA%\RoadRashNative\RoadRash\game` (`SHGetKnownFolderPath(FOLDERID_LocalAppData)`, UTF-16 → UTF-8). If an old `%APPDATA%` tree exists and the new one does not, move it once (rename on the same volume, copy and verify otherwise). Saves and settings stay in `%APPDATA%`, where they roam.
-- [ ] **Step 5:** Commit `windows: UTF-8 manifest, retry-safe atomic writes, local game data`.
+- [x] **Step 1: Manifest.** Set `<activeCodePage>UTF-8</activeCodePage>`, `<dpiAwareness>PerMonitorV2</dpiAwareness>`, `<longPathAware>true</longPathAware>`, and the Windows 10/11 `supportedOS` GUIDs. Embed it in `rr-game.exe` and in every test executable, so tests see the same code page as the game.
+- [x] **Step 2: Unicode test.** Run `utf8_path_test` (Part A Task A4), plus a full first-run smoke with `RR_PREF_OVERRIDE=%TEMP%\Tëst ディレクトリ`: import a synthetic disc, save settings, save and load a career.
+- [x] **Step 3: Atomic writes.** Flush with `_commit(_fileno(f))` before rename. If the rename fails with access denied or a sharing violation, retry up to 10 times with 10–200 ms backoff, then fail cleanly and keep the old file. Test it by holding the destination open without `FILE_SHARE_DELETE` in a test thread.
+- [x] **Step 4: Game data location.** On Windows, `game_directory()` returns `%LOCALAPPDATA%\RoadRashNative\RoadRash\game` (`SHGetKnownFolderPath(FOLDERID_LocalAppData)`, UTF-16 → UTF-8). If an old `%APPDATA%` tree exists and the new one does not, move it once (rename on the same volume, copy and verify otherwise). Saves and settings stay in `%APPDATA%`, where they roam.
+- [x] **Step 5:** Commit `windows: UTF-8 manifest, retry-safe atomic writes, local game data`.
+
+**Tasks 2–3 result (October 30, 2026).** Implemented as planned, with these differences:
+- `windows/rr-app.manifest` is embedded through `rr-app.rc` in **every** executable (`cmake/windows.cmake`; MSVC links with `/MANIFEST:NO`).
+- The helpers are `src/platform_files.*` (`rename_with_retry`, `local_data_directory`, `migrate_directory`; portable, with Windows branches) and `src/platform_game.*` (`--console`, log), not one `platform_windows.cpp`.
+- The Step 2 Unicode checks are CTests:
+  - `utf8_path` covers settings save/load and a folder import under `Tëst ディレクトリ`;
+  - `first-run-smoke-unicode` covers a first run there.
+- The icon is the committed `assets/app-icon/roadrash.ico`; the earlier "never committed" text was wrong.
+- `--version` is an alias for `--build-info`, with the CTest `game-version`.
+
+Windows CI caught a real bug in Step 3: a successful retry kept the first attempt's error code, so `write_file_atomic` reported failure. Fixed. Evidence: VERIFICATION.md "Plan 33b Tasks 2–3".
 
 ### Task 3: Game executable and resources
 
 **Files:** Create `windows/rr-game.rc.in`. Modify `CMakeLists.txt`, `src/game_main.cpp`, `src/platform_windows.cpp`, `tools/build_info.py`.
 
-- [ ] **Step 1: No console.** Set `WIN32_EXECUTABLE ON` for `rr-game` only. `SDL_main.h` is already included, so SDL provides `WinMain`. CLI tools and tests stay console programs. `rr-game --console` attaches to the parent console (`AttachConsole(ATTACH_PARENT_PROCESS)`) so `--version`, `--bench` and smoke output print when started from a terminal.
-- [ ] **Step 2: Logging.** `SDL_SetLogOutputFunction` writes to `%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log`, keeping the last 2 runs, as well as `OutputDebugString`. USER_GUIDE tells users to attach this log to bug reports.
-- [ ] **Step 3: Resources.** The icon is the committed `assets/app-icon/roadrash.ico` (the original 16/32/48 px group; owner exception, see its README). `VERSIONINFO` uses the version and commit from `build_info.py`. The `ProductName` is "Road Rash Native".
-- [ ] **Step 4: Window behaviour.** Alt+Enter toggles fullscreen and Alt+F4 quits through the normal quit path (saves flushed). Fullscreen uses SDL3's borderless desktop mode, with `SDL_HINT_WINDOWS_RAW_KEYBOARD` left at the default. Check that the taskbar icon and title match.
-- [ ] **Step 5: Fonts.** Part A Task A8 (`%WINDIR%\Fonts`, bundled fallback). Check that the import screen renders with Segoe UI.
-- [ ] **Step 6:** Commit `windows: GUI subsystem, log file, icon and version resources`.
+- [x] **Step 1: No console.** Set `WIN32_EXECUTABLE ON` for `rr-game` only. `SDL_main.h` is already included, so SDL provides `WinMain`. CLI tools and tests stay console programs. `rr-game --console` attaches to the parent console (`AttachConsole(ATTACH_PARENT_PROCESS)`) so `--version`, `--bench` and smoke output print when started from a terminal.
+- [x] **Step 2: Logging.** `SDL_SetLogOutputFunction` writes to `%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log`, keeping the last 2 runs, as well as `OutputDebugString`. USER_GUIDE tells users to attach this log to bug reports.
+- [x] **Step 3: Resources.** The icon is the committed `assets/app-icon/roadrash.ico` (the original 16/32/48 px group; owner exception, see its README). `VERSIONINFO` uses the version and commit from `build_info.py`. The `ProductName` is "Road Rash Native".
+- [ ] **Step 4: Window behaviour.** *(Code done October 30: Alt+Enter/Cmd+F now also toggle during races (`RaceAction::toggle_fullscreen`); fullscreen is SDL's borderless desktop mode; Alt+F4 posts `SDL_EVENT_QUIT` into the normal quit path. Observing the taskbar icon/title and Alt+F4 on a real desktop is open with Task 8.)* Alt+Enter toggles fullscreen and Alt+F4 quits through the normal quit path (saves flushed). Fullscreen uses SDL3's borderless desktop mode, with `SDL_HINT_WINDOWS_RAW_KEYBOARD` left at the default. Check that the taskbar icon and title match.
+- [x] **Step 5: Fonts.** Part A Task A8 (`%WINDIR%\Fonts`, bundled fallback). Check that the import screen renders with Segoe UI.
+- [x] **Step 6:** Commit `windows: GUI subsystem, log file, icon and version resources`.
 
 ### Task 4: Input, audio and pacing
 
@@ -195,4 +206,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: Task 1 done except the disc run on real Windows (Step 7, blocked: no device); Task 6 Step 1 synthetic part done; Tasks 2–5 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Tasks 1–3 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 4, 5 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

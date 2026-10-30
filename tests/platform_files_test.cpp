@@ -6,6 +6,7 @@
 #include "temp_dir.hpp"
 #include "utf8_path.hpp"
 #include <SDL3/SDL.h>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -67,26 +68,31 @@ int main() {
           "Windows local data is under %LOCALAPPDATA%");
     // A destination held open without FILE_SHARE_DELETE (as scanners do)
     // blocks the replace; a short hold is retried, a long one fails cleanly.
+    // The holder signals once its handle is open, so a slow thread start on a
+    // loaded machine cannot let the write slip in unblocked.
+    std::atomic<bool> opened{false};
     auto hold = [&](const fs::path& p, int ms) {
-        return std::thread([p, ms] {
+        opened = false;
+        std::thread t([p, ms, &opened] {
             HANDLE h = ::CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            opened = true;
             std::this_thread::sleep_for(std::chrono::milliseconds(ms));
             if (h != INVALID_HANDLE_VALUE) ::CloseHandle(h);
         });
+        while (!opened) std::this_thread::yield();
+        return t;
     };
     const fs::path target = root / "settings.txt";
     write_text(target, "old");
     {
         auto t = hold(target, 150);
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
         check(rr::write_file_atomic(target, "short", 5) && read_text(target) == "short",
               "a briefly held destination is replaced after retries");
         t.join();
     }
     {
         auto t = hold(target, 3000);
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
         const bool ok = rr::write_file_atomic(target, "long", 4);
         t.join();
         fs::path tmp = target;
