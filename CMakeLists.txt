@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
 option(RR_BUNDLE_SDL "Build a standalone macOS ARM64 app with pinned static SDL" OFF)
+# Plan 33 Task A7: the pinned SDL source build, statically linked, on any
+# desktop platform (Linux/Windows packages; implied by RR_BUNDLE_SDL).
+option(RR_STATIC_SDL "Link the pinned SDL3 source build statically" OFF)
+if(RR_BUNDLE_SDL)
+    set(RR_STATIC_SDL ON CACHE BOOL "" FORCE)
+endif()
 if(RR_BUNDLE_SDL AND NOT ANDROID)
     set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Standalone application architecture" FORCE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Minimum macOS version" FORCE)
@@ -17,6 +23,14 @@ add_custom_target(rr-build-provenance
 option(RR_DEV_ASSETS "Allow developer-only packaged Android game assets" OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Plan 33 Task A3: identical floating point on every compiler. GCC contracts
+# a*b+c into FMA by default (-ffp-contract=fast), Clang within expressions
+# (on), MSVC not at all; first-party code is compiled with contraction off.
+if(MSVC)
+    add_compile_options(/fp:precise)
+else()
+    add_compile_options(-ffp-contract=off)
+endif()
 option(RR_TSAN "ThreadSanitizer build (separate tree only; never combine with ASan/UBSan)" OFF)
 if(RR_TSAN)
     if(EMSCRIPTEN OR ANDROID)
@@ -42,13 +56,24 @@ endif()
 option(RR_WEB_BROWSER "Build the playable browser application" OFF)
 if(EMSCRIPTEN)
     include(cmake/emscripten.cmake)
-elseif(RR_BUNDLE_SDL)
-    if(NOT APPLE OR ANDROID)
-        message(FATAL_ERROR "RR_BUNDLE_SDL is the standalone macOS build option")
+elseif(RR_STATIC_SDL)
+    if(ANDROID)
+        message(FATAL_ERROR "Android links the SDL AAR (third_party/SDL3-devel-*-android.zip), not RR_STATIC_SDL")
+    endif()
+    if(RR_BUNDLE_SDL AND NOT APPLE)
+        message(FATAL_ERROR "RR_BUNDLE_SDL is the standalone macOS build option; use RR_STATIC_SDL elsewhere")
     endif()
     include(cmake/sdl3_static.cmake)
 else()
-    find_package(SDL3 3.2 REQUIRED CONFIG)
+    # Plan 33 F17: tests and the game assume SDL 3.4 behaviour (3.2's software
+    # renderer fails the input overlay check). Older system SDL (Debian trixie
+    # ships 3.2) falls back to the pinned source build.
+    find_package(SDL3 3.4 CONFIG)
+    if(NOT SDL3_FOUND)
+        message(STATUS "System SDL3 >= 3.4 not found; building the pinned SDL3 (cmake/sdl3_static.cmake)")
+        set(RR_STATIC_SDL ON CACHE BOOL "" FORCE)
+        include(cmake/sdl3_static.cmake)
+    endif()
 endif()
 add_library(rr-resource STATIC src/resource.cpp src/course.cpp src/road.cpp src/assets.cpp src/framebuffer.cpp src/bike.cpp src/race.cpp src/input.cpp src/bob.cpp src/session.cpp src/iso9660.cpp src/sha256.cpp src/importer.cpp src/import_job.cpp src/wav.cpp src/mixer.cpp src/ima_adpcm.cpp src/avi.cpp src/cinepak.cpp src/video_player.cpp src/raster.cpp src/terrain.cpp src/scene.cpp src/polygon.cpp src/texture.cpp src/cel.cpp src/world_renderer.cpp src/render_threads.cpp src/road_panels.cpp src/road_materials.cpp src/exe_tables.cpp src/pe_strings.cpp src/career.cpp src/text.cpp src/settings.cpp src/rri.cpp src/frontend.cpp src/sound.cpp src/explode.cpp src/rider_sprites.cpp src/mmpx.cpp src/upscale_cache.cpp src/atomic_file.cpp src/display.cpp src/native_strings.cpp src/native_screens.cpp src/view_state.cpp src/texture_perspective.cpp src/framebuffer_rgb.cpp src/raster_rgb.cpp src/fog.cpp src/post_chain.cpp src/upscale_import.cpp src/race_actions.cpp src/race_overlay.cpp src/race_helpers.cpp src/game_types.cpp src/race_screen.cpp)
 target_link_libraries(rr-resource PUBLIC SDL3::SDL3 Threads::Threads)
@@ -62,7 +87,7 @@ if(EMSCRIPTEN AND RR_WEB_BROWSER)
         -sEXPORTED_FUNCTIONS=_main,_malloc,_free -lidbfs.js)
 endif()
 
-target_sources(rr-resource PRIVATE src/family.cpp src/terrain_panels.cpp src/building_panels.cpp src/terrain_ground.cpp src/course_scene.cpp src/hud.cpp src/animation.cpp src/actor_animation.cpp src/actor_descriptors.cpp src/actor_render.cpp src/actor_nodes.cpp src/crash.cpp src/police.cpp src/scenery.cpp src/traffic.cpp src/pedestrians.cpp src/race_pedestrians.cpp src/race_schedule.cpp src/race_music.cpp src/race_setup.cpp src/track_ring.cpp src/race_state.cpp src/net/rollback.cpp)
+target_sources(rr-resource PRIVATE src/family.cpp src/terrain_panels.cpp src/building_panels.cpp src/terrain_ground.cpp src/course_scene.cpp src/hud.cpp src/animation.cpp src/actor_animation.cpp src/actor_descriptors.cpp src/actor_render.cpp src/actor_nodes.cpp src/crash.cpp src/police.cpp src/scenery.cpp src/traffic.cpp src/pedestrians.cpp src/race_pedestrians.cpp src/race_schedule.cpp src/race_music.cpp src/race_setup.cpp src/track_ring.cpp src/race_state.cpp src/net/rollback.cpp src/det_math.cpp src/utf8_path.cpp src/system_fonts.cpp)
 set_target_properties(rr-resource PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(rr-resource PUBLIC src)
 target_include_directories(rr-resource SYSTEM PRIVATE third_party)   # plan 30 Task 3: vendor headers out of warnings
@@ -175,6 +200,9 @@ else()
         # 43). See docs/agent-handoffs/l5d-crash-car-20261026.md.
         add_test(NAME agent-tooling COMMAND ${Python3_EXECUTABLE}
             "${CMAKE_SOURCE_DIR}/tests/agent_tooling_test.py")
+        # Plan 33: portability lint (no __int128, total-order sorts, no platform libm, guarded POSIX headers).
+        add_test(NAME portability-lint COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_SOURCE_DIR}/tools/portability_check.py")
         add_custom_target(verify-sim
             COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/verify_sim.py"
                 --mode acceptance --binary "$<TARGET_FILE:oracle-sim-test>"
@@ -290,7 +318,7 @@ else()
             rr_web_hostfs(road-test)
         endif()
         add_test(NAME road-projection COMMAND road-test)
-        foreach(t framebuffer assets bike race race_schedule car_contact frozen_state input bob session golden sha256 iso9660 importer import_job wav mixer ima_adpcm avi cinepak raster view terrain scene polygon texture cel family course course_scene hud animation actor_animation actor_descriptors actor_render actor_nodes crash police scenery building_panels terrain_ground world_renderer road_panels road_materials exe_tables pe_strings career text frontend settings sound music traffic actor_traffic sim_fields mmpx upscale_cache race_setup pedestrian track_ring display native_screens render_threads rgba_cache atomic_file texture_edge check)
+        foreach(t framebuffer assets bike race race_schedule car_contact frozen_state input bob session golden sha256 iso9660 importer import_job wav mixer ima_adpcm avi cinepak raster view terrain scene polygon texture cel family course course_scene hud animation actor_animation actor_descriptors actor_render actor_nodes crash police scenery building_panels terrain_ground world_renderer road_panels road_materials exe_tables pe_strings career text frontend settings sound music traffic actor_traffic sim_fields mmpx upscale_cache race_setup pedestrian track_ring display native_screens render_threads rgba_cache atomic_file texture_edge check det_math fp_contract wide_math importer_case utf8_path system_fonts)
             add_executable(${t}-test tests/${t}_test.cpp)
             target_link_libraries(${t}-test PRIVATE rr-resource SDL3::SDL3)
             if(EMSCRIPTEN)

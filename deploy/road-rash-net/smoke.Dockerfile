@@ -11,6 +11,6 @@ COPY server server
 COPY third_party third_party
 COPY tools tools
 COPY tests tests
-RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DRR_SDL_HEADLESS=ON \
  && cmake --build /build --target net-bots -j2
 ENTRYPOINT ["/build/net-bots"]

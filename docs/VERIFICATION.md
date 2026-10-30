@@ -1,5 +1,54 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33 Part A: portability groundwork (October 29, 2026)
+
+Worktree `port/plan33-part-a` (baseline `c9eb240`). Logs are local in that
+worktree (`ctest-*.log`, `web-*.log`, `gate-package.log`) and in the session
+scratchpad `linux/` directory (Docker runs).
+
+- **macOS ARM64 Debug** (AppleClang, Homebrew SDL 3.4.8, disc present):
+  baseline before the changes 121/121. After Part A, `ctest -j6`: **128/128
+  passed, 0 skipped** (436 s), including the new `wide_math`, `det_math`,
+  `fp_contract`, `importer_case`, `utf8_path`, `system_fonts` and
+  `portability-lint`.
+- **macOS package gate** (`agent_gate.py package`; Release, static SDL
+  **3.4.18**, `verify_macos_app.py`): passed. Release CTest **128/128, 0
+  skipped**. `oracle-sim` remains the pinned known divergence at frame 209.
+  Receipt: `analysis/agent-gates/package-92d2ce0b2de440ca928299824554fd4f/`.
+- **Linux ARM64** (Docker `debian:trixie`, GCC 14.2; distribution SDL 3.2.10
+  rejected, so the pinned 3.4.18 was built with `-DRR_SDL_HEADLESS=ON`): full
+  build passed. `ctest -j4`: 127/128; the one failure was `oracle-sim` with no
+  fixtures, because the worktree's `analysis/oracle` symlink was not mounted.
+  With the fixtures mounted, `ctest -L "sim|disc"` gave **44/44 passed**,
+  including `oracle-sim`, all three `oracle-sim-field*` replays, `race-soak`,
+  `rollback`, `race_state` and `net_client`. The October 29 failures
+  `oracle-actor-record`, `raster-rgb-alloc` and `input` all pass.
+- **Linux desktop configure** (same image plus SDL's X11/Wayland/libdecor/
+  PulseAudio/PipeWire/ALSA/udev/D-Bus dev packages, `-DRR_STATIC_SDL=ON`):
+  configure passed with X11, Wayland, libdecor, PipeWire, PulseAudio and ALSA
+  all ON and dynamically loaded (`*_SHARED` ON). Without the X11 extension
+  headers, SDL 3.4.18 stops at configure (missing XTEST), which is why
+  `RR_SDL_HEADLESS` exists.
+- **Root cause of the old `raster-rgb-alloc` mismatch:** with
+  `-ffp-contract=off` on both hosts, the macOS and Linux frames are identical
+  (`RR_RGB_DUMP`, 0 of 307,200 pixels differ). The old pin
+  `0x861b81d25eb5f7db` was contraction-dependent; the new pin is
+  `0xbab29462f0960895`. Replacing libm alone did not change it, so F16's
+  libm hypothesis was wrong for this test.
+- **det_math:** bit hash `0x2012804f2dd7f3bf` on macOS and Linux. The volume,
+  pan and fog tables equal their pre-change macOS values (`0xd60ac8d951ecfb3`,
+  `0xd97c7fe8650f96e1`, `0x3f1744b8f436f1ec`). Worst error against the host
+  libm is 1 ulp for both exp and log.
+- **wasm32 under Node** (emsdk 6.0.10, SDL 3.4.18): 113 passed, 8 skipped
+  (browser-only SDL devices and network tests that skip under Node), and
+  `net_protocol` failed because the test lacked `rr_web_hostfs` and could not
+  read its vector file. With that fixed (`cmake/net_tests.cmake`), it passes.
+  **`raster-rgb-alloc` now passes under wasm**, closing the "remaining
+  portability difference" in WEB.md. All four `oracle-sim*` replays pass.
+- `tools/portability_check.py`: 0 problems. `tools/doc_checks.py`: OK.
+- Not run: Linux x86-64 full gate, Clang on Linux, sanitizers on Linux, any
+  Windows compile (33b Task 1), Android (SDL AAR unchanged at 3.4.8), devices.
+
 ## Plan 33: first Linux native gate (October 29, 2026)
 
 - Host: Docker `debian:trixie` `--platform linux/arm64` on the Apple-silicon

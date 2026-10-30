@@ -14,6 +14,7 @@
 #include "game_types.hpp"
 #include "lifecycle.hpp"
 #include <SDL3/SDL_main.h>
+#include "utf8_path.hpp"
 #include "assets.hpp"
 #include "bob.hpp"
 #include "framebuffer.hpp"
@@ -320,7 +321,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
              const CliDisplayOverride& cli, const std::string& menu_script, const std::string& net_invite,
              const std::string& net_server, bool rtc, const QuickStart& quick = {}) {
     const std::string pref = rr::pref_directory();
-    const std::string settings_path = (std::filesystem::path(pref) / "settings.txt").string();
+    const std::string settings_path = rr::path_to_utf8(rr::path_from_utf8(pref) / "settings.txt");
     rr::Settings settings = rr::load_settings(settings_path);
     apply_cli_overrides(settings, cli);
     if (!net_server.empty()) settings.net_server = net_server;
@@ -340,7 +341,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
     auto frontend_data = rr::read_frontend_data(exe);
     rr::add_native_screens(frontend_data, rr::kMobileDisplay);
     rr::Frontend fe(assets, text, strings, rr::credit_lines(resources), std::move(frontend_data), tables,
-                    career, settings, (std::filesystem::path(pref) / "saves").string());
+                    career, settings, rr::path_to_utf8(rr::path_from_utf8(pref) / "saves"));
 #ifdef RR_NET_TRANSPORT
     try {
         const auto hello = load_with_indicator(renderer, "Verifying game files...", [&] {
@@ -650,7 +651,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
                 for (size_t i = 0; i < g.race().riders().size(); ++i)
                     if (!g.race().riders()[i].cop && g.race().riders()[i].finished)
                         order.emplace_back(g.race().riders()[i].finish_tick, i);
-                std::sort(order.begin(), order.end());
+                std::sort(order.begin(), order.end()); // total-order: (tick, index)
                 std::vector<rr::Standing> standings;
                 for (const auto& [tick, i] : order)
                     standings.push_back(

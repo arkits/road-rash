@@ -88,7 +88,7 @@ struct FrameBench {
     // `context` is a pre-formatted JSON object body (no braces) describing the run.
     std::string report(const std::string& context) const {
         std::vector<uint64_t> sorted = totals;
-        std::sort(sorted.begin(), sorted.end());
+        std::sort(sorted.begin(), sorted.end()); // total-order: integers
         const auto pct = [&](double q) {
             if (sorted.empty()) return 0.0;
             return double(sorted[std::min(sorted.size() - 1, size_t(q * double(sorted.size() - 1) + 0.5))]) /

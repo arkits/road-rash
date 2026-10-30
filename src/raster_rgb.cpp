@@ -1,9 +1,11 @@
 // Plan 21 Task 4: RGB raster implementation.
 #include "raster_rgb.hpp"
 #include <cstdlib>
+#include "det_math.hpp"
 #include "fog.hpp"
 #include <cstring>
 #include "texture.hpp"
+#include "wide_math.hpp"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -409,7 +411,7 @@ void draw_rgb_quad_nearest_wide(FramebufferRgb& fb, const std::array<TextureVert
     };
     chain(saved_left, -1);
     chain(saved_right, 1);
-    auto floor64 = [](int64_t a) { return a >= 0 ? a / 65536 : int64_t((__int128(a) - 65535) / 65536); };
+    auto floor64 = [](int64_t a) { return floor_q16_i64(a); };
     const int64_t top = std::max<int64_t>({0, vertices[size_t(first)].y, clip.top});
     const int64_t last = std::min<int64_t>({height - 1, bottom, clip.bottom, fb.height() - 1});
     const int64_t bound = std::min<int64_t>(clip.right, fb.width());
@@ -423,7 +425,7 @@ void draw_rgb_quad_nearest_wide(FramebufferRgb& fb, const std::array<TextureVert
         const int64_t length = end - start;
         if (!length || start >= bound) continue;
         const int64_t reciprocal = 65536 / length;
-        auto prod = [&](int64_t d) { return int64_t((__int128(d) * reciprocal) >> 16); };
+        auto prod = [&](int64_t d) { return mul_shr16(d, reciprocal); };
         int64_t du = prod(int64_t(r.u) - l.u), dv = prod(int64_t(r.v) - l.v);
         int64_t cu = l.u, cv = l.v;
         if (start < 0) {
@@ -647,7 +649,7 @@ static void render_nodes_rgb_impl(FramebufferRgb& fb, const std::vector<DrawNode
             // Fractional LOD from the projected size (same choice as mip level).
             const double proj = double(std::max(maxx - minx + 1, maxy - miny + 1));
             const double src = double(std::max(src_w, src_h));
-            const float lod = float(std::max(0.0, std::log2(src / std::max(1.0, proj))));
+            const float lod = float(std::max(0.0, det_log2(src / std::max(1.0, proj))));
             FogState tex_fog{fog_on && (pts[0].fog_q8 | pts[1].fog_q8 | pts[2].fog_q8 | pts[3].fog_q8),
                              fog_colour};
             ResolvedNode rt;

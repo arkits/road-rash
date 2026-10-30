@@ -372,7 +372,7 @@ std::vector<uint32_t> split_nodes(const Course& course) {
         } else
             pending.push_back(node.link);
     }
-    std::sort(splits.begin(), splits.end());
+    std::sort(splits.begin(), splits.end()); // total-order: integers
     return splits;
 }
 

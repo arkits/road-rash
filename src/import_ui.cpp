@@ -1,4 +1,5 @@
 #include "import_ui.hpp"
+#include "system_fonts.hpp"
 #include "importer.hpp"
 #include <algorithm>
 #include <atomic>
@@ -13,34 +14,39 @@
 #include <vector>
 // rr-game has no vendor include path; keep the vendored header's warnings
 // out of strict builds (rr-resource gets the same via SYSTEM includes).
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wshadow"
 #pragma GCC diagnostic ignored "-Wsign-compare"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4244 4245 4267 4456 4457 4505 4701)
+#endif
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
 #include "../third_party/stb_truetype.h"
+#if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 namespace rr {
 namespace {
 // The disc's own fonts are unavailable before import, so this screen uses a
-// system face (Futura on macOS, like the original) and falls back to SDL's
-// debug font when none loads.
+// system face (Futura on macOS, like the original; see system_fonts.cpp) and
+// falls back to SDL's debug font only when no candidate loads.
 struct SystemFont {
     std::vector<uint8_t> bytes;
     stbtt_fontinfo info{};
     bool ok = false;
 };
-struct FontCandidate {
-    const char* path;
-    int index;
-};
-SystemFont load_font(std::initializer_list<FontCandidate> candidates) {
+SystemFont load_font(const std::vector<FontCandidate>& candidates) {
     SystemFont font;
     for (const auto& c : candidates) {
         size_t size = 0;
-        void* data = SDL_LoadFile(c.path, &size);
+        void* data = SDL_LoadFile(c.path.c_str(), &size);
         if (!data) continue;
         font.bytes.assign(static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size);
         SDL_free(data);
@@ -56,28 +62,9 @@ SystemFont load_font(std::initializer_list<FontCandidate> candidates) {
 struct Fonts {
     SystemFont title, bold, body;
     Fonts()
-#if defined(__APPLE__)
-        : title(load_font({{"/System/Library/Fonts/Supplemental/Futura.ttc", 4}})),
-          bold(load_font({{"/System/Library/Fonts/Supplemental/Futura.ttc", 2}})),
-          body(load_font({{"/System/Library/Fonts/Supplemental/Futura.ttc", 0}}))
-#elif defined(__ANDROID__)
-        : title(load_font({{"/system/fonts/Roboto-Black.ttf", 0}, {"/system/fonts/Roboto-Regular.ttf", 0}})),
-          bold(load_font({{"/system/fonts/Roboto-Bold.ttf", 0}, {"/system/fonts/Roboto-Regular.ttf", 0}})),
-          body(load_font({{"/system/fonts/Roboto-Regular.ttf", 0}}))
-#elif defined(_WIN32)
-        : title(load_font({{"C:/Windows/Fonts/seguibl.ttf", 0}, {"C:/Windows/Fonts/segoeuib.ttf", 0}})),
-          bold(load_font({{"C:/Windows/Fonts/segoeuib.ttf", 0}})),
-          body(load_font({{"C:/Windows/Fonts/segoeui.ttf", 0}}))
-#else
-        : title(load_font({{"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0},
-                           {"/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 0}})),
-          bold(load_font({{"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0},
-                          {"/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 0}})),
-          body(load_font({{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0},
-                          {"/usr/share/fonts/TTF/DejaVuSans.ttf", 0}}))
-#endif
-    {
-    }
+        : title(load_font(system_font_candidates(FontWeight::title))),
+          bold(load_font(system_font_candidates(FontWeight::bold))),
+          body(load_font(system_font_candidates(FontWeight::body))) {}
 };
 // Anti-aliased white text rasterized at output resolution, tinted when drawn.
 class TextCache {

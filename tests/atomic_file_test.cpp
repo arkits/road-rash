@@ -4,7 +4,7 @@
 #include <iostream>
 #include <iterator>
 #include <string>
-#include <unistd.h>
+#include "temp_dir.hpp"
 namespace fs = std::filesystem;
 static std::string slurp(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
@@ -19,7 +19,7 @@ int main() {
             std::cerr << "FAIL " << what << '\n';
         }
     };
-    const fs::path dir = fs::temp_directory_path() / ("rr-atomic-" + std::to_string(::getpid()));
+    const fs::path dir = fs::temp_directory_path() / ("rr-atomic-" + rr::test::process_tag());
     fs::remove_all(dir);
     fs::create_directories(dir);
     const fs::path f = dir / "save.RRS";

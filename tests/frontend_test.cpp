@@ -13,7 +13,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
-#include <unistd.h>
+#include "temp_dir.hpp"
 
 using namespace rr;
 
@@ -187,7 +187,7 @@ int main(int argc, char** argv) {
     check(data.restroom_patterns[1] == "YNNYYYYN", "restroom pattern");
     const auto strings = frontend_strings(read_string_resources(assets.read("TEXT/ENU.DLL")));
     const std::string saves =
-        (std::filesystem::temp_directory_path() / ("rr-frontend-test-saves-" + std::to_string(::getpid())))
+        (std::filesystem::temp_directory_path() / ("rr-frontend-test-saves-" + rr::test::process_tag()))
             .string();
     std::filesystem::remove_all(saves);
     Career career;

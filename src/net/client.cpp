@@ -64,7 +64,7 @@ void Client::receive(const Message& m, uint64_t now) {
         samples_.push_back(rtt);
         if (samples_.size() > 64) samples_.pop_front();
         auto ordered = std::vector<double>(samples_.begin(), samples_.end());
-        std::sort(ordered.begin(), ordered.end());
+        std::sort(ordered.begin(), ordered.end()); // total-order: finite RTT samples
         stats_.jitter_ms = (ordered[(ordered.size() - 1) * 95 / 100] - ordered.front()) / 2;
         stats_.lead =
             std::clamp(int(std::ceil((stats_.rtt_ms / 2 + stats_.jitter_ms) * .06)) + 1, 1, window_);

@@ -146,7 +146,7 @@ RR_WEB_ISO=/absolute/path/to/disc.iso node tests/web_browser_smoke.cjs
 vercel deploy --prebuilt --yes
 ```
 
-The build uses the already installed/pinned emsdk 6.0.10 and SDL 3.4.8. It
+The build uses the already installed/pinned emsdk 6.0.10 and the pinned SDL (3.4.18 since plan 33 Task A7; the browser smoke passed on it October 29). It
 stages Vercel Build Output API files under `.vercel/output/`. Deploy **prebuilt**:
 the remote builder does not have the local emsdk. `RR_WEB_BUILD_DIR` selects a
 private build tree and `RR_BUILD_JOBS` controls parallelism.
@@ -165,11 +165,11 @@ referrer and content-security policies. No game data enters the upload.
   `mixer-device` require browser SDL devices and skip 77 under Node. The large
   PCH terrain oracle needs a 4 GiB Node-test memory ceiling (2 GiB caused
   `std::bad_alloc`); the browser retains its default memory ceiling.
-- `raster-rgb-alloc` still differs from its native pre-change checksum in the
-  optional full-colour enhancement. Its allocation and frame-stability checks
-  pass. The golden has **not** been changed and full enhanced-pixel parity is
-  **not** claimed. Original indexed rendering, hires fixtures and simulation
-  oracle checks pass. This portability difference remains open.
+- `raster-rgb-alloc`: **resolved October 29, 2026 (plan 33 Task A3).** The old
+  native pin had been taken with AppleClang fusing multiply-adds. With
+  floating-point contraction off on every compiler, wasm, macOS ARM64 and
+  Linux ARM64 all produce the new pin `0xbab29462f0960895` (VERIFICATION.md
+  "Plan 33 Part A").
 - Local Chromium/Playwright covers folder and ISO import, malformed ISO,
   cancellation, quota failure, disc/save reload, five courses, keyboard driving,
   nonzero audio output under normal autoplay policy, pause, the visibility
@@ -195,7 +195,7 @@ referrer and content-security policies. No game data enters the upload.
 - **Node v24.19.0** bundled with the emsdk
   (`.tools/emsdk/node/24.19.0_64bit/bin/node`); the system Node (v25.8.1)
   is not used. `CMAKE_CROSSCOMPILING_EMULATOR` points at the bundled Node.
-- **SDL 3.4.8**, the same pinned release archive and SHA-256 as the macOS
+- **SDL 3.4.8** (3.4.18 since October 29, plan 33 Task A7), the same pinned release archive and SHA-256 as the macOS
   bundle build (`cmake/sdl3_static.cmake`, reused verbatim). Emscripten
   backend drivers detected at configure time: video `dummy emscripten
   offscreen`, render `ogl_es2`, audio `disk dummy emscripten`, joystick

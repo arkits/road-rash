@@ -12,7 +12,7 @@ Generated from `agent-status.json`. Historical entries describe their own checkp
 | Android | Native asset-free APK build | Hardware validation remains unverified; Device import/render/input/lifecycle/performance | [14-android-port.md](plans/14-android-port.md), [VERIFICATION.md](VERIFICATION.md) |
 | Packaging | Source/commit/config/compiler stamp and manifest check | Current package receipt below if run; Owner signing/release acceptance | [USER_GUIDE.md](USER_GUIDE.md), [15-release-and-acceptance.md](plans/15-release-and-acceptance.md) |
 | Agent tooling | Canonical instructions, claims, gates, capture validation, evidence index | Tooling regression suite; receipts below; Clients must honor claims; direct unmanaged commands bypass them | [AGENT_TOOLING.md](AGENT_TOOLING.md), [REVIEW.md](agent-review/REVIEW.md) |
-| Linux/Windows | Not started | No builds yet; Builds, packaging, CI and acceptance on both | [33-linux-windows-ports.md](plans/33-linux-windows-ports.md) |
+| Linux/Windows | Plan 33 Part A portability groundwork done (portable 128-bit math, FP contraction off, deterministic libm, total-order sorts, UTF-8 paths, case-insensitive folder import, static SDL 3.4.18, font discovery, host-neutral tools) | Linux ARM64 (Debian trixie, GCC 14, Docker): full suite builds; 127/128 plus sim/disc 44/44 with fixtures; macOS and Linux render identical enhanced frames; no Windows compile yet; 33a Linux x86-64/Clang gate, packages, Steam Deck; 33b MSVC build, packages; CI and hardware acceptance on both | [33-linux-windows-ports.md](plans/33-linux-windows-ports.md) |
 
 ## Latest gate receipts
 

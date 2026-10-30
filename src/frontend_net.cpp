@@ -1,6 +1,7 @@
 #include "frontend.hpp"
 #include "native_screens.hpp"
 #include "native_strings.hpp"
+#include "utf8_path.hpp"
 #include <algorithm>
 #include <filesystem>
 
@@ -132,8 +133,7 @@ void Frontend::net_update() {
         if (settings_.net_room != code || settings_.net_seat != token) {
             settings_.net_room = code;
             settings_.net_seat = token;
-            save_settings((std::filesystem::path(save_dir_).parent_path() / "settings.txt").string(),
-                          settings_);
+            save_settings(path_to_utf8(path_from_utf8(save_dir_).parent_path() / "settings.txt"), settings_);
         }
         if (net_connecting_) {
             net_close_connecting();
@@ -211,8 +211,7 @@ bool Frontend::net_edit_input(const MenuInput& in) {
             show_dialog(str(ns::net_connecting), 4, {{204, 0}});
         } else {
             settings_.net_chat = chat_messages_;
-            save_settings((std::filesystem::path(save_dir_).parent_path() / "settings.txt").string(),
-                          settings_);
+            save_settings(path_to_utf8(path_from_utf8(save_dir_).parent_path() / "settings.txt"), settings_);
             editing_chat_ = -1;
             for (size_t i = 0; i < 8; ++i)
                 strings_[1056 + i] = "F" + std::to_string(i + 1) + " " + chat_messages_[i];

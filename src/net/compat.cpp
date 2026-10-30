@@ -87,7 +87,7 @@ uint64_t self_test_hash() {
 
 DataDigest digest_from_table(const std::vector<std::pair<std::string, std::string>>& rows) {
     auto sorted = rows;
-    std::sort(sorted.begin(), sorted.end());
+    std::sort(sorted.begin(), sorted.end()); // total-order: string pairs
     std::string buf;
     for (const auto& [path, sha] : sorted) {
         buf += path + '\n';

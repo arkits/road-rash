@@ -1,4 +1,4 @@
-# WebAssembly build (plan 23, Task 1): Emscripten + SDL 3.4.8.
+# WebAssembly build (plan 23, Task 1): Emscripten + the pinned SDL (3.4.18 since plan 33 Task A7).
 #
 # Included from the top-level CMakeLists when EMSCRIPTEN is set (i.e. the
 # project is configured through emcmake). SDL comes from the same pinned

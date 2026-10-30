@@ -6,17 +6,22 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
-LLVM_BIN=/opt/homebrew/opt/llvm/bin
+# Plan 33 Task A9: Homebrew LLVM on macOS, otherwise $LLVM_BIN or the clang on PATH.
+if [ -z "${LLVM_BIN:-}" ]; then
+    if [ -x /opt/homebrew/opt/llvm/bin/clang++ ]; then LLVM_BIN=/opt/homebrew/opt/llvm/bin
+    elif command -v clang++ >/dev/null 2>&1; then LLVM_BIN=$(dirname "$(command -v clang++)")
+    else LLVM_BIN=/opt/homebrew/opt/llvm/bin; fi
+fi
 build_dir=${RR_TSAN_BUILD_DIR:-"$root/build-tsan"}
 if [ ! -x "$LLVM_BIN/clang++" ]; then
-    echo "tsan.sh: Homebrew LLVM missing ($LLVM_BIN/clang++); install with 'brew install llvm'" >&2
+    echo "tsan.sh: LLVM clang++ missing ($LLVM_BIN/clang++); install LLVM or set LLVM_BIN" >&2
     exit 77
 fi
 cmake -S . -B "$build_dir" -DRR_TSAN=ON -DRR_BUNDLE_SDL=OFF \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_C_COMPILER="$LLVM_BIN/clang" \
     -DCMAKE_CXX_COMPILER="$LLVM_BIN/clang++"
-cmake --build "$build_dir" --parallel "${RR_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
+cmake --build "$build_dir" --parallel "${RR_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 export TSAN_OPTIONS=${TSAN_OPTIONS:-"halt_on_error=1:second_deadlock_stack=1"}
 # Race-relevant suites: tests that exercise threads/audio/import lifecycle.
 ctest --test-dir "$build_dir" --output-on-failure \

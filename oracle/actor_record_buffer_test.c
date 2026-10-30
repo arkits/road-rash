@@ -40,7 +40,7 @@ static void mock_select(uint32_t bike, int ctx) {
     *(uint32_t*)(memory + 0xa8) = 0x12345678;
 }
 static void mock_billboard(int* p1, unsigned* p2, int size, int lateral, int ground, unsigned pos,
-                           char clip) {
+                           signed char clip) {
     assert(p1 == expected_p1 && p2 == expected_p2);
     assert(size == 17 && lateral == -23 && ground == -41);
     assert(pos == 0xfedcba98u && clip == -7);

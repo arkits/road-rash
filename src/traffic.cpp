@@ -59,8 +59,11 @@ VehicleLibrary::VehicleLibrary(const std::vector<uint8_t>& container, const std:
     if (anims.empty() && cans.empty()) throw std::runtime_error("No vehicle resources in CARS container");
     // 0x004465f0: vehicle i uses 'ANIM' i+1; the loop stops at the first
     // missing animation, and that index becomes the vehicle count DAT_00474d88.
-    std::sort(anims.begin(), anims.end(), [](const Resource* a, const Resource* b) { return a->id < b->id; });
-    std::sort(cans.begin(), cans.end(), [](const Resource* a, const Resource* b) { return a->id < b->id; });
+    // total-order: stable, so a duplicated id keeps container order.
+    std::stable_sort(anims.begin(), anims.end(),
+                     [](const Resource* a, const Resource* b) { return a->id < b->id; });
+    std::stable_sort(cans.begin(), cans.end(),
+                     [](const Resource* a, const Resource* b) { return a->id < b->id; });
     std::vector<uint8_t> inherited_cans;
     for (size_t i = 0; i < anims.size(); ++i) {
         if (anims[i]->id != i + 1) break; // FUN_004153a0('MINA', i+1) miss ends the loop
@@ -1133,8 +1136,9 @@ std::vector<DrawNode> traffic_draw_nodes(const TrafficSystem& system, const std:
                  wrap(int64_t(wrap(int64_t(b.road[own_b].world_y) - a.road[own_a].world_y) * fraction) >> 8));
         visible.push_back({&car, depth, road_x, world_y});
     }
-    std::sort(visible.begin(), visible.end(),
-              [](const Visible& x, const Visible& y) { return x.depth > y.depth; });
+    // total-order: stable, so cars at equal depth keep pool order on every standard library.
+    std::stable_sort(visible.begin(), visible.end(),
+                     [](const Visible& x, const Visible& y) { return x.depth > y.depth; });
     for (const auto& v : visible) {
         const auto& vehicle = system.library().vehicles().at(v.car->vehicle);
         if (vehicle.animation.frames.empty()) continue;

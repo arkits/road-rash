@@ -7,6 +7,8 @@
 #include "render_threads.hpp"
 #include "settings.hpp"
 #include "view.hpp"
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 
 namespace {
@@ -54,8 +56,17 @@ int main() {
         check(n == 0, "zero allocations on second frame");
     }
     check(checksum_rgb(fb) == first, "checksum stable across frames");
-    // Pre-change checksum (merge-base 524af8b run): pins no pixel change.
-    check(checksum_rgb(fb) == 0x861b81d25eb5f7dbULL, "matches pre-change checksum");
+    if (const char* dump = std::getenv("RR_RGB_DUMP")) { // diagnostic: raw 0xXXRRGGBB rows
+        if (FILE* f = std::fopen(dump, "wb")) {
+            for (int y = 0; y < fb.height(); ++y) std::fwrite(fb.row(y), 4, size_t(fb.width()), f);
+            std::fclose(f);
+        }
+    }
+    // Pins no pixel change. Plan 33 Task A3 (October 29, 2026): the original pin
+    // 0x861b81d25eb5f7db (merge-base 524af8b) was taken with AppleClang fusing
+    // a*b+c into FMA; with contraction off on every compiler macOS ARM64 and
+    // Linux ARM64 (GCC 14) render identical frames with this checksum.
+    check(checksum_rgb(fb) == 0xbab29462f0960895ULL, "matches pre-change checksum");
     if (failures == 0) std::cout << "raster_rgb_alloc OK\n";
     return failures ? 1 : 0;
 }

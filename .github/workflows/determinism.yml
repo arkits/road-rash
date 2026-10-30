@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and compare
         run: |
-          cmake -S . -B build-det -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF
+          cmake -S . -B build-det -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF -DRR_SDL_HEADLESS=ON
           cmake --build build-det --target rr-determinism --parallel
           build-det/rr-determinism --synthetic > linux-synthetic.txt
           diff linux-synthetic.txt tests/data/determinism_synthetic.txt

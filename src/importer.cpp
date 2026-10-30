@@ -2,10 +2,14 @@
 #include "import_job.hpp"
 #include "iso9660.hpp"
 #include "sha256.hpp"
+#include "utf8_path.hpp"
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -20,26 +24,74 @@ struct CloseIO {
 using IO = std::unique_ptr<SDL_IOStream, CloseIO>;
 void validate_path(const std::string& path) {
     if (path.empty() || path.find('\\') != std::string::npos || path.find('\0') != std::string::npos ||
-        fs::path(path).is_absolute())
+        path_from_utf8(path).is_absolute())
         throw std::runtime_error("Invalid import reference path");
     if (path == ".rr-import" || path == ".rr-source.iso")
         throw std::runtime_error("Reserved import metadata path");
-    for (const auto& part : fs::path(path))
+    for (const auto& part : path_from_utf8(path))
         if (part == ".." || part == "." || part.empty())
             throw std::runtime_error("Import reference escapes destination");
     // (The ImportJob constructor re-validates the table with the same rules.)
 }
 std::vector<uint8_t> load_file(const fs::path& path) {
-    IO io(SDL_IOFromFile(path.string().c_str(), "rb"));
-    if (!io) throw std::runtime_error("Cannot open source file: " + path.string());
+    IO io(SDL_IOFromFile(path_to_utf8(path).c_str(), "rb"));
+    if (!io) throw std::runtime_error("Cannot open source file: " + path_to_utf8(path));
     const Sint64 size = SDL_GetIOSize(io.get());
     if (size < 0 || size > 256 * 1024 * 1024)
-        throw std::runtime_error("Invalid source file size: " + path.string());
+        throw std::runtime_error("Invalid source file size: " + path_to_utf8(path));
     std::vector<uint8_t> result(static_cast<size_t>(size));
     if (SDL_ReadIO(io.get(), result.data(), result.size()) != result.size())
-        throw std::runtime_error("Truncated source file: " + path.string());
+        throw std::runtime_error("Truncated source file: " + path_to_utf8(path));
     return result;
 }
+// Plan 33 Task A5: disc folders are found case-insensitively. The Linux
+// iso9660 driver lowercases plain ISO9660 names by default (map=normal), and a
+// copied disc may use any case; the ISO path already compares upper-case.
+// Two directory entries that differ only in case are ambiguous and reported,
+// never guessed between.
+class CaseResolver {
+  public:
+    explicit CaseResolver(fs::path root) : root_(std::move(root)) {}
+    // root/relative with each component matched case-insensitively; a
+    // component that is not found is kept as written (reported as missing).
+    fs::path resolve(const std::string& relative) {
+        fs::path at = root_;
+        for (const auto& part : path_from_utf8(relative)) {
+            const auto& entries = listing(at);
+            const auto found = entries.find(upper(path_to_utf8(part)));
+            if (found == entries.end()) {
+                at /= part;
+                continue;
+            }
+            if (found->second.size() > 1)
+                throw std::runtime_error("Ambiguous disc folder: " + path_to_utf8(found->second[0]) +
+                                         " and " + path_to_utf8(found->second[1]) + " differ only in case");
+            at /= found->second[0];
+        }
+        return at;
+    }
+
+  private:
+    static std::string upper(std::string s) {
+        for (auto& c : s) c = char(std::toupper(static_cast<unsigned char>(c)));
+        return s;
+    }
+    const std::map<std::string, std::vector<fs::path>>& listing(const fs::path& directory) {
+        auto [it, inserted] = listings_.try_emplace(directory);
+        if (inserted) {
+            std::error_code error;
+            for (fs::directory_iterator entry(directory, error), end; !error && entry != end;
+                 entry.increment(error)) {
+                const fs::path name = entry->path().filename();
+                it->second[upper(path_to_utf8(name))].push_back(name);
+            }
+            for (auto& [key, names] : it->second) std::sort(names.begin(), names.end()); // total-order: path
+        }
+        return it->second;
+    }
+    fs::path root_;
+    std::map<fs::path, std::map<std::string, std::vector<fs::path>>> listings_;
+};
 // ImportSink writing verified files into the staging directory. commit()
 // writes the marker and renames staging to the destination, exactly as the
 // former blocking import_game did; abort() removes the staging tree.
@@ -100,10 +152,10 @@ const std::vector<ReferenceHash>& reference_hashes() {
 }
 std::string data_root() {
     if (const char* override_path = SDL_getenv("RR_PREF_OVERRIDE"))
-        return (fs::path(override_path) / "game" / "ROADRASH").string();
+        return path_to_utf8(path_from_utf8(override_path) / "game" / "ROADRASH");
     char* pref = SDL_GetPrefPath("RoadRashNative", "RoadRash");
     if (!pref) throw std::runtime_error(SDL_GetError());
-    const std::string result = (fs::path(pref) / "game" / "ROADRASH").string();
+    const std::string result = path_to_utf8(path_from_utf8(pref) / "game" / "ROADRASH");
     SDL_free(pref);
     return result;
 }
@@ -141,9 +193,13 @@ ImportResult import_game(const std::string& source, const std::string& dest,
         }
         if (staging.empty()) throw std::runtime_error("Cannot create import staging directory");
         std::error_code source_error;
-        const bool folder = fs::is_directory(source, source_error);
-        fs::path source_root(source);
-        if (folder && fs::is_directory(source_root / "ROADRASH")) source_root /= "ROADRASH";
+        const bool folder = fs::is_directory(path_from_utf8(source), source_error);
+        fs::path source_root = path_from_utf8(source);
+        if (folder) {
+            const fs::path nested = CaseResolver(source_root).resolve("ROADRASH");
+            if (fs::is_directory(nested, source_error)) source_root = nested;
+        }
+        CaseResolver disc(source_root);
         IO iso_io;
         if (!folder) {
             iso_io.reset(SDL_IOFromFile(source.c_str(), "rb"));
@@ -174,7 +230,7 @@ ImportResult import_game(const std::string& source, const std::string& dest,
                 }
                 stream.close();
                 if (!stream) throw std::runtime_error("Cannot finish disc image cache");
-                iso_io.reset(SDL_IOFromFile(cache.string().c_str(), "rb"));
+                iso_io.reset(SDL_IOFromFile(path_to_utf8(cache).c_str(), "rb"));
                 if (!iso_io) throw std::runtime_error("Cannot reopen cached disc image");
             }
         }
@@ -190,7 +246,7 @@ ImportResult import_game(const std::string& source, const std::string& dest,
                 if (progress) progress(job.progress());
                 if (auto file = job.need_file()) {
                     try {
-                        const auto bytes = load_file(source_root / *file);
+                        const auto bytes = load_file(disc.resolve(*file));
                         job.supply(bytes.data(), bytes.size());
                     } catch (const std::exception& e) {
                         job.missing_file(e.what());

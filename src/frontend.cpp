@@ -1,4 +1,5 @@
 #include "atomic_file.hpp"
+#include "utf8_path.hpp"
 #include <cstdlib>
 #include "frontend.hpp"
 #include "byte_reader.hpp"
@@ -1084,7 +1085,7 @@ std::string Frontend::native_value_text(int caption) const {
 void Frontend::apply_native_setting() {
     // Persist beside the saves directory (sibling settings.txt, as run_game lays out)
     // and ask the host to re-apply the display live.
-    const std::string path = (std::filesystem::path(save_dir_).parent_path() / "settings.txt").string();
+    const std::string path = path_to_utf8(path_from_utf8(save_dir_).parent_path() / "settings.txt");
     save_settings(path, settings_);
     events_.push_back({FrontendEvent::Kind::apply_display, {}, 0});
     // Popups close before applying the value; refresh the restored row's help
@@ -1198,7 +1199,7 @@ void Frontend::apply_mixer_setting() {
     // Same persistence as display settings; the host re-applies channel levels live.
     // No preview click: the original dlgproc plays no wave on change either (test
     // button 0xBC1 only re-posts the live-apply message, which this event is).
-    const std::string path = (std::filesystem::path(save_dir_).parent_path() / "settings.txt").string();
+    const std::string path = path_to_utf8(path_from_utf8(save_dir_).parent_path() / "settings.txt");
     save_settings(path, settings_);
     events_.push_back({FrontendEvent::Kind::apply_mixer, {}, 0});
 }
@@ -1289,7 +1290,7 @@ void Frontend::save_new() {
     const std::string base = c >= 1 && c <= 8 ? character_files[c - 1] : "Player";
     for (int n = 1; n < 1000; ++n) {
         const std::string path =
-            (std::filesystem::path(save_dir_) / (base + " " + std::to_string(n) + ".RRS")).string();
+            path_to_utf8(path_from_utf8(save_dir_) / (base + " " + std::to_string(n) + ".RRS"));
         if (!std::filesystem::exists(path)) {
             save_file_ = path;
             break;
@@ -1308,7 +1309,10 @@ void Frontend::open_load_list() {
         if (e.is_regular_file(ec) && ext == ".RRS")
             files.emplace_back(e.last_write_time(ec), e.path().string());
     }
-    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    // total-order: newest first, equal times by name.
+    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
     if (files.size() > 8) files.resize(8);
     if (files.empty()) {
         show_dialog(format_c(str(368), {A(save_dir_)}), dialog_message, {{205, 0}});

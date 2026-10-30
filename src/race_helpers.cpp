@@ -258,7 +258,9 @@ void draw_opponents(SDL_Renderer* r, const rr::Game& g, SpriteCache& cache,
                                              : riding_frame(rd.bike);
         items.push_back({a.depth, xa + (xb - xa) * f, ya + (yb - ya) * f, scale, frame, rd.colour});
     }
-    std::sort(items.begin(), items.end(), [](const Item& p, const Item& q) { return p.depth > q.depth; });
+    // total-order: stable, so equal depths keep rider order on every standard library.
+    std::stable_sort(items.begin(), items.end(),
+                     [](const Item& p, const Item& q) { return p.depth > q.depth; });
     const SDL_Rect clip{0, 0, 640, 480};
     SDL_SetRenderClipRect(r, &clip);
     for (const auto& it : items) {

@@ -39,7 +39,9 @@ def run_gate(args):
     elif args.profile == 'package':
         resources = [build]
     env = dict(os.environ)
-    env.setdefault('JAVA_HOME', '/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home')
+    homebrew_java = Path('/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home')
+    if homebrew_java.is_dir():  # plan 33 A9: only where it exists (other hosts use their JAVA_HOME)
+        env.setdefault('JAVA_HOME', str(homebrew_java))
     try:
         with claims.hold(args.session, resources):
             commands = []

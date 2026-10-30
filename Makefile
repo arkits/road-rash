@@ -7,8 +7,9 @@ BUILD_TYPE ?= Debug
 ASSETS     ?= ../cdrom/ROADRASH
 COURSE     ?=
 BIKE       ?=
-JOBS       ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
-JAVA_HOME  ?= /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+JOBS       ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+# Homebrew JDK when present; other hosts keep their own JAVA_HOME (plan 33 A9).
+JAVA_HOME  ?= $(wildcard /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home)
 
 .PHONY: help all configure build run run-first viewer video test test-fast test-sim corpus smoke \
         import app apk apk-release decompile inventory ci clean distclean \

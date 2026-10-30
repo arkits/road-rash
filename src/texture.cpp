@@ -1,4 +1,5 @@
 #include "texture.hpp"
+#include "wide_math.hpp"
 #include <stdexcept>
 namespace rr {
 void texture_span(uint8_t* destination, size_t count, const std::vector<uint8_t>& pixels, unsigned shift,
@@ -136,7 +137,7 @@ void draw_textured_quad(Framebuffer& fb, const std::array<TextureVertex, 4>& ver
 }
 namespace {
 int64_t floor_q16_64(int64_t a) {
-    return a >= 0 ? a / 65536 : int64_t((__int128(a) - 65535) / 65536);
+    return floor_q16_i64(a);
 }
 constexpr int64_t empty_edge_value() {
     return int64_t(INT32_MIN) * 65536 * 4;
@@ -158,7 +159,7 @@ void texture_edge_wide_vec(std::vector<TextureEdge64>& rows, const TextureVertex
     if (!dy || to.y < from.y) return;
     for (int64_t y = 0; y < height; ++y) rows[size_t(y)] = {empty_edge_value(), 0, 0};
     const int64_t reciprocal = int64_t(0x100000000LL) / dy;
-    auto prod = [&](int64_t a) { return int64_t((__int128(a) * reciprocal) >> 16); };
+    auto prod = [&](int64_t a) { return mul_shr16(a, reciprocal); };
     int64_t ax = int64_t(from.x) << 16, au = int64_t(from.u) << 16, av = int64_t(from.v) << 16;
     const int64_t sx = prod((int64_t(to.x) - from.x) << 16);
     const int64_t su = prod((int64_t(to.u) - from.u) << 16);
@@ -183,7 +184,7 @@ void texture_edge_wide(RasterScratch64& scratch, const TextureVertexWide& from, 
     if (!dy || to.y < from.y) return;
     for (int64_t y = 0; y < height; ++y) scratch.rows[size_t(y)] = {empty_edge_value(), 0, 0};
     const int64_t reciprocal = int64_t(0x100000000LL) / dy;
-    auto prod = [&](int64_t a) { return int64_t((__int128(a) * reciprocal) >> 16); };
+    auto prod = [&](int64_t a) { return mul_shr16(a, reciprocal); };
     int64_t ax = int64_t(from.x) << 16, au = int64_t(from.u) << 16, av = int64_t(from.v) << 16;
     const int64_t sx = prod((int64_t(to.x) - from.x) << 16);
     const int64_t su = prod((int64_t(to.u) - from.u) << 16);
@@ -285,7 +286,7 @@ void draw_textured_quad_wide(Framebuffer& fb, const std::array<TextureVertexWide
         int64_t start = floor_q16_64(l.x), end = floor_q16_64(r.x), length = end - start;
         if (!length || start >= bound) continue;
         const int64_t reciprocal = 65536 / length;
-        auto prod = [&](int64_t d) { return int64_t((__int128(d) * reciprocal) >> 16); };
+        auto prod = [&](int64_t d) { return mul_shr16(d, reciprocal); };
         int64_t du = prod(int64_t(r.u) - l.u), dv = prod(int64_t(r.v) - l.v);
         int64_t cu = l.u, cv = l.v;
         if (start < 0) {

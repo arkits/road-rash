@@ -58,10 +58,16 @@ if [ "$SEED_FROM_DISC" = 1 ]; then
     echo "fuzz: disc seeds copied (fuzz_iso/fuzz_save/fuzz_settings/fuzz_unpack have no disc source)"
 fi
 
-CC_BIN="/opt/homebrew/opt/llvm/bin/clang"
-CXX_BIN="/opt/homebrew/opt/llvm/bin/clang++"
+# Plan 33 Task A9: Homebrew LLVM on macOS, otherwise $LLVM_BIN or the clang on PATH.
+if [ -z "${LLVM_BIN:-}" ]; then
+    if [ -x /opt/homebrew/opt/llvm/bin/clang++ ]; then LLVM_BIN=/opt/homebrew/opt/llvm/bin
+    elif command -v clang++ >/dev/null 2>&1; then LLVM_BIN=$(dirname "$(command -v clang++)")
+    else LLVM_BIN=/opt/homebrew/opt/llvm/bin; fi
+fi
+CC_BIN="$LLVM_BIN/clang"
+CXX_BIN="$LLVM_BIN/clang++"
 if [ ! -x "$CXX_BIN" ]; then
-    echo "fuzz: Homebrew LLVM clang++ missing at $CXX_BIN; install it with \`brew install llvm\`" >&2
+    echo "fuzz: LLVM clang++ missing at $CXX_BIN; install LLVM (\`brew install llvm\` on macOS) or set LLVM_BIN" >&2
     exit 1
 fi
 mkdir -p "$LOCAL"

@@ -12,7 +12,7 @@
 #endif
 #ifndef RR_ACTOR_BILLBOARD_ORIGINAL
 #define RR_ACTOR_BILLBOARD_ORIGINAL                                                                          \
-    ((void(__fastcall*)(int*, unsigned*, int, int, int, unsigned, char))0x0044ba40)
+    ((void(__fastcall*)(int*, unsigned*, int, int, int, unsigned, signed char))0x0044ba40)
 #endif
 static struct {
     uint32_t bike, ctx, desc[5], a8, b0, b4, bc, view;
@@ -71,7 +71,7 @@ static void __fastcall hook_select(uint32_t bike, int ctx) {
     ++g_nsel;
 }
 static void __fastcall hook_billboard(int* p1, unsigned* p2, int size, int lateral, int ground, unsigned pos,
-                                      char clip) {
+                                      signed char clip) {
     const uint32_t base = (uint32_t)RD32(0x0049e66c), end = (uint32_t)RD32(0x0049e660);
     const int32_t nbefore = end >= base ? (int32_t)((end - base) / 0xa8) : -1;
     const int32_t pre_lat = lateral; // params may not survive the forwarded call; snapshot first

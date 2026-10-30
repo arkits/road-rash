@@ -53,6 +53,33 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 29, 2026: plan 33 Part A, portability groundwork
+
+- All eleven Part A tasks are done ([plan 33](plans/33-linux-windows-ports.md)
+  "Part A results"; [handoff](agent-handoffs/plan33-part-a-20261029.md)):
+  - no `__int128` (`wide_math.hpp`; it was also in the original 640×480 texture raster);
+  - floating-point contraction off on every compiler;
+  - fdlibm-based `det_math` instead of platform `exp`/`log2`/`pow`;
+  - total-order sorts;
+  - UTF-8 path helpers;
+  - case-insensitive folder import (lower-case Linux loop mounts);
+  - portable test temp names and pragma guards;
+  - static SDL on any desktop with the pin raised to 3.4.18
+    (`RR_STATIC_SDL`, automatic fallback below 3.4, `RR_SDL_HEADLESS` for containers);
+  - per-OS font discovery with a packaged DejaVu fallback;
+  - host-neutral TSan/fuzz/LLVM/JDK tooling and a Python determinism matrix;
+  - signed `char` in the oracle billboard hook;
+  - a new `portability-lint` CTest.
+- Root cause found for the long-open `raster-rgb-alloc` mismatch on Linux and
+  wasm: its pin depended on AppleClang FMA contraction. With contraction off,
+  macOS, Linux and wasm agree on the new pin. This is the only golden that changed.
+- Gates: macOS Debug 128/128 (0 skips); macOS package (Release, SDL 3.4.18)
+  128/128; Linux ARM64 full build with sim/disc 44/44; wasm under Node
+  passes `raster-rgb-alloc` and the oracle replays; the browser smoke passes
+  on SDL 3.4.18; macOS disc determinism is identical to baseline `c9eb240`.
+- Remaining: 33a/33b (first MSVC compile, Linux x86-64/Clang gate, packages,
+  CI jobs, devices). Android stays on the SDL 3.4.8 AAR.
+
 ### October 29, 2026: plan 33 rewritten; first Linux native gate
 
 - Portability review of the build, sources, tests, tools and CI. Plan 33 now

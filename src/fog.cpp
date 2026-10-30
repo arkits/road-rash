@@ -1,5 +1,6 @@
 // Plan 21 Task 5: fog + grading implementation. All procedural; no data.
 #include "fog.hpp"
+#include "det_math.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -13,7 +14,7 @@ uint16_t fog_factor_q8(int32_t depth_q8, int draw_slices, int strength) {
     const double t = std::min(1.0, double(depth_q8) / far);
     // Exponential-squared: 1 - exp(-(k*t)^2), k chosen so t=1 -> ~1.
     const double k = 2.0;
-    const double f = (1.0 - std::exp(-(k * t) * (k * t))) / (1.0 - std::exp(-k * k));
+    const double f = (1.0 - det_exp(-(k * t) * (k * t))) / (1.0 - det_exp(-k * k));
     const double scaled = f * double(strength) / 100.0;
     return uint16_t(std::max(0.0, std::min(256.0, scaled * 256.0)));
 }

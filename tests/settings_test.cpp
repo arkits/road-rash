@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
-#include <unistd.h>
+#include "temp_dir.hpp"
 
 int main() {
     int failures = 0;
@@ -40,7 +40,7 @@ int main() {
               g.high_resolution == d.high_resolution && g.alias.empty(),
           "invalid values ignored");
     const auto path =
-        (std::filesystem::temp_directory_path() / ("rr-settings-test-" + std::to_string(::getpid()) + ".txt"))
+        (std::filesystem::temp_directory_path() / ("rr-settings-test-" + rr::test::process_tag() + ".txt"))
             .string();
     check(rr::save_settings(path, s) && rr::load_settings(path).alias == "Rasher", "file round trip");
     std::remove(path.c_str());

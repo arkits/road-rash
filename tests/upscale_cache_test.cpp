@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <unistd.h>
+#include "temp_dir.hpp"
 namespace {
 std::vector<uint8_t> source_for(const std::string& asset, uint32_t index) {
     if (asset == "DATA/X.CEL" && index == 3) return {1, 2, 3, 4};
@@ -83,7 +83,7 @@ int main() {
         }
     };
     const auto root =
-        (std::filesystem::temp_directory_path() / ("rr-upscale-test-" + std::to_string(::getpid()))).string();
+        (std::filesystem::temp_directory_path() / ("rr-upscale-test-" + rr::test::process_tag())).string();
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     rr::UpscaleCache cache(root);

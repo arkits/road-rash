@@ -1,5 +1,6 @@
 #include "sound.hpp"
 #include "assets.hpp"
+#include "det_math.hpp"
 #include "exe_tables.hpp"
 #include "race.hpp"
 #include "race_music.hpp"
@@ -154,13 +155,13 @@ int32_t ds_attenuation(int32_t volume) {
 }
 
 int mixer_volume(int32_t attenuation) {
-    return int(std::lround(127.0 * std::pow(10.0, double(attenuation) / 2000.0)));
+    return int(std::lround(127.0 * det_pow10(double(attenuation) / 2000.0)));
 }
 
 int mixer_pan(int32_t pan, bool swap) {
     pan = std::clamp(swap ? -pan : pan, -10000, 10000);
     // DirectSound attenuates the opposite channel by |pan| hundredths of dB; the mixer scales it linearly.
-    const double g = std::pow(10.0, -double(std::abs(pan)) / 2000.0);
+    const double g = det_pow10(-double(std::abs(pan)) / 2000.0);
     const int linear = int(std::lround((1.0 - g) * 63.0));
     return pan > 0 ? linear : -linear;
 }
@@ -378,8 +379,10 @@ void SoundSystem::update(Race& race) {
                 if (d < hearing) near.push_back({d, true, i});
             }
         }
-        std::sort(near.begin(), near.end(),
-                  [](const Candidate& a, const Candidate& b) { return a.dist < b.dist; });
+        // total-order: stable, so equal distances keep scan order (bikes, then cars), as the
+        // original 0x004350e0 nearest-vehicle loop keeps the first of equal candidates.
+        std::stable_sort(near.begin(), near.end(),
+                         [](const Candidate& a, const Candidate& b) { return a.dist < b.dist; });
         for (int k = 0; k < 2; ++k) {
             const int base = k == 0 ? 3 : 5;
             if (size_t(k) >= near.size()) {

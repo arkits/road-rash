@@ -6,7 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
-#include <unistd.h>
+#include "temp_dir.hpp"
 
 namespace fs = std::filesystem;
 namespace {
@@ -88,9 +88,9 @@ int main() {
                   sink.files["A.BIN"] == std::vector<uint8_t>{'h', 'e', 'l', 'l', 'o'},
               "imported bytes match");
         const auto tmp =
-            fs::temp_directory_path() / ("rr-import-job-sync-" + std::to_string(::getpid()) + ".iso");
+            fs::temp_directory_path() / ("rr-import-job-sync-" + rr::test::process_tag() + ".iso");
         const auto dest =
-            fs::temp_directory_path() / ("rr-import-job-sync-" + std::to_string(::getpid()) + ".out");
+            fs::temp_directory_path() / ("rr-import-job-sync-" + rr::test::process_tag() + ".out");
         fs::remove_all(dest);
         {
             std::ofstream f(tmp, std::ios::binary);

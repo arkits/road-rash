@@ -9,6 +9,7 @@
 #include "actor_nodes.hpp"
 #include "display.hpp"
 #include "fog.hpp"
+#include "utf8_path.hpp"
 #include "framebuffer.hpp"
 #include "framebuffer_rgb.hpp"
 #include "frame_profile.hpp"
@@ -183,7 +184,7 @@ struct CourseCanvas {
         // Plan 20 Task 3: lazy attach/detach on detail flips (load_course runs
         // before the settings sync, so attach here where the setting is live).
         if (game.texture_detail && !game.upscaled_attached && game.scene()) {
-            UpscaleCache cache((std::filesystem::path(pref_directory()) / "upscaled").string());
+            UpscaleCache cache(path_to_utf8(path_from_utf8(pref_directory()) / "upscaled"));
             game.assets.scene->attach_upscaled(cache);
             game.upscaled_attached = true;
         } else if (!game.texture_detail && game.upscaled_attached && game.scene()) {

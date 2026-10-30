@@ -2,6 +2,9 @@
     add_executable(net_protocol-test tests/net_protocol_test.cpp)
     target_link_libraries(net_protocol-test PRIVATE rr-net)
     target_include_directories(net_protocol-test PRIVATE tests)
+    if(EMSCRIPTEN)
+        rr_web_hostfs(net_protocol-test) # reads tests/data/net_protocol_vectors.txt under Node
+    endif()
     add_test(NAME net_protocol COMMAND net_protocol-test)
 if(RR_NET_TRANSPORT)
     add_executable(net_ws-test tests/net_ws_test.cpp)

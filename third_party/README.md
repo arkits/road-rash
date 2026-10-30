@@ -6,9 +6,15 @@ The official `SDL3-devel-3.4.8-android.zip` archive has SHA-256
 `c4c23cec585cb99ea626625dc06b421933dd78733b3841628d86be1c13ab16c6`.
 Its unmodified `SDL3-3.4.8.aar` is in `android/app/libs/` and the license is `SDL-LICENSE.txt`.
 
-Standalone macOS builds fetch the official SDL3-3.4.8.tar.gz source archive,
-SHA-256 `e9fff7467fb60f037e6708da18b25560649e4c63edc2a69bb871b960d9cbfbba`.
+Static SDL builds (`RR_STATIC_SDL`: the standalone macOS app, the browser
+build, Linux/Windows packages, and any host whose system SDL is older than
+3.4) fetch the official SDL3-3.4.18.tar.gz source archive
+(https://github.com/libsdl-org/SDL/releases/tag/release-3.4.18, October 2,
+2026), SHA-256 `9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3`.
 `cmake/sdl3_static.cmake` verifies that digest and builds SDL statically.
+3.4.18 is newer than 3.4.12, which added `SDL_HINT_ENABLE_STEAM_SCREEN_KEYBOARD`
+(plan 33a). Android stays on the 3.4.8 AAR above until its device work bumps
+it (plan 33 Task A7 records the split).
 The existing SDL and stb licences are copied into the application's Resources.
 
 Online multiplayer (plan 34) networking, fetched by `cmake/net.cmake` when

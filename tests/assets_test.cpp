@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <unistd.h>
+#include "temp_dir.hpp"
 
 int main() {
     int failures = 0;
@@ -13,7 +13,7 @@ int main() {
             std::cerr << "FAIL " << what << '\n';
         }
     };
-    auto dir = std::filesystem::temp_directory_path() / ("rr-assets-test-" + std::to_string(::getpid()));
+    auto dir = std::filesystem::temp_directory_path() / ("rr-assets-test-" + rr::test::process_tag());
     std::filesystem::create_directories(dir / "DATA");
     {
         std::ofstream(dir / "DATA" / "X.BIN", std::ios::binary) << "abc";
