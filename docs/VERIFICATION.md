@@ -3,8 +3,8 @@
 ## Exact menu pictures, dark fills and text colours (October 31, 2026)
 
 - Build `build-agent-frontend-exact-20261031` (Debug): configure/build PASS;
-  `ctest` 121/121 PASS, zero skips (final tree, before the rebase onto
-  upstream).
+  `ctest` 121/121 PASS before the rebase onto upstream and 134/134
+  PASS after it, zero failures.
 - `frontend-test ../cdrom/ROADRASH`: "original picture caches compared
   bit-exact: 226" (all `fe-*-cache<i>.raw` named slots under
   `analysis/frontend/acceptance-*`); masked screens characters 90%,
@@ -15,6 +15,13 @@
   `analysis/agent-gates/android-debug-03e2011a872746da99ee3f1feb8c163d`,
   hardware not run); emscripten Release build PASS
   (`build-agent-frontend-exact-web`, ctest not run).
+- After rebasing onto `6b3b6be` (Linux/Windows packaging): the JPEG
+  licences join the Linux tarball/Flatpak and Windows package lists (and
+  their verifiers), and the Flatpak supplies libjpeg-turbo as a pinned
+  archive through the new `RR_JPEG_SOURCE_DIR` (offline configure checked
+  locally: "No download step", frontend-test 226/226). Linux and Windows
+  package builds, and the MSVC path of `cmake/jpeg_scalar.cmake`, were not
+  run on this Mac.
 - Glyph research: `tools/glyphprobe.c` (i686 mingw, Wine 11.18 Staging,
   scratch prefix) wrote 9856 glyphs; scratch comparator against Homebrew
   FreeType 2.14.3: 6986/8448 covered glyphs exact, ASCII 4185/4224. Not a

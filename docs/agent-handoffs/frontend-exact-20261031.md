@@ -3,7 +3,7 @@
 Task: plan 13 Task 6 Step 2 remainder — exact menu pictures, GDI-hinted
 glyph bitmaps, AWE/MIDI music timbre.
 
-Baseline: `c9eb240`. Build directories: `build-agent-frontend-exact-20261031`
+Baseline: `c9eb240`, rebased onto `6b3b6be`. Build directories: `build-agent-frontend-exact-20261031`
 (Debug), `build-agent-frontend-exact-web` (emscripten Release).
 
 Adopted the abandoned October 26 frontend-acceptance worktree changes
@@ -23,7 +23,10 @@ that produced the git-ignored acceptance goldens other sessions already pin.
 - Full-frame exact vs goldens: restroom 96%, jukebox 98%, graphics 97%,
   characters 95%. Remaining red pixels are glyph shapes and the box edges
   that follow from them.
-- libjpeg-turbo/IJG notices in the macOS bundle and the APK.
+- libjpeg-turbo/IJG notices in the macOS bundle, APK, Linux tarball/Flatpak
+  and Windows package; Flatpak gets the pinned archive via
+  `RR_JPEG_SOURCE_DIR`. Not built here: Linux/Windows packages and the MSVC
+  branch of `cmake/jpeg_scalar.cmake` (`jpeg-static.lib`); check them in CI.
 
 ## Open
 

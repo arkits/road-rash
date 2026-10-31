@@ -1,9 +1,19 @@
 # The original modifies the IJG sample-range table to truncate to five bits.
 # SIMD paths bypass that table. Always build the pinned scalar decoder, for
 # identical output on macOS, Android, WebAssembly and future desktop targets.
+# Offline builds (Flatpak) pass the unpacked 3.1.4.1 tree as RR_JPEG_SOURCE_DIR.
 include(ExternalProject)
+set(RR_JPEG_SOURCE_DIR "" CACHE PATH "Unpacked libjpeg-turbo 3.1.4.1 source (skips the download)")
 set(RR_JPEG_ROOT "${CMAKE_BINARY_DIR}/jpeg-scalar")
-set(RR_JPEG_SOURCE "${RR_JPEG_ROOT}/src")
+if(RR_JPEG_SOURCE_DIR)
+    set(RR_JPEG_SOURCE "${RR_JPEG_SOURCE_DIR}")
+    set(RR_JPEG_FETCH)
+else()
+    set(RR_JPEG_SOURCE "${RR_JPEG_ROOT}/src")
+    set(RR_JPEG_FETCH
+        URL https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
+        URL_HASH SHA256=a7da42b640377c2a9a9665e2c4b0ea60cd5599afb48c2521e6df0c9dc9d15a25)
+endif()
 set(RR_JPEG_BINARY "${RR_JPEG_ROOT}/build")
 set(RR_JPEG_PLATFORM_ARGS)
 foreach(var CMAKE_TOOLCHAIN_FILE CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET
@@ -20,8 +30,7 @@ else()
 endif()
 file(MAKE_DIRECTORY "${RR_JPEG_SOURCE}/src" "${RR_JPEG_BINARY}")
 ExternalProject_Add(rr-jpeg-build
-    URL https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
-    URL_HASH SHA256=a7da42b640377c2a9a9665e2c4b0ea60cd5599afb48c2521e6df0c9dc9d15a25
+    ${RR_JPEG_FETCH}
     SOURCE_DIR "${RR_JPEG_SOURCE}" BINARY_DIR "${RR_JPEG_BINARY}"
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_SIMD=OFF -DWITH_TURBOJPEG=OFF

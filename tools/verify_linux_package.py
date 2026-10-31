@@ -44,7 +44,7 @@ DISC_SUFFIXES = {'.EXE', '.RSC', '.RRI', '.BOB', '.CRS', '.DAT', '.WAV', '.RRA',
 TOP = 'road-rash-native'
 REQUIRED = {'rr-game', 'README.txt', 'icon.png', 'road-rash-native.desktop.in', 'install-desktop-entry.sh',
             'fonts/DejaVuSans.ttf', 'fonts/DejaVuSans-Bold.ttf'}
-LICENSES = {'SDL-LICENSE.txt', 'stb-LICENSE.txt', 'libdatachannel-LICENSE.txt', 'libjuice-LICENSE.txt',
+LICENSES = {'SDL-LICENSE.txt', 'stb-LICENSE.txt', 'JPEG-LICENSE.md', 'JPEG-README.ijg', 'libdatachannel-LICENSE.txt', 'libjuice-LICENSE.txt',
             'usrsctp-LICENSE.md', 'plog-LICENSE.txt', 'OpenSSL-LICENSE.txt', 'DejaVu-LICENSE.txt'}
 # Large files that are expected, by magic: the executable (ELF) and the fonts (TrueType).
 LARGE_MAGIC = {'rr-game': b'\x7fELF', 'fonts/DejaVuSans.ttf': b'\x00\x01\x00\x00',

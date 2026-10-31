@@ -53,7 +53,7 @@ MINGW_CRT = {'msvcrt.dll', 'ucrtbase.dll'}
 DISC_SUFFIXES = {'.EXE', '.RSC', '.RRI', '.BOB', '.CRS', '.DAT', '.WAV', '.RRA', '.AVI', '.ISO', '.MID', '.SBK',
                  '.DLL', '.BIN', '.CUE', '.IMG'}
 REQUIRED = {'rr-game.exe', 'README.txt', 'portable.txt'}
-LICENSES = {'SDL-LICENSE.txt', 'stb-LICENSE.txt', 'libdatachannel-LICENSE.txt', 'libjuice-LICENSE.txt',
+LICENSES = {'SDL-LICENSE.txt', 'stb-LICENSE.txt', 'JPEG-LICENSE.md', 'JPEG-README.ijg', 'libdatachannel-LICENSE.txt', 'libjuice-LICENSE.txt',
             'usrsctp-LICENSE.md', 'plog-LICENSE.txt', 'OpenSSL-LICENSE.txt'}
 
 

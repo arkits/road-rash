@@ -3,7 +3,8 @@
 # replaces @SOURCE_URL@ / @SOURCE_COMMIT@ with the repository and commit to
 # build and produces RoadRashNative-<version>-<arch>.flatpak. The build has
 # no network: SDL and libdatachannel come in as pinned sources below and
-# CMake's FetchContent uses them (FETCHCONTENT_SOURCE_DIR_*). OpenSSL and the
+# CMake's FetchContent uses them (FETCHCONTENT_SOURCE_DIR_*); libjpeg-turbo
+# likewise through RR_JPEG_SOURCE_DIR. OpenSSL and the
 # DejaVu fonts come from the runtime.
 #
 # Sandbox: Wayland with X11 fallback, PulseAudio (PipeWire's pulse server),
@@ -36,6 +37,7 @@ modules:
       - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
       - -DFETCHCONTENT_SOURCE_DIR_SDL3=/run/build/road-rash-native/deps/sdl3
       - -DFETCHCONTENT_SOURCE_DIR_LIBDATACHANNEL=/run/build/road-rash-native/deps/libdatachannel
+      - -DRR_JPEG_SOURCE_DIR=/run/build/road-rash-native/deps/libjpeg-turbo
     no-make-install: true
     post-install:
       - install -Dm755 rr-game /app/bin/rr-game
@@ -43,7 +45,7 @@ modules:
       - install -Dm644 ../assets/app-icon/roadrash.png /app/share/icons/hicolor/48x48/apps/org.roadrash.nativeport.png
       - sed -e 's|@EXEC@|rr-game|' -e 's|@ICON@|org.roadrash.nativeport|' ../linux/road-rash-native.desktop.in > org.roadrash.nativeport.desktop
       - install -Dm644 org.roadrash.nativeport.desktop /app/share/applications/org.roadrash.nativeport.desktop
-      - install -Dm644 -t /app/share/licenses/org.roadrash.nativeport ../third_party/SDL-LICENSE.txt ../third_party/LICENSE
+      - install -Dm644 -t /app/share/licenses/org.roadrash.nativeport ../third_party/SDL-LICENSE.txt ../third_party/LICENSE ../third_party/JPEG-LICENSE.md ../third_party/JPEG-README.ijg
         ../third_party/libdatachannel-LICENSE.txt ../third_party/libjuice-LICENSE.txt ../third_party/usrsctp-LICENSE.md
         ../third_party/plog-LICENSE.txt ../third_party/OpenSSL-LICENSE.txt
     sources:
@@ -55,6 +57,10 @@ modules:
         url: https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz
         sha256: 9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3
         dest: deps/sdl3
+      - type: archive
+        url: https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
+        sha256: a7da42b640377c2a9a9665e2c4b0ea60cd5599afb48c2521e6df0c9dc9d15a25
+        dest: deps/libjpeg-turbo
       - type: git
         url: https://github.com/paullouisageneau/libdatachannel.git
         commit: 6b1e2e620f1e37f0eafeee702eaea0043cb305fd # v0.24.6
