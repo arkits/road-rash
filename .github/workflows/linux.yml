@@ -24,6 +24,7 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'linux/**'
+      - 'run-linux.sh'
       - 'assets/app-icon/**'
       - '.github/workflows/linux.yml'
   pull_request:

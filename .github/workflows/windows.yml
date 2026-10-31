@@ -21,6 +21,7 @@ on:
       - 'CMakePresets.json'
       - 'vcpkg.json'
       - 'windows/**'
+      - 'run-windows.*'
       - 'assets/app-icon/**'
       - '.github/workflows/windows.yml'
       - '.github/workflows/windows-package.yml'
@@ -94,6 +95,22 @@ jobs:
             build-${{ matrix.preset }}/Testing/Temporary/LastTest*.log
             build-${{ matrix.preset }}/ctest.xml
           if-no-files-found: ignore
+
+  # run-windows.bat from a plain shell: it must find Visual Studio, enter the
+  # MSVC environment and vcpkg itself, build Release and launch the game.
+  run-script:
+    name: run-windows-script
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and launch with run-windows.bat
+        shell: cmd
+        run: |
+          call run-windows.bat --console --version > version.json
+          if errorlevel 1 exit /b 1
+          type version.json
+          python -c "import json; d = json.load(open('version.json')); assert d['configuration'] == 'Release', d"
 
   mingw:
     name: msys2-clang64

@@ -88,12 +88,44 @@ See [docs/WEB.md](docs/WEB.md) for deployment, tests and current limitations.
 - Android builds additionally need JDK 21, Android SDK 35 / NDK 28, Gradle
   wrapper in `android/`.
 
-## Quick start (macOS)
+## Quick start
+
+Each script builds `rr-game` and launches it. It passes `--assets` when the
+disc is at `../cdrom/ROADRASH` (or the folder given as the first argument)
+and otherwise opens the first-run import screen. Further arguments go to
+`rr-game`.
+
+macOS:
 
 ```sh
 ./run-macos.sh                       # Release build in build-play/, launch game
 ./run-macos.sh --debug               # Debug build in build/ (slower renderer)
 ```
+
+Linux (x86-64 or ARM64; on a Steam Deck use the AppImage instead):
+
+```sh
+./run-linux.sh                       # Release build in build-play/, launch game
+./run-linux.sh --debug               # Debug build in build/
+```
+
+If a tool or library is missing, it prints the install command for
+Debian/Ubuntu, Fedora or Arch. It needs GCC 13+ or Clang 17+.
+
+Windows (x64 or ARM64; Visual Studio 2022 or its Build Tools with
+"Desktop development with C++", plus Git and Python 3):
+
+```bat
+rem Release build in build-windows-msvc\ (ARM64: build-windows-msvc-arm64\)
+run-windows.bat
+rem Debug configuration (slower renderer)
+run-windows.bat -Debug
+```
+
+`run-windows.ps1` does the same from PowerShell. It enters the MSVC
+environment itself, and the first run clones vcpkg into `.tools\vcpkg`
+unless `VCPKG_ROOT` or `VCPKG_INSTALLATION_ROOT` points to one. Add
+`--console` to see the game's output in the terminal.
 
 Or with CMake directly:
 
