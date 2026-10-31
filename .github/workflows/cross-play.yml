@@ -3,7 +3,9 @@
 # ARM64 and a wasm32 (the browser build's engine and WebSocket transport,
 # under Node) client from the same commit. The server marks the result
 # official only when every seat reports the same tick and state hash, and
-# each bot fails unless it gets that official result.
+# each bot fails unless it gets that official result. Each race job then
+# runs rr-determinism --disc on the same data (plan 33b Task 6 Step 1, the
+# disc race), and the last job requires every platform's hashes to be equal.
 #
 # Builds come first so the five race jobs start together. Each race job
 # fetches the hosted reference data into an ephemeral directory (as the
@@ -45,10 +47,10 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DRR_STATIC_SDL=ON -DRR_SDL_HEADLESS=ON \
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRR_STATIC_SDL=ON -DRR_SDL_HEADLESS=ON \
             -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
-          cmake --build build --target net-bots --parallel
-          mkdir bin && cp build/net-bots bin/
+          cmake --build build --target net-bots rr-determinism --parallel
+          mkdir bin && cp build/net-bots build/rr-determinism bin/
       - uses: actions/upload-artifact@v4
         with: {name: bots-linux, path: bin, retention-days: 3}
 
@@ -61,9 +63,9 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DRR_STATIC_SDL=ON
-          cmake --build build --target net-bots --parallel "$(sysctl -n hw.ncpu)"
-          mkdir bin && cp build/net-bots bin/ && otool -L bin/net-bots
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRR_STATIC_SDL=ON
+          cmake --build build --target net-bots rr-determinism --parallel "$(sysctl -n hw.ncpu)"
+          mkdir bin && cp build/net-bots build/rr-determinism bin/ && otool -L bin/net-bots
       - uses: actions/upload-artifact@v4
         with: {name: bots-macos, path: bin, retention-days: 3}
 
@@ -102,12 +104,12 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake --preset ${{ matrix.preset }} -DBUILD_TESTING=OFF
+          cmake --preset ${{ matrix.preset }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          cmake --build build-${{ matrix.preset }} --config Release --target net-bots --parallel
+          cmake --build build-${{ matrix.preset }} --config Release --target net-bots rr-determinism --parallel
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           New-Item -ItemType Directory bin | Out-Null
-          Copy-Item build-${{ matrix.preset }}\Release\net-bots.exe bin\
+          Copy-Item build-${{ matrix.preset }}\Release\net-bots.exe, build-${{ matrix.preset }}\Release\rr-determinism.exe bin\
       - uses: actions/upload-artifact@v4
         with: {name: 'bots-windows-${{ matrix.arch }}', path: bin, retention-days: 3}
 
@@ -133,9 +135,9 @@ jobs:
           .tools/emsdk/emsdk activate 6.0.10
       - run: |
           source .tools/emsdk/emsdk_env.sh
-          emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-          cmake --build build --target net-bots --parallel
-          mkdir bin && cp build/net-bots.js build/net-bots.wasm bin/
+          emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target net-bots rr-determinism --parallel
+          mkdir bin && cp build/net-bots.js build/net-bots.wasm build/rr-determinism.js build/rr-determinism.wasm bin/
       - uses: actions/upload-artifact@v4
         with: {name: bots-wasm, path: bin, retention-days: 3}
 
@@ -190,7 +192,34 @@ jobs:
             --first ${{ matrix.first }} "${room[@]}" --native-platform --no-udp --ticks 480 --timeout 900 | tee race.log
           test "${PIPESTATUS[0]}" -eq 0
           grep -q "net-bots OK: official cutoff results" race.log
+      - name: Disc determinism race
+        shell: bash
+        run: |
+          case "${{ matrix.name }}" in
+            wasm-node) det=(node bin/rr-determinism.js);;
+            windows-*) det=(bin/rr-determinism.exe);;
+            *) chmod +x bin/rr-determinism; det=(bin/rr-determinism);;
+          esac
+          "${det[@]}" --disc "$RUNNER_TEMP/rr-net-disc" > det-disc-${{ matrix.name }}.txt
+          test "$(wc -l < det-disc-${{ matrix.name }}.txt)" -ge 100
+      - uses: actions/upload-artifact@v4
+        with: {name: 'det-${{ matrix.name }}', path: 'det-disc-${{ matrix.name }}.txt', retention-days: 3}
       - name: Remove temporary data
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/rr-net-disc"
+
+  disc-determinism:
+    needs: race
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {pattern: 'det-*', path: det, merge-multiple: true}
+      - name: Every platform's disc race hashes are equal
+        run: |
+          ls det
+          test "$(ls det | wc -l)" -eq 5
+          for f in det/*.txt; do
+            if cmp -s "$f" det/det-disc-linux.txt; then echo "determinism: $(basename "$f" .txt) matches linux"; \
+            else echo "determinism: $(basename "$f" .txt) DIFFERS"; diff "$f" det/det-disc-linux.txt | head; exit 1; fi
+          done
