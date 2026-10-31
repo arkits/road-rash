@@ -204,4 +204,4 @@ A platform is done only when all of these hold on real hardware, each recorded i
 6. **Lifecycle:** alt-tab or focus loss pauses, sleep/resume does not fast-forward, and an audio device or controller change mid-race recovers.
 7. **Online (plan 34):** cross-play with macOS and the browser through `rr-netd`.
 
-Status: Part A implemented (October 29, 2026; see "Part A results"); 33a/33b not started. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Part A implemented (October 29, 2026; see "Part A results"). 33b Tasks 1–7 done October 30 and 33a Tasks 1–7 done October 31 in software; both child plans wait for hardware acceptance (Task 8 each). Tracked in [00-INDEX.md](00-INDEX.md).

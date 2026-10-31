@@ -107,6 +107,16 @@ grep -q '^ACCEPTANCE OK$' "$LOG"
 - [ ] **Step 3:** Mark plans 01–15 complete in 00-INDEX.md. Tag `v1.0.0` only after the owner confirms in chat, and build the tagged artefacts (the Android `versionName` comes from the tag).
 - [ ] **Step 4:** Commit: `docs: final port status and user guide`.
 
+### Owner decisions from plan 33 (recorded October 31, 2026)
+
+- **Flathub submission** (plan 33a Task 3 Step 3): owner decision, because
+  it publishes the project name and exposes the trademark question. The
+  Flatpak bundle is built, verified and attached to releases either way.
+- **AppImage update channel** (plan 33a Task 2 Step 3): none embedded by
+  default; zsync update information only if the owner picks a channel.
+- **Project licence:** the Linux and Windows packages carry every
+  third-party licence; the port's own licence file waits for the owner.
+
 ## Exit criteria
 
 - `tools/acceptance.sh` prints `ACCEPTANCE OK` from a fresh clone, and plan 14's device checklist is complete.

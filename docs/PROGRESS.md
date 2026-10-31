@@ -53,6 +53,51 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 31, 2026: Linux and Steam Deck in software (plan 33a Tasks 1–7)
+
+- **Gate:** GCC 14 and Clang 19, x86-64 and ARM64 (Debian trixie in
+  Docker): the full suite with the disc passes on all four, and every
+  golden equals macOS. ASan/UBSan and TSan are clean.
+- **Packages:** a portable tarball and AppImage per architecture, built in
+  the Steam Runtime sniper SDK with static SDL/OpenSSL/libstdc++. They need
+  glibc 2.30 or newer and nothing else; the verifier checks for game data,
+  dependencies and launch. They start on clean Ubuntu 20.04, Debian 12,
+  Fedora and Arch. A Flatpak (freedesktop 24.08) is built from source.
+- **Import without a mouse (native addition):**
+  - the import screen takes gamepad and keyboard focus;
+  - the in-game file browser opens as a fallback when the system dialog
+    fails or stays silent, and by default in Deck Game Mode;
+  - a 2 s search finds disc folders and ISOs nearby.
+- **Steam Deck:**
+  - run-time Deck/gamescope detection sets fullscreen and display-matched
+    first-run defaults;
+  - pad-only career name entry (native addition), for when Steam's
+    on-screen keyboard (now requested through SDL's hint) does not appear;
+  - sleep in a race or video comes back paused;
+  - the screen saver is held in races and videos.
+- **Linux plumbing:**
+  - app ID and name hints match the desktop file;
+  - `rr-game.log` is written on Linux;
+  - wss:// uses the distribution CA bundle.
+- **CI:**
+  - `linux.yml` runs the gate and builds and checks the packages;
+  - the determinism matrix has Linux GCC/Clang on x86-64 and ARM64;
+  - cross-play has six seats, now including Linux ARM64;
+  - releases attach the Linux packages.
+- **Bugs found on the way:**
+  - the ASan mismatch in the test allocation counter (nothrow `new`);
+  - Linux TSan's own `operator new`;
+  - `tools/tsan.sh` had been running no tests;
+  - Fedora's missing default CA path for static OpenSSL;
+  - Wayland's first-frame scale in screenshot mode.
+- **Remaining, all hardware:**
+  - desktop Linux with a GPU, audio devices and controllers on GNOME, KDE
+    and gamescope: display scaling at 150%, the idle inhibitor, audio
+    device switching, Flatpak import and play;
+  - Steam Deck acceptance: Desktop and Game Mode, the on-screen keyboard,
+    sleep, legibility, the battery benchmark and the Deck disc determinism
+    run (plan 33a Task 8).
+
 ### October 30, 2026: Windows determinism matrix and cross-play (plan 33b Task 6)
 
 - `determinism.yml`: MSVC x64, clang-cl x64 and MSVC ARM64 jobs

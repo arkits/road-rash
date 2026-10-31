@@ -1,5 +1,83 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33a: Linux and Steam Deck, Tasks 1–7 (October 30–31, 2026)
+
+- **Gate, local** (`linux/gate.Dockerfile` image: Debian trixie, GCC 14.2.0,
+  Clang 19.1.7, pinned SDL 3.4.18 with all desktop backends, OpenSSL 3.5;
+  disc and oracle fixtures mounted; `tools/linux_gate.sh`; SDL dummy drivers):
+  - First run (tree before the Task 5 code, 132 tests): GCC and Clang, ARM64
+    and x86-64 (Rosetta), 132/132 on all four, zero skips.
+  - At `3689f12` (134 tests): ARM64 GCC 134/134 and ARM64 Clang 134/134,
+    zero skips; x86-64 GCC 134/134 and x86-64 Clang 134/134 (Rosetta), zero skips.
+  - All oracle, pixel and determinism goldens equal the committed macOS pins.
+    No golden changed.
+- **Sanitizers** (ARM64, Clang 19, `linux-asan` preset):
+  - First full run: 130/134. Fixed:
+    - `race-cache` and `race_state`: alloc-dealloc mismatch.
+      `alloc_counter.hpp` lacked the nothrow `new` that
+      `std::stable_sort`'s buffer uses.
+    - `net_hostile_ws` and `net_rtc`: UBSan in libdatachannel
+      `wstransport.cpp:390` (misaligned 64-bit store) and libjuice
+      `picohash.h:680` (function type). These are third-party, now in
+      `tools/sanitizer_ignorelist.txt`.
+  - Second full run at `4c2a0d1`: 131/134. `portability-lint` failed because
+    clang-format had moved a `total-order:` note (fixed in `37d251c`), and
+    the two `oracle-terrain*` tests were killed for memory at `-j12` within
+    Docker's 8.8 GB.
+  - Serial rerun of those and of every network test (14 tests): 14/14.
+  - TSan (`tools/tsan.sh`, Clang 19): 15/15 thread-relevant tests, plus the
+    mixer-device, first-run-import and 1800-tick headless-race scenarios,
+    with no reports. Two fixes were needed first:
+    - The Linux TSan runtime defines `operator new`, so the allocation
+      counter is off there.
+    - `tsan.sh` had passed a quoted regex and run no tests at all.
+- **Determinism** (`tools/determinism_matrix.py macos linux linux-clang
+  linux-arm64 linux-arm64-clang` with `RR_DISC_MOUNT=1`): all eight Linux
+  outputs equal the synthetic reference and the macOS disc run.
+  - CI run `41178597804` (`4c2a0d1`): all nine jobs passed, including the new
+    `linux-x86_64-clang`, `linux-arm64` and `linux-arm64-clang`.
+- **Cross-play** run `41178597827` (`4c2a0d1`): six seats in room `J5XSBY`
+  (Linux x86-64, Linux ARM64, macOS, Windows x64, Windows ARM64, wasm32
+  under Node).
+  - Fingerprint `44b26ee2c9a9702f`; each seat confirmed tick 480 at hash
+    `1387611608435030573`, and the result was official.
+  - The disc race was equal on all six.
+- **Packages** (`tools/build_linux_package.sh`; sniper SDK
+  `sdk@sha256:bb30053d…`, `sdk/arm64@sha256:966ad3ef…`; OpenSSL 3.5.9
+  static; AppImage runtime 20251108):
+  - At `4c2a0d1`: aarch64 tarball 7.3 MB, AppImage 7.6 MB. Both
+    architectures have `NEEDED` libc/libm/libdl/libpthread (+ ld-linux)
+    only, newest `GLIBC_2.30`, and no `GLIBCXX`.
+  - `verify_linux_package.py` passed.
+  - `linux_clean_host_smoke.sh` passed: aarch64 on Ubuntu 20.04 (glibc
+    2.31), Debian 12 and Fedora 44; x86-64 on those and Arch (glibc 2.44,
+    after adding `pacman --disable-sandbox` for emulation).
+  - CI Linux run `41179325675` (`37d251c`): gate GCC x86-64, GCC ARM64 and
+    Clang x86-64 each 134 tests, 34 skipped (29 disc, 5 fixture; the skip
+    check passed). The package jobs ran the verifier with `--run` (launches
+    both packages) on both architectures, the four-distribution smoke, and
+    the x86-64 Flatpak smoke.
+- **Flatpak** (`tools/build_linux_flatpak.sh aarch64`, flathub-infra
+  freedesktop-24.08 image, commit `e1bdf07`): built from source offline,
+  exported, installed into a scratch user installation, `--version` Release
+  at that commit, `--first-run-smoke` OK, log in
+  `~/.var/app/org.roadrash.nativeport/data/...`.
+  - It reported `dirty` because git saw the unpacked `deps/`; `/deps/` is now
+    ignored.
+- **Display (headless):** the packaged aarch64 `rr-game` renders the import
+  screen on Xvfb (X11, 1280x960), headless Weston at scale 1 (1280x960)
+  and at scale 2 (2560x1920, pixel density 2).
+  - The first frame on Weston scale 2 was laid out for scale 1, so
+    screenshot mode now captures the fourth frame; the rerun is correct.
+- **macOS** (`build-plan33`, Homebrew SDL): 134/134 including the new
+  `file_browser` and `platform_linux` tests, and screenshots of the import
+  screen and browser.
+- **Not covered (hardware):** GNOME/KDE/gamescope desktops, 150% scaling,
+  fullscreen toggle and cursor; the GNOME idle inhibitor; PipeWire,
+  PulseAudio and ALSA device switching; real controllers; Steam on-screen
+  keyboard; suspend on a real machine; Flatpak import and play; everything
+  on a Steam Deck (plan 33a Task 8, Task 6 Step 2).
+
 ## Plan 33b Task 6: determinism matrix and cross-play (October 30, 2026)
 
 - Determinism matrix run `41166186066` (`main`, `6f94c35`): all six jobs

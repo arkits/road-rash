@@ -146,6 +146,46 @@ of the port:
 - **Static OpenSSL has no system roots.** Its default CA paths are the build
   machine's. TLS clients use `system_ca_file()` (`src/net/system_ca.cpp`).
 
+## Linux gate in Docker (plan 33a)
+
+- Image: `docker build --platform linux/arm64 -t rr-linux-gate:arm64 -f linux/gate.Dockerfile linux`
+  (`linux/amd64` for x86-64; OrbStack runs it under Rosetta, fine for
+  correctness, not for timing). Packages come from `linux/install-gate-deps.sh`,
+  which CI uses too.
+- Run: mount the checkout read-only, the disc so that `../cdrom/ROADRASH`
+  resolves beside it, and a named volume for the build, then
+  `tools/linux_gate.sh linux-gcc /build/linux-gcc` (presets `linux-gcc`,
+  `linux-clang`, `linux-asan`). A worktree's `.git` is a file pointing into
+  the main repository: mount that `.git` at its absolute host path and set
+  `safe.directory` (`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory
+  GIT_CONFIG_VALUE_0=*`), or build provenance fails with "not a git
+  repository". Mount the `analysis/oracle` symlink's target at its absolute
+  path for the fixture tests.
+- The source is mounted live: editing while a container builds mixes old
+  and new files. Rerun the gate on the final commit.
+- Sanitizer stacks need `llvm-symbolizer` (the image links llvm-19's); without
+  it, `addr2line -Cfipe <binary> <offsets>` resolves the PIE offsets.
+- Under ASan with 12 parallel jobs and Docker's 8.8 GB, the two
+  `oracle-terrain*` tests can be killed for memory (no output, "Subprocess
+  killed"); run them alone (`ctest -R oracle-terrain -j1`).
+- A stale CMake cache in a reused build volume can keep backends from an
+  earlier configuration (ALSA ON with no headers); `tools/determinism_matrix.py`
+  configures with `--fresh`.
+
+## Portable C++ pitfalls (plan 33a)
+
+- **Plain `char` is unsigned on ARM64 Linux** (found in Part A).
+- **Linux sanitizer runtimes own `operator new`.** TSan's static runtime
+  defines it, so `tests/alloc_counter.hpp` turns its replacement off there;
+  under ASan the replacement must cover the nothrow forms too, or
+  `std::stable_sort`'s buffer pairs ASan's `new` with our `free`.
+- **Static OpenSSL on Linux** looks for roots under the build container's
+  `OPENSSLDIR`, which Fedora does not have; `system_ca_file()` picks
+  `$SSL_CERT_FILE` or the distribution bundle.
+- **Wayland scale arrives after the first commit.** A screenshot of a
+  window's very first frame on a scaled Wayland output is laid out for scale
+  1; capture after a few frames.
+
 ## Multi-session workflow
 
 Two agent sessions have worked in this repository concurrently (October 11,

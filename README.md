@@ -60,9 +60,11 @@ Still open (see `docs/CURRENT_STATUS.md` and `docs/PROGRESS.md`):
   GDI-hinting text shapes and that art mapping.
 - Android builds and packages but hardware validation (render, input,
   import, lifecycle, performance) is pending.
-- Linux and Windows build and pass their tests (Linux in Docker; Windows
-  x64/ARM64 on GitHub runners, including the zip and installer packages), but
-  neither has been played on real hardware yet (plans 33a/33b).
+- Linux and Windows build and pass their tests (Linux x86-64/ARM64 with GCC
+  and Clang, in Docker and on GitHub runners, including the tarball, AppImage
+  and Flatpak; Windows x64/ARM64 on GitHub runners, including the zip and
+  installer packages), but neither has been played on real hardware or a
+  Steam Deck yet (plans 33a/33b).
 
 ## Browser build
 
@@ -204,6 +206,26 @@ Inno Setup 6.3+, a per-user installer, both with a static CRT and SDL, so
 they need no DLLs beyond Windows' own, and no game data. `tools/sign_windows.ps1` signs them when the owner sets
 `RR_SIGN_*`; otherwise they are unsigned and SmartScreen warns. The verifier
 needs `pip install pefile`. CI builds and install-tests both architectures.
+
+## Linux packaging
+
+Needs Docker (on a Mac, OrbStack or Docker Desktop builds both
+architectures; x86-64 runs under emulation):
+
+```sh
+tools/build_linux_package.sh x86_64       # or aarch64
+tools/linux_clean_host_smoke.sh build-linux-package/RoadRashNative-<version>-linux-x86_64.tar.gz \
+    build-linux-package/RoadRashNative-<version>-x86_64.AppImage x86_64
+tools/build_linux_flatpak.sh x86_64       # committed HEAD only
+```
+
+The tarball and AppImage are built in the Steam Runtime "sniper" SDK
+container (glibc 2.31 baseline) with static SDL, OpenSSL and libstdc++, so
+they need only glibc and whatever display and audio libraries the system
+has; `tools/verify_linux_package.py` checks that, the absence of game data
+and (on Linux) that both launch. The Flatpak builds from source against the
+freedesktop 24.08 runtime. Linux native gate: `tools/linux_gate.sh linux-gcc`
+inside the `linux/gate.Dockerfile` image (see `docs/TOOLING.md`).
 
 ## Docs map
 
