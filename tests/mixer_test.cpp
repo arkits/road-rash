@@ -32,11 +32,20 @@ int main(int argc, char**) {
                 std::cerr << "FAIL paused voice cursor at frame 0 after the first callback\n";
                 result = 1;
             }
+            // Plan 33b Task 4: another device's removal (or the physical default
+            // device's, which SDL migrates) leaves our stream untouched.
+            const SDL_AudioDeviceID ours = mixer.device_id();
             SDL_Event removed{};
             removed.type = SDL_EVENT_AUDIO_DEVICE_REMOVED;
             removed.adevice.recording = false;
+            removed.adevice.which = ours + 1000;
+            if (!mixer.handle(removed) || mixer.device_id() != ours) {
+                std::cerr << "FAIL unrelated device removal reopened the stream\n";
+                result = 1;
+            }
+            removed.adevice.which = ours;
             mixer.pause(true);
-            if (!mixer.handle(removed) || !mixer.device_open()) {
+            if (!mixer.handle(removed) || !mixer.device_open() || mixer.device_id() == ours) {
                 std::cerr << "FAIL device reopened after removal: " << SDL_GetError() << '\n';
                 result = 1;
             }

@@ -265,7 +265,13 @@ void Mixer::close_device() {
     stream_ = nullptr;
 }
 bool Mixer::handle(const SDL_Event& event) {
-    if (event.type != SDL_EVENT_AUDIO_DEVICE_REMOVED || event.adevice.recording || !stream_) return true;
+    // Plan 33b Task 4: the stream is opened on the system default, so SDL moves
+    // it to the new default (WASAPI headset plug/unplug) with its queued audio
+    // and voice cursors intact; that sends no removal for our logical device.
+    // Reopen only if our own device is gone, never for another device's removal.
+    if (event.type != SDL_EVENT_AUDIO_DEVICE_REMOVED || event.adevice.recording || !stream_ ||
+        event.adevice.which != SDL_GetAudioStreamDevice(stream_))
+        return true;
     close_device();
     return open_device();
 }

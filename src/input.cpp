@@ -96,6 +96,113 @@ uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, 
     return bits;
 }
 
+std::string key_label(int scancode, KeyFromScancode lookup) {
+    if (scancode <= 0 || scancode >= SDL_SCANCODE_COUNT) return "?";
+    const SDL_Keycode key = lookup(SDL_Scancode(scancode), SDL_KMOD_NONE, false);
+    const char* name = key != SDLK_UNKNOWN ? SDL_GetKeyName(key) : nullptr;
+    if (!name || !*name) name = SDL_GetScancodeName(SDL_Scancode(scancode));
+    return name && *name ? name : "?";
+}
+
+int default_key_scancode(int action) {
+    return action >= 0 && action < 11 ? kDefaultKeys[action][0] : -1;
+}
+
+PadLabels pad_labels(SDL_GamepadType type, SDL_GamepadButtonLabel south, SDL_GamepadButtonLabel east,
+                     SDL_GamepadButtonLabel west, SDL_GamepadButtonLabel north) {
+    PadLabels l;
+    const auto face = [](SDL_GamepadButtonLabel label, const char* positional) -> std::string {
+        switch (label) {
+        case SDL_GAMEPAD_BUTTON_LABEL_A:
+            return "A";
+        case SDL_GAMEPAD_BUTTON_LABEL_B:
+            return "B";
+        case SDL_GAMEPAD_BUTTON_LABEL_X:
+            return "X";
+        case SDL_GAMEPAD_BUTTON_LABEL_Y:
+            return "Y";
+        case SDL_GAMEPAD_BUTTON_LABEL_CROSS:
+            return "Cross";
+        case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE:
+            return "Circle";
+        case SDL_GAMEPAD_BUTTON_LABEL_SQUARE:
+            return "Square";
+        case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE:
+            return "Triangle";
+        default:
+            return positional;
+        }
+    };
+    l.south = face(south, "South");
+    l.east = face(east, "East");
+    l.west = face(west, "West");
+    l.north = face(north, "North");
+    switch (type) {
+    case SDL_GAMEPAD_TYPE_XBOX360:
+        l.start = "Start", l.back = "Back";
+        break;
+    case SDL_GAMEPAD_TYPE_XBOXONE:
+        l.start = "Menu", l.back = "View";
+        break;
+    case SDL_GAMEPAD_TYPE_PS3:
+        l.start = "Start", l.back = "Select";
+        l.left_trigger = "L2", l.right_trigger = "R2", l.right_shoulder = "R1";
+        break;
+    case SDL_GAMEPAD_TYPE_PS4:
+        l.start = "Options", l.back = "Share";
+        l.left_trigger = "L2", l.right_trigger = "R2", l.right_shoulder = "R1";
+        break;
+    case SDL_GAMEPAD_TYPE_PS5:
+        l.start = "Options", l.back = "Create";
+        l.left_trigger = "L2", l.right_trigger = "R2", l.right_shoulder = "R1";
+        break;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+        l.start = "+", l.back = "-";
+        l.left_trigger = "ZL", l.right_trigger = "ZR", l.right_shoulder = "R";
+        break;
+    default:
+        break;
+    }
+    return l;
+}
+
+PadLabels pad_labels(SDL_Gamepad* pad) {
+    if (!pad) return {};
+    return pad_labels(SDL_GetGamepadType(pad), SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_SOUTH),
+                      SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_EAST),
+                      SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_WEST),
+                      SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_NORTH));
+}
+
+std::array<std::string, 4> gamepad_rows(const PadLabels& l, bool swap) {
+    // race_screen: South/RT gas, East/LT brake, d-pad or stick steer, West
+    // punch and North kick (traded by the swap), right shoulder backhand;
+    // Start pauses, Back asks to quit a career race; menus take South/Start
+    // to select and East/Back to go back.
+    return {
+        l.south + "/" + l.right_trigger + ": gas  " + l.east + "/" + l.left_trigger + ": brake  Pad: steer",
+        (swap ? l.north : l.west) + ": punch  " + (swap ? l.west : l.north) + ": kick  " + l.right_shoulder +
+            ": backhand",
+        l.start + ": pause  " + l.back + ": quit career race", "Menus: D-pad + " + l.south + "/" + l.east};
+}
+
+bool track_gamepad(GamepadPtr& pad, const SDL_Event& e) {
+    if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad) {
+        pad.reset(SDL_OpenGamepad(e.gdevice.which));
+        return false;
+    }
+    if (e.type != SDL_EVENT_GAMEPAD_REMOVED || !pad || SDL_GetGamepadID(pad.get()) != e.gdevice.which)
+        return false;
+    pad.reset();
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    for (int i = 0; ids && i < count && !pad; ++i)
+        if (ids[i] != e.gdevice.which) pad.reset(SDL_OpenGamepad(ids[i]));
+    SDL_free(ids);
+    return true;
+}
+
 PlayerInput touch_input(float x, float y, float width, float height, bool left_handed) {
     if (left_handed) x = width - x; // plan 18 Task 7: mirror zones for left thumbs
     PlayerInput in;

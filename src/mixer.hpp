@@ -60,6 +60,7 @@ class Mixer {
     void close_device();
     bool handle(const SDL_Event&);
     bool device_open() const { return stream_ != nullptr; }
+    SDL_AudioDeviceID device_id() const { return stream_ ? SDL_GetAudioStreamDevice(stream_) : 0; }
 
   private:
     struct Command {

@@ -294,6 +294,12 @@ uint32_t Frontend::next_random() {
 
 const std::string& Frontend::str(int slot) const {
     static const std::string empty;
+    if (slot >= ns::pad_map1 && slot <= ns::pad_map4) {
+        // Element-wise copy keeps the returned string objects in place.
+        const auto rows = gamepad_rows(pad_labels_, settings_.swap_punch_kick);
+        for (size_t i = 0; i < rows.size(); ++i) pad_rows_[i] = rows[i];
+        return pad_rows_[size_t(slot - ns::pad_map1)];
+    }
     if (slot >= native_slot_base) return native_string(slot);
     return slot > 0 && size_t(slot) < strings_.size() ? strings_[size_t(slot)] : empty;
 }
@@ -1100,17 +1106,10 @@ void Frontend::apply_native_setting() {
 std::string Frontend::key_name(int action) const {
     // Plan 18 Task 7: label text for the 0x12 key-label rows. Custom keyboard
     // codes store low-byte-first (0x0040e760); the byte is the keyboard code.
-    static const char* kDefaultNames[9] = {"Up", "Down", "Left", "Right", "Z", "X", "C", "?", "?"};
+    // Plan 33b Task 4: the name the current keyboard layout prints on that key.
     if (action < 0 || action > 8) return "?";
-    if (settings_.custom_controls) {
-        const int sc = settings_.controls[size_t(action)] & 0xff;
-        if (sc > 0 && sc < SDL_SCANCODE_COUNT) {
-            const char* name = SDL_GetScancodeName(SDL_Scancode(sc));
-            if (name && *name) return name;
-        }
-        return "?";
-    }
-    return kDefaultNames[action];
+    if (settings_.custom_controls) return key_label(settings_.controls[size_t(action)] & 0xff);
+    return key_label(default_key_scancode(action));
 }
 
 int Frontend::slider_value(int caption) const {

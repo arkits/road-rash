@@ -4,6 +4,8 @@
     tools/bench_report.py REPORT.json [...]            table of runs
     tools/bench_report.py --compare BASE.json NEW.json  per-phase delta
     tools/bench_report.py --min-fps 60 REPORT.json      exit 1 below target
+    tools/bench_report.py --max-drift 1 REPORT.json     exit 1 if the 60 Hz clock
+                                                        drifted a tick (plan 33b Task 4)
 """
 import argparse
 import json
@@ -42,6 +44,7 @@ def main():
     ap.add_argument("reports", nargs="+")
     ap.add_argument("--compare", action="store_true")
     ap.add_argument("--min-fps", type=float)
+    ap.add_argument("--max-drift", type=float, help="ticks the race clock may differ from wall time x 60")
     a = ap.parse_args()
     reports = [load(p) for p in a.reports]
     if a.compare:
@@ -54,6 +57,23 @@ def main():
         low = [r.get("label") or "?" for r in reports if r["fps_mean"] < a.min_fps]
         if low:
             print(f"below {a.min_fps} fps: {', '.join(low)}", file=sys.stderr)
+            return 1
+    if a.max_drift is not None:
+        bad = 0
+        for r, path in zip(reports, a.reports):
+            pacing = r.get("pacing")
+            if not pacing:
+                print(f"{path}: no pacing block (older rr-game)", file=sys.stderr)
+                bad += 1
+                continue
+            iv = pacing["interval_ms"]
+            print(f"{r.get('label') or path}: {pacing['wall_s']:.1f} s, drift {pacing['drift_ticks']:+.3f} ticks, "
+                  f"interval p50 {iv['p50']:.2f} p99 {iv['p99']:.2f} max {iv['max']:.2f} ms, "
+                  f"steps 0/1/2/3+ {pacing['step_frames']}, clock resets {pacing.get('clock_resets', 0)}")
+            if abs(pacing["drift_ticks"]) >= a.max_drift:
+                print(f"{path}: drift {pacing['drift_ticks']:+.3f} ticks exceeds {a.max_drift}", file=sys.stderr)
+                bad += 1
+        if bad:
             return 1
     return 0
 

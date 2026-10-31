@@ -87,6 +87,7 @@ RaceScreen::RaceScreen(Game& g, SDL_Renderer* r, const RaceOptions& opt, Display
     touch_.set_left_handed(opt_.left_handed);
     touch_.set_phone_controls(kMobileDisplay);
     pad_ = open_first_gamepad();
+    if (opt_.menu) opt_.menu->set_pad_labels(pad_labels(pad_.get()));
     if (opt_.show_fps && opt_.assets) fps_ = std::make_unique<FpsOverlay>(*opt_.assets);
     // 0x004163d0: a fresh race (timer still at its start value) fades in.
     if (!opt_.capture && g_.countdown == countdown_ticks) fade_ = Fade::in;
@@ -182,6 +183,7 @@ void RaceScreen::update_fade(uint64_t now) {
 }
 
 void RaceScreen::reset_clock(uint64_t now_ns) {
+    clock_reset_ = true; // --bench pacing leaves this frame out
     touch_.clear();
     clock_.reset();
     last_ = now_ns;
@@ -284,11 +286,11 @@ void RaceScreen::event(const SDL_Event& e) {
     case RaceAction::demo_exit:
         break;
     }
-    if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad_) pad_.reset(SDL_OpenGamepad(e.gdevice.which));
-    if (e.type == SDL_EVENT_GAMEPAD_REMOVED && pad_ && SDL_GetGamepadID(pad_.get()) == e.gdevice.which) {
-        pad_.reset();
-        lifecycle_.state.pause();
-    }
+    // A removed pad pauses the race; another connected pad, or the next one
+    // plugged in, takes over.
+    if (track_gamepad(pad_, e)) lifecycle_.state.pause();
+    if (opt_.menu && (e.type == SDL_EVENT_GAMEPAD_ADDED || e.type == SDL_EVENT_GAMEPAD_REMOVED))
+        opt_.menu->set_pad_labels(pad_labels(pad_.get()));
     if (e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION ||
         e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED) {
         if (act == RaceAction::none) {
@@ -374,6 +376,7 @@ void RaceScreen::step_online(uint64_t now, uint32_t controls) {
 bool RaceScreen::iterate(uint64_t now_ns) {
     const uint64_t now = now_ns ? now_ns : SDL_GetTicksNS();
     if (!running_) return false;
+    clock_reset_ = false;
     if (!last_) reset_clock(now);
     FrameProfile* prof = opt_.bench ? &opt_.bench->current : nullptr;
     canvas_.profile = prof;
@@ -577,7 +580,7 @@ bool RaceScreen::iterate(uint64_t now_ns) {
     if (opt_.bench) {
         // Fade-in frames are skipped by the warm-up; a whole frame is
         // iterate entry to after present.
-        opt_.bench->finish_frame(SDL_GetTicksNS() - now, steps);
+        opt_.bench->finish_frame(SDL_GetTicksNS() - now, steps, now, clock_.alpha_q16(), clock_reset_);
         if (opt_.bench->done()) {
             running_ = false;
             result_.quit_app = true;

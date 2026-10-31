@@ -364,12 +364,9 @@ RgbImage capture_race_frame(SDL_Renderer* renderer) {
 // menu loop's mapping (arrows + Enter/Escape, d-pad + A/B, pointer/touch).
 void pause_event(Frontend* menu, const SDL_Event& e, GamepadPtr& pad, SDL_Renderer* renderer) {
     MenuInput in;
-    if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad) {
-        pad.reset(SDL_OpenGamepad(e.gdevice.which));
-        return;
-    }
-    if (e.type == SDL_EVENT_GAMEPAD_REMOVED && pad && SDL_GetGamepadID(pad.get()) == e.gdevice.which) {
-        pad.reset();
+    if (e.type == SDL_EVENT_GAMEPAD_ADDED || e.type == SDL_EVENT_GAMEPAD_REMOVED) {
+        track_gamepad(pad, e);
+        if (menu) menu->set_pad_labels(pad_labels(pad.get()));
         return;
     }
     if (e.type == SDL_EVENT_KEY_DOWN) {

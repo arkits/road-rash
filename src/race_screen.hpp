@@ -67,6 +67,7 @@ class RaceScreen {
     RaceActionContext ctx_now() const;
     void end_as_quit();
     void reset_clock(uint64_t now_ns);
+    bool clock_reset_ = false; // reset_clock ran this iterate (bench pacing)
     void step_sim(uint64_t now);
     void render(uint64_t now);
     void draw_scene(FrameProfile*);

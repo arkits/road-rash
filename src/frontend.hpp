@@ -1,5 +1,6 @@
 #pragma once
 #include "career.hpp"
+#include "input.hpp"
 #include "net/mano.hpp"
 #include "net/protocol.hpp"
 #include "settings.hpp"
@@ -114,7 +115,9 @@ class Frontend {
              std::string save_directory);
     void start(); // intro video, then the Credits screen
     void update(const MenuInput&, uint64_t now_ms);
-    bool poll(FrontendEvent&);                 // next host action
+    bool poll(FrontendEvent&); // next host action
+    // Plan 33b Task 4: button names of the connected pad (default: none connected).
+    void set_pad_labels(PadLabels labels) { pad_labels_ = std::move(labels); }
     void draw(RgbImage&, int scale = 1) const; // 640s x 480s; scale = 1 keeps today's output exactly
     void draw_net_overlay(RgbImage&, int scale) const;
     void draw_scale1(RgbImage&) const;            // original 640x480 path, bit-identical
@@ -200,10 +203,12 @@ class Frontend {
     void apply_native_setting();         // persist + emit apply_display
     int slider_value(int caption) const; // plan 18 Task 6: 0..100 for slider rows
     void set_slider_value(int caption, int v);
-    void adjust_slider(int delta);          // Left/Right (+-10) on the focused slider row
-    void slider_home_end(bool home);        // Home/End: 0/100 on the focused slider row
-    void apply_mixer_setting();             // persist + emit apply_mixer
-    std::string key_name(int action) const; // plan 18 Task 7: 0x12 label text
+    void adjust_slider(int delta);                // Left/Right (+-10) on the focused slider row
+    void slider_home_end(bool home);              // Home/End: 0/100 on the focused slider row
+    void apply_mixer_setting();                   // persist + emit apply_mixer
+    std::string key_name(int action) const;       // plan 18 Task 7: 0x12 label text
+    PadLabels pad_labels_;                        // plan 33b Task 4: Gamepad page names
+    mutable std::array<std::string, 4> pad_rows_; // rows built from pad_labels_ in str()
     void apply_restroom_pattern();
     void set_background(const std::string& name);
     std::string background_for(int previous, int screen, int title);

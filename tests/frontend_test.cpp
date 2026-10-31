@@ -952,6 +952,18 @@ int main(int argc, char** argv) {
     fe.enter(screen_id::native_gamepad);
     if (focus_item(4)) key("select");
     check(settings.swap_punch_kick, "swap toggle flips");
+    // Plan 33b Task 4: mapping rows name the connected pad's buttons and follow the swap.
+    check(fe.caption_text(fe.items()[1]) == "North: punch  West: kick  RB: backhand",
+          "no pad: positional names, swapped punch and kick");
+    fe.set_pad_labels(rr::pad_labels(SDL_GAMEPAD_TYPE_PS5, SDL_GAMEPAD_BUTTON_LABEL_CROSS,
+                                     SDL_GAMEPAD_BUTTON_LABEL_CIRCLE, SDL_GAMEPAD_BUTTON_LABEL_SQUARE,
+                                     SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE));
+    check(fe.caption_text(fe.items()[0]) == "Cross/R2: gas  Circle/L2: brake  Pad: steer",
+          "DualSense gas row");
+    check(fe.caption_text(fe.items()[1]) == "Triangle: punch  Square: kick  R1: backhand",
+          "DualSense attack row");
+    check(fe.caption_text(fe.items()[3]) == "Menus: D-pad + Cross/Circle", "DualSense menu row");
+    fe.set_pad_labels({});
     if (focus_item(5)) key("right");
     check(settings.stick_deadzone == 40, "dead zone slider steps by 5");
     if (focus_item(5)) key("home");

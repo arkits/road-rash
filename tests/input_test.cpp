@@ -1,6 +1,7 @@
 #include "input.hpp"
 #include "race_overlay.hpp"
 #include <iostream>
+#include <string>
 
 int main() {
     int failures = 0;
@@ -192,6 +193,120 @@ int main() {
     check(rr::touch_input(5.f / 6, 0.5f, 1.f, 1.f, true).left, "left-handed mirrors right to left");
     check(rr::touch_input(5.f / 6, 0.8f, 1.f, 1.f, false).accelerate, "steer zones accelerate by default");
     check(rr::touch_input(1.f / 6, 0.8f, 1.f, 1.f, true).accelerate, "left-handed mirrors accelerate across");
+    // Plan 33b Task 4 Step 1: race keys are scancodes; labels follow the layout.
+    {
+        const auto azerty = [](SDL_Scancode sc, SDL_Keymod, bool) -> SDL_Keycode {
+            switch (sc) {
+            case SDL_SCANCODE_Q:
+                return SDLK_A;
+            case SDL_SCANCODE_A:
+                return SDLK_Q;
+            case SDL_SCANCODE_W:
+                return SDLK_Z;
+            case SDL_SCANCODE_Z:
+                return SDLK_W;
+            case SDL_SCANCODE_M:
+                return SDLK_COMMA;
+            default:
+                return SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false);
+            }
+        };
+        const auto qwertz = [](SDL_Scancode sc, SDL_Keymod, bool) -> SDL_Keycode {
+            if (sc == SDL_SCANCODE_Z) return SDLK_Y;
+            if (sc == SDL_SCANCODE_Y) return SDLK_Z;
+            return SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false);
+        };
+        const auto dvorak = [](SDL_Scancode sc, SDL_Keymod, bool) -> SDL_Keycode {
+            if (sc == SDL_SCANCODE_Z) return SDLK_SEMICOLON;
+            if (sc == SDL_SCANCODE_X) return SDLK_Q;
+            if (sc == SDL_SCANCODE_C) return SDLK_J;
+            return SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false);
+        };
+        // No video subsystem here, so SDL's lookup is the default US map.
+        const rr::KeyFromScancode us = SDL_GetKeyFromScancode;
+        check(rr::default_key_scancode(4) == SDL_SCANCODE_Z, "punch defaults to the Z position");
+        check(rr::key_label(SDL_SCANCODE_Z, us) == "Z", "US punch label");
+        check(rr::key_label(SDL_SCANCODE_Z, azerty) == "W", "AZERTY prints W on the punch key");
+        check(rr::key_label(SDL_SCANCODE_Z, qwertz) == "Y", "QWERTZ prints Y on the punch key");
+        check(rr::key_label(SDL_SCANCODE_X, dvorak) == "Q", "Dvorak prints Q on the kick key");
+        check(rr::key_label(SDL_SCANCODE_UP, azerty) == "Up", "arrows keep their names");
+        check(rr::key_label(rr::default_key_scancode(7), us) == "?", "unbound row");
+        // The bound bit comes from the physical key whatever the layout prints.
+        bool down[SDL_SCANCODE_COUNT] = {};
+        down[SDL_SCANCODE_Z] = true;
+        check(rr::bound_control_bits({}, false, down) == rr::control_punch, "default punch by position");
+        std::array<uint16_t, 11> codes{};
+        codes[4] = uint16_t(SDL_SCANCODE_Q); // bound on AZERTY's A key
+        down[SDL_SCANCODE_Z] = false;
+        down[SDL_SCANCODE_Q] = true;
+        check(rr::bound_control_bits(codes, true, down) == rr::control_punch, "custom punch by position");
+        check(rr::key_label(codes[4] & 0xff, azerty) == "A", "custom label in the current layout");
+    }
+    // Plan 33b Task 4 Step 2: button names per pad family.
+    {
+        const auto xbox =
+            rr::pad_labels(SDL_GAMEPAD_TYPE_XBOXONE, SDL_GAMEPAD_BUTTON_LABEL_A, SDL_GAMEPAD_BUTTON_LABEL_B,
+                           SDL_GAMEPAD_BUTTON_LABEL_X, SDL_GAMEPAD_BUTTON_LABEL_Y);
+        const auto rows = rr::gamepad_rows(xbox, false);
+        check(rows[0] == "A/RT: gas  B/LT: brake  Pad: steer", "Xbox gas row");
+        check(rows[1] == "X: punch  Y: kick  RB: backhand", "Xbox attack row");
+        check(rows[2] == "Menu: pause  View: quit career race", "Xbox Start/Back names");
+        check(rr::gamepad_rows(xbox, true)[1] == "Y: punch  X: kick  RB: backhand",
+              "swap trades West and North");
+        const auto ds4 = rr::pad_labels(SDL_GAMEPAD_TYPE_PS4, SDL_GAMEPAD_BUTTON_LABEL_CROSS,
+                                        SDL_GAMEPAD_BUTTON_LABEL_CIRCLE, SDL_GAMEPAD_BUTTON_LABEL_SQUARE,
+                                        SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE);
+        check(rr::gamepad_rows(ds4, false)[2] == "Options: pause  Share: quit career race", "DS4 names");
+        // Nintendo layout: the South position is printed B.
+        const auto pro = rr::pad_labels(SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO, SDL_GAMEPAD_BUTTON_LABEL_B,
+                                        SDL_GAMEPAD_BUTTON_LABEL_A, SDL_GAMEPAD_BUTTON_LABEL_Y,
+                                        SDL_GAMEPAD_BUTTON_LABEL_X);
+        check(rr::gamepad_rows(pro, false)[0] == "B/ZR: gas  A/ZL: brake  Pad: steer", "Switch Pro labels");
+        const auto generic = rr::pad_labels(
+            SDL_GAMEPAD_TYPE_STANDARD, SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN, SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN,
+            SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN, SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN);
+        check(rr::gamepad_rows(generic, false)[3] == "Menus: D-pad + South/East", "generic pad positions");
+        check(rr::pad_labels(nullptr).south == "South", "no pad: positional names");
+    }
+    // Plan 33b Task 4 Step 2: hot-plug through SDL virtual gamepads.
+    if (SDL_Init(SDL_INIT_GAMEPAD)) {
+        const auto attach = [] {
+            SDL_VirtualJoystickDesc desc;
+            SDL_INIT_INTERFACE(&desc);
+            desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+            desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+            desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+            desc.name = "rr virtual pad";
+            return SDL_AttachVirtualJoystick(&desc);
+        };
+        const auto pump = [](rr::GamepadPtr& pad, int& removed) {
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) removed += rr::track_gamepad(pad, e) ? 1 : 0;
+        };
+        rr::GamepadPtr pad;
+        int removed = 0;
+        const SDL_JoystickID first = attach();
+        pump(pad, removed);
+        check(first && pad && SDL_GetGamepadID(pad.get()) == first, "added pad opens");
+        const SDL_JoystickID second = attach();
+        pump(pad, removed);
+        check(pad && SDL_GetGamepadID(pad.get()) == first, "a second pad does not take over");
+        SDL_DetachVirtualJoystick(first);
+        pump(pad, removed);
+        check(removed == 1, "removing the open pad reports it once (race pauses)");
+        check(pad && SDL_GetGamepadID(pad.get()) == second, "the other connected pad takes over");
+        SDL_DetachVirtualJoystick(second);
+        pump(pad, removed);
+        check(removed == 2 && !pad, "last pad removed");
+        const SDL_JoystickID again = attach();
+        pump(pad, removed);
+        check(pad && SDL_GetGamepadID(pad.get()) == again && removed == 2, "reconnecting restores input");
+        pad.reset();
+        SDL_DetachVirtualJoystick(again);
+        SDL_Quit();
+    } else {
+        check(false, SDL_GetError());
+    }
     std::cout << failures << " failures\n";
     return failures ? 1 : 0;
 }

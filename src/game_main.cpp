@@ -176,12 +176,7 @@ void play_video(const rr::Assets& assets, const std::string& path, SDL_Renderer*
             if (!rr::lifecycle_event(e.type)) lifecycle.state.handle(e);
             if (!mixer.handle(e)) SDL_Log("Audio reopen failed: %s", SDL_GetError());
             if (e.type == SDL_EVENT_QUIT) running = false;
-            if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad) pad.reset(SDL_OpenGamepad(e.gdevice.which));
-            if (e.type == SDL_EVENT_GAMEPAD_REMOVED && pad &&
-                SDL_GetGamepadID(pad.get()) == e.gdevice.which) {
-                pad.reset();
-                lifecycle.state.pause();
-            }
+            if (rr::track_gamepad(pad, e)) lifecycle.state.pause();
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
                 if (e.key.key == SDLK_Q)
                     running = false;
@@ -693,6 +688,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
             menu_stick.suspend();
             lifecycle.state.pause();
         }
+        fe.set_pad_labels(rr::pad_labels(pad.get())); // plan 33b Task 4: Gamepad page names
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = false;
@@ -774,10 +770,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
             if (e.type == SDL_EVENT_TEXT_INPUT && text_input) {
                 append_text(e.text.text);
             }
-            if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad) pad.reset(SDL_OpenGamepad(e.gdevice.which));
-            if (e.type == SDL_EVENT_GAMEPAD_REMOVED && pad &&
-                SDL_GetGamepadID(pad.get()) == e.gdevice.which) {
-                pad = rr::open_first_gamepad();
+            if (rr::track_gamepad(pad, e)) {
                 menu_stick.suspend();
                 lifecycle.state.pause();
             }
@@ -1046,9 +1039,10 @@ int main(int argc, char** argv) {
         rr::Settings boot_settings =
             rr::load_settings((std::filesystem::path(rr::pref_directory()) / "settings.txt").string());
         apply_cli_overrides(boot_settings, cli);
-        // The benchmark measures throughput: no vsync wait unless asked, and
+        // The benchmark measures throughput: no vsync wait unless asked
+        // (--bench-vsync turns it on whatever the settings file says), and
         // the race scale follows the settings file unless --render-scale.
-        if (benchmark && !bench_vsync) boot_settings.vsync = false;
+        if (benchmark) boot_settings.vsync = bench_vsync;
         if (benchmark && !explicit_render_scale) render_scale = 0;
         if (capturing) {
             // Isolated, reproducible presentation; never save over user settings.
