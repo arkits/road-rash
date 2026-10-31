@@ -9,8 +9,9 @@ with the disc, with this host's disc run). Exit 1 on any difference.
   tools/determinism_matrix.py [target ...]     (default: every target)
 
 Targets: macos, linux (x86-64, Docker), linux-arm64 (Docker), wasm (emcc +
-Node), android (adb device + build-android-det/), windows and windows-arm64
-(native on a Windows host). Unavailable targets are skipped with the reason.
+Node), android (adb device + build-android-det/), windows, windows-clang-cl and
+windows-arm64 (native on a Windows host, inside an MSVC developer environment:
+Ninja, static SDL, no OpenSSL). Unavailable targets are skipped with the reason.
 """
 import os
 from pathlib import Path
@@ -23,8 +24,10 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.environ.get("RR_DET_OUT", ROOT / "analysis" / "determinism"))
 REF = ROOT / "tests" / "data" / "determinism_synthetic.txt"
 DISC = Path(os.environ.get("RR_DISC", ROOT.parent / "cdrom" / "ROADRASH"))
-TARGETS = ["macos", "linux", "linux-arm64", "wasm", "android", "windows", "windows-arm64"]
+TARGETS = ["macos", "linux", "linux-arm64", "wasm", "android", "windows", "windows-clang-cl", "windows-arm64"]
 failures = 0
+# CI sets RR_DET_REQUIRE=1: a skipped target is then a failure, not a pass.
+REQUIRE = os.environ.get("RR_DET_REQUIRE") == "1"
 
 
 def run(cmd, log, **kw):
@@ -132,13 +135,21 @@ def main():
             capture([str(adb), "shell", "/data/local/tmp/rr-determinism", "--synthetic"],
                     OUT / "android-synthetic.txt")
             check("android-arm64-synthetic", OUT / "android-synthetic.txt", REF)
-        else:  # windows, windows-arm64
+        else:  # windows, windows-clang-cl, windows-arm64
             want_arm = target == "windows-arm64"
-            on_arm = machine in ("arm64", "aarch64")
+            # The MSVC environment's target architecture; x64 Python under
+            # emulation on an ARM64 runner reports AMD64.
+            arch = os.environ.get("VSCMD_ARG_TGT_ARCH", machine).lower()
+            on_arm = arch in ("arm64", "aarch64")
             if system != "Windows" or want_arm != on_arm:
                 print(f"determinism: {target} skipped (needs a {'ARM64' if want_arm else 'x64'} Windows host)")
+                if REQUIRE:
+                    return 1
                 continue
-            host_native(target, ROOT / f"build-det-{target}")
+            compiler = "clang-cl" if target == "windows-clang-cl" else "cl"
+            host_native(target, ROOT / f"build-det-{target}",
+                        ["-G", "Ninja", "-DRR_STATIC_SDL=ON", f"-DCMAKE_C_COMPILER={compiler}",
+                         f"-DCMAKE_CXX_COMPILER={compiler}"])
     return 1 if failures else 0
 
 

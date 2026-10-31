@@ -1,0 +1,196 @@
+# Plan 33b Task 6 Step 2 / plan 34 Task 10 Step 4: cross-play. One public room
+# on the production server holds a Linux, a macOS, a Windows x64, a Windows
+# ARM64 and a wasm32 (the browser build's engine and WebSocket transport,
+# under Node) client from the same commit. The server marks the result
+# official only when every seat reports the same tick and state hash, and
+# each bot fails unless it gets that official result.
+#
+# Builds come first so the five race jobs start together. Each race job
+# fetches the hosted reference data into an ephemeral directory (as the
+# production smoke test does); no game data is cached or uploaded.
+name: Cross-play
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/net/**'
+      - 'tools/net_bots.cpp'
+      - 'cmake/net.cmake'
+      - '.github/workflows/cross-play.yml'
+  workflow_run:
+    workflows: [Deploy multiplayer server]
+    types: [completed]
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-play
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+
+jobs:
+  build-linux:
+    if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04 # same image as the race job, so the binary's glibc and libssl match
+    timeout-minutes: 40
+    steps:
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq g++-14 libssl-dev
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DRR_STATIC_SDL=ON -DRR_SDL_HEADLESS=ON \
+            -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+          cmake --build build --target net-bots --parallel
+          mkdir bin && cp build/net-bots bin/
+      - uses: actions/upload-artifact@v4
+        with: {name: bots-linux, path: bin, retention-days: 3}
+
+  build-macos:
+    if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DRR_STATIC_SDL=ON
+          cmake --build build --target net-bots --parallel "$(sysctl -n hw.ncpu)"
+          mkdir bin && cp build/net-bots bin/ && otool -L bin/net-bots
+      - uses: actions/upload-artifact@v4
+        with: {name: bots-macos, path: bin, retention-days: 3}
+
+  build-windows:
+    if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x64, runner: windows-2022, preset: windows-msvc}
+          - {arch: arm64, runner: windows-11-arm, preset: windows-msvc-arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - name: Locate or bootstrap vcpkg
+        shell: pwsh
+        run: |
+          if (-not $env:VCPKG_INSTALLATION_ROOT -or -not (Test-Path "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe")) {
+            git clone --quiet https://github.com/microsoft/vcpkg.git C:\vcpkg
+            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+            "VCPKG_INSTALLATION_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+      - uses: actions/cache@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --preset ${{ matrix.preset }} -DBUILD_TESTING=OFF
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build-${{ matrix.preset }} --config Release --target net-bots --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory bin | Out-Null
+          Copy-Item build-${{ matrix.preset }}\Release\net-bots.exe bin\
+      - uses: actions/upload-artifact@v4
+        with: {name: 'bots-windows-${{ matrix.arch }}', path: bin, retention-days: 3}
+
+  build-wasm:
+    if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Cache pinned Emscripten SDK
+        id: sdk
+        uses: actions/cache@v4
+        with:
+          path: .tools/emsdk
+          key: emsdk-linux-6.0.10-v1
+      - name: Install Emscripten 6.0.10
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 6.0.10 https://github.com/emscripten-core/emsdk.git .tools/emsdk
+          .tools/emsdk/emsdk install 6.0.10
+          .tools/emsdk/emsdk activate 6.0.10
+      - run: |
+          source .tools/emsdk/emsdk_env.sh
+          emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build --target net-bots --parallel
+          mkdir bin && cp build/net-bots.js build/net-bots.wasm bin/
+      - uses: actions/upload-artifact@v4
+        with: {name: bots-wasm, path: bin, retention-days: 3}
+
+  race:
+    needs: [build-linux, build-macos, build-windows, build-wasm]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # first: this seat's index (alias BotN+1 and character); the Linux
+          # job hosts. Five seats in all.
+          - {name: linux, runner: ubuntu-24.04, artifact: bots-linux, first: 0, role: host}
+          - {name: macos, runner: macos-15, artifact: bots-macos, first: 1, role: join}
+          - {name: windows-x64, runner: windows-2022, artifact: bots-windows-x64, first: 2, role: join}
+          - {name: windows-arm64, runner: windows-11-arm, artifact: bots-windows-arm64, first: 3, role: join}
+          - {name: wasm-node, runner: ubuntu-24.04, artifact: bots-wasm, first: 4, role: join}
+    name: race-${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          sparse-checkout: |
+            deploy/road-rash-net
+            src/reference_hashes.inc
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v4
+        with: {name: '${{ matrix.artifact }}', path: bin}
+      - uses: actions/setup-node@v4
+        if: matrix.name == 'wasm-node'
+        with: {node-version: '22'}
+      - name: Fetch hosted reference data (ephemeral)
+        shell: bash
+        run: python3 deploy/road-rash-net/fetch-smoke-data.py "$RUNNER_TEMP/rr-net-disc" || python deploy/road-rash-net/fetch-smoke-data.py "$RUNNER_TEMP/rr-net-disc"
+      - name: Race
+        shell: bash
+        env:
+          RUN: ${{ github.run_id }}${{ github.run_attempt }}
+        run: |
+          alias="XP${RUN: -14}" # unique per run and attempt; 16-character alias limit
+          case "${{ matrix.role }}" in host) room=(--host-alias "$alias");; *) room=(--join-alias "$alias");; esac
+          case "${{ matrix.name }}" in
+            wasm-node) bot=(node bin/net-bots.js);;
+            windows-*) bot=(bin/net-bots.exe);;
+            *) chmod +x bin/net-bots; bot=(bin/net-bots);;
+          esac
+          # WebSocket only: the Node client has no DataChannel, and one
+          # transport for every seat keeps the comparison about the platforms.
+          "${bot[@]}" --url wss://road-rash.archit.xyz/net --disc "$RUNNER_TEMP/rr-net-disc" --clients 1 --seats 5 \
+            --first ${{ matrix.first }} "${room[@]}" --native-platform --no-udp --ticks 480 --timeout 900 | tee race.log
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "net-bots OK: official cutoff results" race.log
+      - name: Remove temporary data
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/rr-net-disc"

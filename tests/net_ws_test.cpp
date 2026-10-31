@@ -4,17 +4,39 @@
 #include "check.hpp"
 #include "net/channel.hpp"
 #include "net/protocol.hpp"
+#include "net/system_ca.hpp"
 #include "net/ws_channel.hpp"
 
 #include <rtc/websocketserver.hpp>
 
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <thread>
 
 using namespace rr::net;
 
 int main() {
     rr::test::Checks check;
+    // Plan 33b Task 6: wss:// trusts the OS roots where OpenSSL is static.
+    {
+        const std::string& file = system_ca_file();
+#if defined(_WIN32) || defined(__APPLE__)
+        check(!file.empty() && system_ca_count() > 20, "OS root store exported");
+#endif
+        if (!file.empty()) {
+            std::ifstream in(file, std::ios::binary);
+            std::stringstream text;
+            text << in.rdbuf();
+            const std::string pem = text.str();
+            int begins = 0;
+            for (size_t at = pem.find("-----BEGIN CERTIFICATE-----"); at != std::string::npos;
+                 at = pem.find("-----BEGIN CERTIFICATE-----", at + 1))
+                ++begins;
+            check(begins == system_ca_count(), "one PEM block per root");
+            check(&system_ca_file() == &file, "written once per process");
+        }
+    }
     rtc::WebSocketServer::Configuration config;
     config.port = 0; // ephemeral
     config.bindAddress = "127.0.0.1";

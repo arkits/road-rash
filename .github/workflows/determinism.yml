@@ -11,6 +11,7 @@ on:
       - 'src/**'
       - 'tools/determinism.cpp'
       - 'tools/determinism_matrix.sh'
+      - 'tools/determinism_matrix.py'
       - 'tests/data/determinism_synthetic.txt'
       - 'cmake/**'
       - 'CMakeLists.txt'
@@ -65,3 +66,30 @@ jobs:
         run: |
           source .tools/emsdk/emsdk_env.sh
           tools/determinism_matrix.sh wasm
+
+  # Plan 33b Task 6 Step 1: MSVC x64, clang-cl x64 and native MSVC ARM64.
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: windows, runner: windows-2022, arch: x64}
+          - {target: windows-clang-cl, runner: windows-2022, arch: x64}
+          - {target: windows-arm64, runner: windows-11-arm, arch: arm64}
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      RR_DET_REQUIRE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - name: Build and compare
+        run: python tools/determinism_matrix.py ${{ matrix.target }}
+      - name: Build log on failure
+        if: failure()
+        shell: pwsh
+        run: Get-Content analysis/determinism/${{ matrix.target }}-build.log -Tail 80

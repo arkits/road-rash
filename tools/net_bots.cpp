@@ -2,6 +2,13 @@
 // disc-backed Race and Rollback. --ticks terminates at a shared sealed cutoff
 // and reports Outcome::left: this is a transport/determinism test, not a claim
 // that scripted riders completed the course.
+//
+// Plan 33b Task 6 cross-play: several processes (one per platform) share one
+// room. --host-alias NAME makes this process's first client host a public
+// room as NAME; --join-alias NAME makes every client here find that room in
+// the public list (which only shows rooms with this build's fingerprint and
+// data digest) and join it. --seats is the room's total; the server marks
+// the result official only when every seat reported the same tick and hash.
 #include "assets.hpp"
 #include "net/client.hpp"
 #include "net/compat.hpp"
@@ -12,18 +19,24 @@
 #include <filesystem>
 #include <iostream>
 #include <thread>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 int main(int argc, char** argv) {
     try {
         std::string url = "ws://127.0.0.1:8080/net";
         std::string root = std::string(RR_SOURCE_DIR) + "/../cdrom/ROADRASH";
-        int count = 2, ticks = 600, timeout = 90, close_tick = -1;
-        bool rtc = false, require_rtc = false;
+        int count = 2, ticks = 600, timeout = 90, close_tick = -1, seats = 0, first = 0;
+        bool rtc = false, require_rtc = false, native_platform = false;
+        std::string host_alias, join_alias;
         for (int i = 1; i < argc; ++i) {
             std::string a = argv[i];
             if (a == "--help") {
-                std::cout << "net-bots [--url ws://host/net] [--disc ROADRASH] [--clients 2..8] [--ticks N] "
-                             "[--timeout seconds] [--rtc|--no-udp] [--require-rtc] [--rtc-close-tick N]\n";
+                std::cout << "net-bots [--url ws://host/net] [--disc ROADRASH] [--clients 1..8] [--ticks N] "
+                             "[--timeout seconds] [--rtc|--no-udp] [--require-rtc] [--rtc-close-tick N]\n"
+                             "         [--seats N --host-alias NAME | --join-alias NAME] [--first N] "
+                             "[--native-platform]\n";
                 return 0;
             }
             if (a == "--rtc") {
@@ -32,6 +45,10 @@ int main(int argc, char** argv) {
             }
             if (a == "--no-udp") {
                 rtc = false;
+                continue;
+            }
+            if (a == "--native-platform") {
+                native_platform = true;
                 continue;
             }
             if (a == "--require-rtc") {
@@ -53,10 +70,23 @@ int main(int argc, char** argv) {
                 close_tick = std::stoi(v);
             else if (a == "--timeout")
                 timeout = std::stoi(v);
+            else if (a == "--seats")
+                seats = std::stoi(v);
+            else if (a == "--first")
+                first = std::stoi(v);
+            else if (a == "--host-alias")
+                host_alias = v;
+            else if (a == "--join-alias")
+                join_alias = v;
             else
                 throw std::runtime_error("unknown option " + a);
         }
-        if (count < 2 || count > 8 || ticks < 1 || ticks > 216000 || timeout < 1)
+        const bool joining = !join_alias.empty(), hosting = !host_alias.empty();
+        if (!seats) seats = count;
+        if (joining && hosting) throw std::runtime_error("--host-alias and --join-alias are exclusive");
+        if (count < (hosting || joining ? 1 : 2) || count > seats || seats > 8 || first < 0 ||
+            first + count > 8 || ticks < 1 || ticks > 216000 || timeout < 1 ||
+            host_alias.size() > rr::net::max_alias || join_alias.size() > rr::net::max_alias)
             throw std::runtime_error("invalid limits");
         rr::Assets assets(root);
         auto exe = assets.read("ROADRASH.EXE");
@@ -67,7 +97,21 @@ int main(int argc, char** argv) {
         };
         // Bots and interactive clients use the same verified data and
         // simulation fingerprint, so staging smoke exercises the real gate.
-        auto hello = make_hello("Bot", Platform::bot, verified_data_digest(assets));
+#if defined(__EMSCRIPTEN__)
+        constexpr auto host_platform = Platform::web;
+#elif defined(__APPLE__)
+        constexpr auto host_platform = Platform::macos;
+#elif defined(_WIN32)
+        constexpr auto host_platform = Platform::windows;
+#else
+        constexpr auto host_platform = Platform::linux_desktop;
+#endif
+        auto hello =
+            make_hello("Bot", native_platform ? host_platform : Platform::bot, verified_data_digest(assets));
+        // The room list filters on these; print them so mismatched builds are obvious.
+        std::cout << "net-bots fingerprint " << std::hex << hello.sim_fingerprint << " digest ";
+        for (const uint8_t b : hello.data_digest) std::cout << (b >> 4) << (b & 15);
+        std::cout << std::dec << " platform " << int(hello.platform) << "\n";
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<Channel*> transports;
         std::vector<int> depths;
@@ -75,7 +119,7 @@ int main(int argc, char** argv) {
         std::vector<int32_t> measured_tick(size_t(count), -1);
         std::vector<uint64_t> base_stalls(size_t(count), 0);
         for (int k = 0; k < count; ++k) {
-            hello.alias = "Bot" + std::to_string(k + 1);
+            hello.alias = k == 0 && hosting ? host_alias : "Bot" + std::to_string(first + k + 1);
             auto channel = ws_connect(url, RtcOptions{.enabled = rtc});
             transports.push_back(channel.get());
             clients.push_back(std::make_unique<Client>(std::move(channel), hello, factory));
@@ -83,6 +127,7 @@ int main(int argc, char** argv) {
         for (auto& client : clients) client->set_automatic_results(false);
         std::string code;
         bool created = false;
+        uint64_t next_list = 0;
         std::vector<bool> welcomed(size_t(count), false), joined(size_t(count), false),
             full_roster(size_t(count), false), ready(size_t(count), false), reported(size_t(count), false),
             official(size_t(count), false);
@@ -116,20 +161,28 @@ int main(int argc, char** argv) {
                 while (auto m = c.poll_event()) {
                     if (std::holds_alternative<Welcome>(*m)) {
                         welcomed[size_t(k)] = true;
-                        if (k == 0 && !created) {
-                            c.send(RoomCreate{RoomOptions{0, 2, true, false}});
+                        if (k == 0 && !created && !joining) {
+                            // A cross-play host lists the room so other processes find it.
+                            c.send(RoomCreate{RoomOptions{0, 2, true, hosting}});
                             created = true;
                         }
                     }
+                    if (auto list = std::get_if<RoomListReply>(&*m); list && joining && code.empty())
+                        for (const auto& room : list->rooms)
+                            if (room.host == join_alias && room.status != RoomStatus::racing) {
+                                code = room.code;
+                                std::cout << "net-bots found room " << code << " hosted by " << join_alias
+                                          << "\n";
+                            }
                     if (auto s = std::get_if<RoomState>(&*m)) {
-                        if (k == 0) code = s->code;
+                        if (k == 0 && !joining) code = s->code;
                         const int occupied =
                             int(std::count_if(s->seats.begin(), s->seats.end(),
                                               [](const SeatInfo& seat) { return seat.occupied; }));
-                        full_roster[size_t(k)] = occupied == count;
+                        full_roster[size_t(k)] = occupied == seats;
                     }
                     if (auto o = std::get_if<Official>(&*m)) {
-                        if (!o->agreed || o->rows.size() != size_t(count))
+                        if (!o->agreed || o->rows.size() != size_t(seats))
                             throw std::runtime_error("unofficial or incomplete result");
                         official[size_t(k)] = true;
                     }
@@ -141,14 +194,18 @@ int main(int argc, char** argv) {
                     if (!rtc || transport.rtc_open || transport.fallbacks || now - begin > 6000) {
                         // Final votes trigger Start on the server, so delay the
                         // choices too, rather than only the redundant Ready.
-                        c.send(PickCharacter{uint8_t(k + 1)});
+                        c.send(PickCharacter{uint8_t(first + k + 1)});
                         c.send(VoteCourse{4});
                         c.send(Ready{});
                         ready[size_t(k)] = true;
                     }
                 }
                 if (c.failed()) throw std::runtime_error("server rejection, desync or client queue overflow");
-                if (k && welcomed[size_t(k)] && !code.empty() && !joined[size_t(k)]) {
+                if (joining && k == 0 && welcomed[0] && code.empty() && now >= next_list) {
+                    c.send(RoomList{});
+                    next_list = now + 1000;
+                }
+                if ((k || joining) && welcomed[size_t(k)] && !code.empty() && !joined[size_t(k)]) {
                     c.send(RoomJoin{code, false});
                     joined[size_t(k)] = true;
                 }
@@ -195,7 +252,11 @@ int main(int argc, char** argv) {
                 std::cout << "net-bots OK: official cutoff results in room " << code << "\n";
                 return 0;
             }
+#ifdef __EMSCRIPTEN__
+            emscripten_sleep(4); // Asyncify: lets the WebSocket callbacks run
+#else
             std::this_thread::sleep_for(std::chrono::milliseconds(4));
+#endif
         }
         for (size_t k = 0; k < clients.size(); ++k) {
             const auto stats = transports[k]->transport_stats();

@@ -20,8 +20,13 @@ set_target_properties(rr-net PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # logic) changes the handshake fingerprint, so mixed rooms are rejected.
 file(GLOB_RECURSE RR_SIM_SOURCES CONFIGURE_DEPENDS "${RR_NET_ROOT}/src/*.cpp" "${RR_NET_ROOT}/src/*.hpp")
 set(RR_SIM_HASHES "")
+# Line endings are normalised first: Git on Windows (core.autocrlf, the
+# GitHub Windows runners' default) checks sources out with CRLF, and the same
+# commit must give the same fingerprint there (plan 33b Task 6).
 foreach(source IN LISTS RR_SIM_SOURCES)
-    file(SHA256 "${source}" source_hash)
+    file(READ "${source}" source_text)
+    string(REPLACE "\r\n" "\n" source_text "${source_text}")
+    string(SHA256 source_hash "${source_text}")
     string(APPEND RR_SIM_HASHES "${source_hash}")
 endforeach()
 string(SHA256 RR_SIM_SOURCE_HASH "${RR_SIM_HASHES}")
@@ -54,6 +59,21 @@ if(RR_NET_TRANSPORT)
     set(RR_SAVED_BUILD_SHARED ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
     FetchContent_MakeAvailable(libdatachannel)
+    # Plan 33b Task 6: the pinned libdatachannel turns wss:// certificate
+    # verification off on Windows ("not supported"), because OpenSSL has no
+    # system roots there. ws_connect passes the Windows ROOT store as a PEM
+    # file (src/net/system_ca.cpp), so keep verification on when one is given.
+    # MPL-2.0: the change is this replacement, applied to the fetched source.
+    set(RR_LDC_WEBSOCKET "${libdatachannel_SOURCE_DIR}/src/impl/websocket.cpp")
+    file(READ "${RR_LDC_WEBSOCKET}" RR_LDC_TEXT)
+    string(REPLACE "if (std::exchange(verify, false)) {\n\t\t\tPLOG_WARNING << \"TLS certificate verification with root CA is not supported on Windows\";"
+                   "if (!config.caCertificatePemFile && std::exchange(verify, false)) { // Road Rash: system roots given\n\t\t\tPLOG_WARNING << \"TLS certificate verification with root CA is not supported on Windows\";"
+                   RR_LDC_PATCHED "${RR_LDC_TEXT}")
+    if(NOT RR_LDC_PATCHED STREQUAL RR_LDC_TEXT)
+        file(WRITE "${RR_LDC_WEBSOCKET}" "${RR_LDC_PATCHED}")
+    elseif(NOT RR_LDC_TEXT MATCHES "Road Rash: system roots given")
+        message(FATAL_ERROR "libdatachannel websocket.cpp changed; update the Windows TLS verification patch")
+    endif()
     set(BUILD_SHARED_LIBS ${RR_SAVED_BUILD_SHARED})
     if(RR_FUZZ)
         # Pinned libjuice picohash casts C hash callbacks through void pointers.
@@ -61,9 +81,14 @@ if(RR_NET_TRANSPORT)
         target_compile_options(juice-static PRIVATE -fno-sanitize=function)
     endif()
 
-    add_library(rr-net-transport STATIC ${RR_NET_ROOT}/src/net/ws_channel.cpp ${RR_NET_ROOT}/src/net/rtc_channel.cpp ${RR_NET_ROOT}/src/net/rtc_transport.cpp)
+    add_library(rr-net-transport STATIC ${RR_NET_ROOT}/src/net/ws_channel.cpp ${RR_NET_ROOT}/src/net/rtc_channel.cpp ${RR_NET_ROOT}/src/net/rtc_transport.cpp ${RR_NET_ROOT}/src/net/system_ca.cpp)
     target_link_libraries(rr-net-transport PUBLIC rr-net LibDataChannel::LibDataChannelStatic)
     target_compile_definitions(rr-net-transport PUBLIC RR_NET_TRANSPORT=1)
+    if(WIN32)
+        target_link_libraries(rr-net-transport PRIVATE crypt32)
+    elseif(APPLE)
+        target_link_libraries(rr-net-transport PRIVATE "-framework Security" "-framework CoreFoundation")
+    endif()
 endif()
 
 if(RR_FUZZ AND NOT RR_NETD_STANDALONE)
@@ -91,6 +116,17 @@ if(EMSCRIPTEN AND NOT RR_NET_TRANSPORT)
     add_library(rr-net-transport STATIC ${RR_NET_ROOT}/src/net/ws_channel_web.cpp ${RR_NET_ROOT}/src/net/rtc_channel_web.cpp ${RR_NET_ROOT}/src/net/rtc_transport.cpp)
     target_link_libraries(rr-net-transport PUBLIC rr-net)
     target_compile_definitions(rr-net-transport PUBLIC RR_NET_TRANSPORT=1)
+endif()
+
+if(EMSCRIPTEN AND NOT RR_WEB_BROWSER AND NOT RR_NET_TRANSPORT)
+    # Plan 33b Task 6: the browser build's engine and WebSocket transport as
+    # a cross-play bot under Node 22+ (global WebSocket; no DataChannel, so
+    # it races over WebSocket). Asyncify lets the socket callbacks run while
+    # the bot loop sleeps.
+    add_executable(net-bots tools/net_bots.cpp)
+    target_link_libraries(net-bots PRIVATE rr-resource rr-net-transport)
+    rr_web_hostfs(net-bots)
+    target_link_options(net-bots PRIVATE "-sASYNCIFY=1" "-sENVIRONMENT=node" "-sEXIT_RUNTIME=1")
 endif()
 
 if(EMSCRIPTEN AND RR_WEB_BROWSER)

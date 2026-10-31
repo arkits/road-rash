@@ -42,7 +42,7 @@ EM_JS(void, rr_ws_close, (int id), {
     if (state) { state.status = 2; state.ws?.close(); Module.rrSockets.delete(id); }
 });
 EM_JS(int, rr_ws_rtc_optin, (), {
-    const p = new URLSearchParams(globalThis.location.search);
+    const p = new URLSearchParams(globalThis.location?.search ?? ""); // Node bots have no location
     return p.get("rtc") === "1" && p.get("udp") !== "off";
 });
 // clang-format on

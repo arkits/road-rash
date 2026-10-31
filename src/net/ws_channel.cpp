@@ -1,6 +1,7 @@
 // Plan 34 Task 4: WebSocket channel over libdatachannel. Callbacks run on the
 // library's threads and only touch the queue under its mutex.
 #include "net/ws_channel.hpp"
+#include "net/system_ca.hpp"
 
 #include "net/protocol.hpp"
 #include "net/rtc_channel.hpp"
@@ -116,6 +117,9 @@ std::unique_ptr<Channel> ws_connect(const std::string& url, RtcOptions options) 
     config.maxMessageSize = max_message_bytes;
     config.connectionTimeout = std::chrono::milliseconds(10000);
     config.pingInterval = std::chrono::milliseconds(10000);
+    // Plan 33b Task 6: verify wss:// against the OS roots where the static
+    // OpenSSL has no usable defaults (Windows, macOS without Homebrew).
+    if (const std::string& roots = system_ca_file(); !roots.empty()) config.caCertificatePemFile = roots;
     auto ws = std::make_shared<rtc::WebSocket>(config);
     auto channel = make_ws_channel(ws);
     try {
