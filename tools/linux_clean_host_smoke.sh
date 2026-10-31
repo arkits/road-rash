@@ -29,7 +29,9 @@ inner='set -e
 case $(. /etc/os-release; echo $ID) in
   ubuntu|debian) apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libx11-6 libasound2 >/dev/null 2>&1 ;;
   fedora) dnf -y -q install libX11 alsa-lib >/dev/null ;;
-  arch) pacman -Sy --noconfirm --needed libx11 alsa-lib >/dev/null ;;
+  # pacman 7 sandboxes downloads with seccomp, which fails under emulation.
+  arch) pacman -Sy --noconfirm --needed --disable-sandbox libx11 alsa-lib >/dev/null 2>&1 ||
+        pacman -Sy --noconfirm --needed libx11 alsa-lib >/dev/null ;;
 esac
 export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy APPIMAGE_EXTRACT_AND_RUN=1
 for game in /pkg/road-rash-native/rr-game /pkg/game.AppImage; do

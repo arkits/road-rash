@@ -5,15 +5,38 @@
 #include <cstddef>
 #include <cstdlib>
 #include <new>
+#include <cstdio>
 #include <string>
 
+// Plan 33a: Linux ThreadSanitizer links operator new/delete from its static
+// runtime, so a replacement here would be a duplicate definition. The TSan
+// tree still runs these tests for their threads; counts then read 0 and the
+// counter says so. Normal and ASan trees count for real.
+#if defined(__linux__) && defined(__SANITIZE_THREAD__)
+#define RR_ALLOC_COUNTER_UNAVAILABLE 1
+#elif defined(__linux__) && defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define RR_ALLOC_COUNTER_UNAVAILABLE 1
+#endif
+#endif
+
 namespace rr::test {
+#ifdef RR_ALLOC_COUNTER_UNAVAILABLE
+inline constexpr bool counting_available = false;
+#else
+inline constexpr bool counting_available = true;
+#endif
 inline std::atomic<size_t> allocations{0};
 inline std::atomic<bool> counting{false};
 // Sizes of the first counted allocations, for diagnosing a failing count.
 inline std::atomic<size_t> sizes[16];
 struct CountAllocs { // RAII: counts operator new calls in scope
     CountAllocs() {
+        if constexpr (!counting_available) {
+            static const bool noted =
+                (std::fputs("alloc counter: unavailable under Linux TSan; counts read 0\n", stderr), true);
+            (void)noted;
+        }
         for (auto& s : sizes) s = 0;
         allocations = 0;
         counting = true;
@@ -30,7 +53,7 @@ struct CountAllocs { // RAII: counts operator new calls in scope
 };
 } // namespace rr::test
 
-#ifdef RR_ALLOC_COUNTER_DEFINE
+#if defined(RR_ALLOC_COUNTER_DEFINE) && !defined(RR_ALLOC_COUNTER_UNAVAILABLE)
 namespace rr::test {
 inline void* counted_malloc(std::size_t n) noexcept {
     void* p = std::malloc(n ? n : 1);

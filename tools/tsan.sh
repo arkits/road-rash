@@ -24,8 +24,11 @@ cmake -S . -B "$build_dir" -DRR_TSAN=ON -DRR_BUNDLE_SDL=OFF \
 cmake --build "$build_dir" --parallel "${RR_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 export TSAN_OPTIONS=${TSAN_OPTIONS:-"halt_on_error=1:second_deadlock_stack=1"}
 # Race-relevant suites: tests that exercise threads/audio/import lifecycle.
-ctest --test-dir "$build_dir" --output-on-failure \
-    ${RR_TSAN_TESTS:-"-R 'mixer|importer|wav|avi|cinepak|video_player|session|actor_traffic|traffic'"} \
+# RR_TSAN_TESTS is a ctest -R regex. (Plan 33a: it used to carry "-R '...'"
+# with the quotes, which reached ctest as one argument or as a regex with
+# literal quotes, so no test ran; --no-tests=error now catches that.)
+ctest --test-dir "$build_dir" --output-on-failure --no-tests=error \
+    -R "${RR_TSAN_TESTS:-mixer|importer|wav|avi|cinepak|video_player|session|actor_traffic|traffic|render_threads|race-cache|raster-rgb-threads|file_browser}" \
     ${RR_TSAN_CTEST_ARGS:-}
 # Threaded scenarios (Review Focus 4). Best-effort: each runs only if the
 # binary/asset fixture exists; skips are recorded, not failures.
