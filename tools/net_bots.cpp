@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
         // The room list filters on these; print them so mismatched builds are obvious.
         std::cout << "net-bots fingerprint " << std::hex << hello.sim_fingerprint << " digest ";
         for (const uint8_t b : hello.data_digest) std::cout << (b >> 4) << (b & 15);
-        std::cout << std::dec << " platform " << int(hello.platform) << "\n";
+        std::cout << std::dec << " platform " << int(hello.platform) << std::endl;
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<Channel*> transports;
         std::vector<int> depths;
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
                             if (room.host == join_alias && room.status != RoomStatus::racing) {
                                 code = room.code;
                                 std::cout << "net-bots found room " << code << " hosted by " << join_alias
-                                          << "\n";
+                                          << std::endl;
                             }
                     if (auto s = std::get_if<RoomState>(&*m)) {
                         if (k == 0 && !joining) code = s->code;
@@ -184,6 +184,12 @@ int main(int argc, char** argv) {
                     if (auto o = std::get_if<Official>(&*m)) {
                         if (!o->agreed || o->rows.size() != size_t(seats))
                             throw std::runtime_error("unofficial or incomplete result");
+                        // The server agrees over the seats that reported; one that
+                        // left without a result gets place 15. Bots report place 0,
+                        // so every seat must have confirmed the same tick and hash.
+                        if (std::any_of(o->rows.begin(), o->rows.end(),
+                                        [](const OfficialRow& row) { return row.place != 0; }))
+                            throw std::runtime_error("a seat left without reporting its result");
                         official[size_t(k)] = true;
                     }
                 }

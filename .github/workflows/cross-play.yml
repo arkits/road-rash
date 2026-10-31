@@ -176,7 +176,8 @@ jobs:
         env:
           RUN: ${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          alias="XP${RUN: -14}" # unique per run and attempt; 16-character alias limit
+          alias="XP$RUN" # unique per run and attempt
+          alias=${alias:0:16} # protocol alias limit
           case "${{ matrix.role }}" in host) room=(--host-alias "$alias");; *) room=(--join-alias "$alias");; esac
           case "${{ matrix.name }}" in
             wasm-node) bot=(node bin/net-bots.js);;

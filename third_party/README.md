@@ -21,8 +21,13 @@ Online multiplayer (plan 34) networking, fetched by `cmake/net.cmake` when
 `RR_NET_TRANSPORT` is on (native desktop builds, rr-netd, net bots):
 - libdatachannel v0.24.6, commit `6b1e2e620f1e37f0eafeee702eaea0043cb305fd`
   (https://github.com/paullouisageneau/libdatachannel), MPL-2.0,
-  `libdatachannel-LICENSE.txt`. Unmodified; built without media
-  (`NO_MEDIA`), examples or tests.
+  `libdatachannel-LICENSE.txt`. Built without media (`NO_MEDIA`), examples
+  or tests. One modification (plan 33b Task 6), applied at configure time by
+  `cmake/net.cmake` to the fetched `src/impl/websocket.cpp`: on Windows,
+  wss:// certificate verification stays on when the caller supplies a CA
+  file (the game passes the Windows ROOT store). The pinned code otherwise
+  turns verification off on Windows. The replacement text in
+  `cmake/net.cmake` is the modified source, as MPL-2.0 requires.
 - Its submodules at that commit: libjuice v1.7.4 `b89c792e` (MPL-2.0,
   `libjuice-LICENSE.txt`), usrsctp `fec583d5` (BSD-3-Clause,
   `usrsctp-LICENSE.md`), plog `94899e0b` (MIT, `plog-LICENSE.txt`). The

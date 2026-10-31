@@ -92,7 +92,11 @@ std::vector<uint8_t> explode(const uint8_t* data, size_t size, size_t expected) 
             const uint32_t len = length_base[s] + in.get(length_extra[s]);
             if (len == 519) break;
             const int extra = len == 2 ? 2 : int(dict);
-            const uint32_t dist = (uint32_t(in.decode(distance_code())) << extra) + in.get(extra) + 1;
+            // Two separate reads: the operands of + are unsequenced, and MSVC
+            // evaluated get() before decode(), corrupting every resource
+            // (plan 33b Task 6, first Windows run on real data).
+            const uint32_t high = uint32_t(in.decode(distance_code())) << extra;
+            const uint32_t dist = high + in.get(extra) + 1;
             if (dist > out.size()) throw std::runtime_error("Compressed distance too far back");
             if (out.size() + len > expected) throw std::runtime_error("Unpacked data overflows its size");
             for (uint32_t i = 0; i < len; ++i) out.push_back(out[out.size() - dist]);

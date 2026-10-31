@@ -70,6 +70,17 @@ int main() {
         ++failures;
     } catch (const std::runtime_error&) {
     }
+    {
+        // Plan 33b Task 6: PKWARE DCL example from zlib's contrib/blast
+        // (literals, then a back-reference whose distance has extra bits).
+        // MSVC read those bits out of order before explode.cpp sequenced them.
+        const uint8_t blast[8] = {0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f};
+        const auto out = rr::explode(blast, sizeof blast, 13);
+        if (std::string(out.begin(), out.end()) != "AIAIAIAIAIAIA") {
+            std::cerr << "FAIL explode back-reference\n";
+            ++failures;
+        }
+    }
     // Plan 22 Task 3 Step 3 (F4): oversized SOF dimensions in decode_rri must throw std::runtime_error without OOM
     std::vector<uint8_t> jpg = {
         255, 216, 255, 224, 0,   16,  74,  70,  73,  70,  0,   1,   1,   0,   0,    1,    0,   1,   0,   0,
