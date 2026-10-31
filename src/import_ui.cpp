@@ -265,6 +265,9 @@ bool run_import_screen(SDL_Window* window, SDL_Renderer* renderer, const std::st
         SDL_free(ids);
     }
     const uint64_t started = SDL_GetTicks();
+    // Screenshot mode presents a few frames first: a Wayland window learns its
+    // scale only after its first commit (plan 33a, Weston at scale 2).
+    int screenshot_frames = 4;
     if (folder_buttons && !smoke && screenshot.empty()) {
         // Name-based search of the browser's roots, capped at 2 s and
         // stopped as soon as the user acts.
@@ -523,7 +526,7 @@ bool run_import_screen(SDL_Window* window, SDL_Renderer* renderer, const std::st
                 text(fonts.body, 13, 466,
                      pad_hints ? "D-pad: move    A: choose" : "Arrows and Enter, or click", 90, 96, 108);
         }
-        if (!screenshot.empty()) {
+        if (!screenshot.empty() && --screenshot_frames == 0) {
             SDL_Surface* pixels = SDL_RenderReadPixels(renderer, nullptr);
             if (!pixels || !SDL_SaveBMP(pixels, screenshot.c_str())) {
                 SDL_DestroySurface(pixels);
@@ -536,7 +539,7 @@ bool run_import_screen(SDL_Window* window, SDL_Renderer* renderer, const std::st
             SDL_DestroySurface(pixels);
         }
         SDL_RenderPresent(renderer);
-        if (smoke || !screenshot.empty()) break;
+        if (smoke || (!screenshot.empty() && screenshot_frames == 0)) break;
         SDL_Delay(16);
     }
     state->cancel = true;
