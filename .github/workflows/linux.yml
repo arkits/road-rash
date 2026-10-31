@@ -46,6 +46,9 @@ jobs:
     container: debian:trixie
     timeout-minutes: 90
     steps:
+      # git first: without it, checkout downloads a tarball with no .git and
+      # build provenance (tools/build_info.py) cannot read the commit.
+      - run: apt-get update -qq && apt-get install -y -qq git ca-certificates
       - uses: actions/checkout@v4
       - run: sh linux/install-gate-deps.sh
       - name: Configure and build
