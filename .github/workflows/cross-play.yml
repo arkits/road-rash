@@ -12,12 +12,11 @@ name: Cross-play
 
 on:
   workflow_dispatch:
+  # Network code changes run after the server deploy they trigger (a
+  # concurrent deploy would restart the server mid-race).
   push:
     branches: [main]
     paths:
-      - 'src/net/**'
-      - 'tools/net_bots.cpp'
-      - 'cmake/net.cmake'
       - '.github/workflows/cross-play.yml'
   workflow_run:
     workflows: [Deploy multiplayer server]
