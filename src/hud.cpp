@@ -324,7 +324,10 @@ RgbImage Hud::compose(const HudState& state, const PhysicsTables& physics, DashM
         };
         char speed[32];
         std::snprintf(speed, sizeof speed, "%d", state.speed);
-        label(speed, 21, 0xffffff);
+        // Mini-table record 20 {DT_RIGHT, 0, 436, 240, 480}; the full table
+        // keeps the speed needle there (offset 21 is needle data, and read as
+        // a DrawText rect it is empty, so ETO_CLIPPED would draw nothing).
+        label(speed, 20, 0xffffff);
         return image;
     }
     // 0x00446c30 draws the third (opponent) meter whenever the full dashboard

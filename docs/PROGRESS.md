@@ -33,7 +33,7 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Rider contact | Rider, car and pedestrian contact branches ported; pedestrian pairs never contact, as in `0x004368f0` (October 26) | `src/race.cpp` |
 | Combat | Original live AI attack selection, descriptor/frame hit gates, relationship reactions and animation queues; measured in the 2400-tick Napa field replay. Steal resolver gates/transfer measured in 31 original component cases (October 26); free-running steal capture remains open | `src/race.cpp` |
 | Language strings (`TEXT/*.DLL`) | All five languages, original table assembly and continuations | `src/pe_strings.cpp` |
-| Menu text | Disc TrueType fonts (Badloc, Futura); GDI metrics and RGB565 colours exact; hinted glyph bitmaps measured (FreeType mono model 99.1% ASCII vs Wine), not yet in the renderer | `src/text.cpp` |
+| Menu text | Disc TrueType fonts (Badloc, Futura) through pinned FreeType 2.13.3: Wine-GDI glyphs exact (smoothed menu text 8448/8448, 16-bit blend 491520/491520; 1-bit race text 8446/8448), DrawText word wrap, clipping and metrics; focus arrow (system Wingdings) open | `src/text.cpp`, `cmake/freetype.cmake` |
 | Front end (menus, Thrash/Big Game flow, shop, Schmooze, restroom, results, credits) | Ported from the EXE screen tables and handlers; jukebox, sound mix and controls implemented; mano-a-mano disabled (plan 34); layout sweep of all 223 items, full pixel equality open on GDI text hinting. Native Display/Sound/Pause/Enhancements screens, visual-style presets, single widescreen setting (October 13) | `src/frontend.cpp` |
 | Career rules and save files | Prize, fines, repairs, shop, level-up and the original 0xa0-byte save format; seeded original-writer file round-trips byte-exact (`career-save-corpus`), driven-career saves round-trip (`career-test --corpus`, October 26) | `src/career.cpp` |
 | Settings | Registry values as a preference file | `src/settings.cpp` |
@@ -52,6 +52,41 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Flat polygon raster | Normalization matches 2,048 original calls; full flat path matches 64 indexed fixtures; scene integration open | `src/raster.cpp`, `src/polygon.cpp` |
 
 ## Timeline
+
+### October 31, 2026: exact menu text (FreeType 2.13.3, smoothed GDI glyphs)
+
+- The disc fonts now render through FreeType 2.13.3, the release Wine bundles,
+  built static from the pinned tarball (`cmake/freetype.cmake`, offline
+  `RR_FREETYPE_SOURCE_DIR` for the Flatpak, FTL notice in every package).
+  stb_truetype remains only for the import screen's system fonts.
+- Menu text in the goldens is anti-aliased: the game asks for
+  `DEFAULT_QUALITY`, the oracle prefix has grayscale font smoothing on, and
+  Wine smooths text on the 16-bit menu surface (never on 8-bit DIBs). New
+  `TextSurface::rgb565` renders 17-level glyphs and blends them like Wine's
+  16-bit DIB driver. The race HUD and overlays keep `indexed8` 1-bit glyphs.
+  Probes `tools/glyphprobe.c` (mono and `gray`) and `tools/blendprobe.c`
+  measured: smoothed glyphs 8448/8448, blend 491520/491520, 1-bit glyphs
+  8446/8448 (BADLOC 14 `Í`/`Ú` keep one accent row Wine drops), advances
+  8448/8448.
+- DrawText word wrap follows Wine's `TEXT_WordBreak`: a left-aligned line
+  keeps the space at a soft break, which widens the CALCRECT box. Text is
+  clipped to the DrawText rectangle. The Restroom title is laid out in the
+  unclamped title width while its banner widens to 0xe6 (`0x0041f770`).
+- Race HUD text (8-bit surface) uses the 1-bit model. Clipping to the
+  DrawText rectangle exposed an off-by-one in MiniDash. The speed readout
+  read its rectangle from mini-layout offset 21 (needle data, an empty rect);
+  record 20 is `{DT_RIGHT, 0, 436, 240, 480}`. The `race-cache` RGB hashes
+  were re-recorded because the HUD glyphs changed; all six no-HUD scene
+  hashes are unchanged.
+- Full frame vs goldens: characters, restroom and jukebox now differ only in
+  the focus arrow (119/83/83 pixels); graphics is 99.7% exact (the arrow
+  plus the port-only Display row); loading, Schmooze, wrecked, busted and
+  lost are exact (0 pixels). `frontend-test` pins these as full-frame
+  ceilings.
+- Remaining: the focus arrow is a Wingdings glyph (a system font, not on the
+  disc); screens with the y=380 player/price footers (thrash, bulletin,
+  showroom, panzer) and standings (New Courier, a system font) keep their
+  known layout gaps; AWE/EMU8000 music timbre.
 
 ### October 31, 2026: exact menu pictures, dark fills and text colours
 

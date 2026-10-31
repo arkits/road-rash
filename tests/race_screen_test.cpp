@@ -227,7 +227,7 @@ int main() {
         // cop stopping inside the 0x00407860 window in a field no capture
         // covers; removed October 28, 2026 when the controller phase was
         // corrected. The arrest is verified on napa-cops-parked-20261026.)
-        const rr::TextRenderer text(assets);
+        const rr::TextRenderer text(assets, rr::TextSurface::rgb565);
         auto frontend_data = rr::read_frontend_data(exe);
         rr::add_native_screens(frontend_data, false);
         rr::Career career;

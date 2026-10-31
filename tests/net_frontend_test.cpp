@@ -24,7 +24,7 @@ int main() {
     rr::Assets assets(root);
     auto exe = assets.read("ROADRASH.EXE");
     auto resources = rr::read_string_resources(assets.read("TEXT/ENU.DLL"));
-    rr::TextRenderer text(assets);
+    rr::TextRenderer text(assets, rr::TextSurface::rgb565);
     auto tables = rr::read_career_tables(exe);
     rr::Career hc, gc;
     hc.state.cash = 12345;

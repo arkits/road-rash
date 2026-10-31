@@ -1,5 +1,45 @@
 # Verification log (all sessions September 28, 2026)
 
+## Exact menu text: FreeType 2.13.3 and smoothed GDI glyphs (October 31, 2026)
+
+- Ground truth (Wine 11.18 Staging, scratch prefix with the default
+  grayscale smoothing; i686 mingw builds of the probes). `tools/glyphprobe.c`
+  (1bpp DIB) and `glyphprobe.exe <TEXT dir> gray` (32bpp, white on black)
+  each dump 9856 glyphs. `tools/blendprobe.c` gives 491520 RGB565 blend
+  samples, and `tools/textprobe.c` gives the CALCRECT widths. Outputs are in
+  `analysis/frontend/glyphs-20261031/` (git-ignored, disc-derived).
+- `text-test` replays them: "mono glyphs exact 8446/8448, advances 8448" (the
+  two misses are BADLOC 14 `Í`/`Ú`, pinned by name), "smoothed glyphs exact
+  8448/8448, advances 8448", "16-bit text blend exact 491520/491520". It
+  skips (77) without the dumps.
+- `frontend-test`: 226 picture caches bit-exact as before. Full-frame
+  ceilings (unmasked): characters 119, restroom 83 and jukebox 83 differing
+  pixels (all in the Wingdings focus arrow); graphics 787 (arrow plus the
+  port-only Display row); loading, schmooze, wrecked, busted and lost 0.
+  Masked exact is 100% on characters, restroom, jukebox and graphics (pins
+  0.999/0.99). Scratch full-frame sweep: restroom 95.9 to 100.0%, jukebox
+  97.8 to 100.0%, graphics 96.6 to 99.7%, characters 95.5 to 100.0%; also
+  olleys 100.0%, panzer 96.1%, won 98.8%, penalty 99.0%. Showroom (94.7%),
+  thrash/bulletin (95.9%) and standings (87.3%) keep known y=380
+  footer and New Courier gaps.
+- `race-cache`: the RGB hashes were re-recorded because HUD glyphs now come
+  from FreeType. All six `original_scene` (no-HUD) hashes are unchanged and
+  every dashboard-pixel check passes. `hud-test` exposed the MiniDash readout
+  record offset (21 to 20) once DrawText clipping was in. The countdown checks
+  vs the original stay 1209/1209, 1241/1241 and 750/750.
+- Build `build-agent-frontend-exact-20261031` (Debug): `ctest` 134/134 PASS.
+  `python3 tools/cpp_quality.py format-check` PASS. `python3
+  tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-46675a655cb643ab98d2482bc1a97e24`,
+  hardware not run). Its first attempt failed because the FreeType sub-build
+  had no `CMAKE_MAKE_PROGRAM`; both ExternalProject modules now forward it.
+  Emscripten Release build PASS with `EMSDK_PYTHON` set to emsdk's 3.13 (the
+  system python3 is 3.9); its ctest was not run. Offline configure with
+  `RR_FREETYPE_SOURCE_DIR`: "No download step for 'rr-freetype-build'",
+  library built.
+- Not run here: Linux/Windows package builds, the MSVC branch of
+  `cmake/freetype.cmake` (`Release/freetype.lib`), and Android hardware.
+
 ## Exact menu pictures, dark fills and text colours (October 31, 2026)
 
 - Build `build-agent-frontend-exact-20261031` (Debug): configure/build PASS;

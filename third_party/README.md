@@ -1,5 +1,15 @@
 stb_image.h, stb_truetype.h (v1.26, SHA-256 ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab) and LICENSE from https://github.com/nothings/stb/tree/2c980bb59875b0d32144a71867fbdebb2f77cd20
-Unmodified upstream image decoder and TrueType rasteriser. stb_truetype renders the TrueType fonts on the disc (TEXT/*.DLL); stb_image now serves only the research viewer.
+Unmodified upstream image decoder and TrueType rasteriser. stb_truetype renders the import screen's system fonts; stb_image now serves only the research viewer.
+
+The disc's TrueType fonts (`TEXT/*.DLL`) are rendered by FreeType 2.13.3, the
+release Wine bundles for GDI text, fetched by `cmake/freetype.cmake` from
+https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz
+(SourceForge mirror as fallback; SHA-256
+`0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289`) and built
+static without zlib/bzip2/png/harfbuzz/brotli. Unmodified source, used under the
+FreeType License (`FreeType-FTL.txt`, from the archive's `docs/FTL.TXT`), which
+ships in every package. Portions of this software are copyright © 2024 The
+FreeType Project (www.freetype.org). All rights reserved.
 
 Menu pictures (`IMAGES/*.RRI`, JPEG) are decoded by libjpeg-turbo 3.1.4.1,
 fetched by `cmake/jpeg_scalar.cmake` from
@@ -25,7 +35,7 @@ build, Linux/Windows packages, and any host whose system SDL is older than
 3.4.18 is newer than 3.4.12, which added `SDL_HINT_ENABLE_STEAM_SCREEN_KEYBOARD`
 (plan 33a). Android stays on the 3.4.8 AAR above until its device work bumps
 it (plan 33 Task A7 records the split).
-The SDL, stb and libjpeg-turbo licences are copied into the application's Resources.
+The SDL, stb, libjpeg-turbo and FreeType licences are copied into the application's Resources.
 
 Online multiplayer (plan 34) networking, fetched by `cmake/net.cmake` when
 `RR_NET_TRANSPORT` is on (native desktop builds, rr-netd, net bots):

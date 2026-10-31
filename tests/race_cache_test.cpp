@@ -117,9 +117,13 @@ int main(int argc, char** argv) {
                     // the GDI ppem advance rule (textprobe ground truth) shifts
                     // HUD/dashboard glyphs by whole pixels; scene bytes
                     // (original_scene hashes) are unchanged.
+                    // All rgb entries re-recorded 2026-10-31 (frontend-exact-20261031):
+                    // HUD text renders through FreeType 2.13.3 1-bit glyphs (Wine-GDI
+                    // ground truth, text-test) instead of stb coverage; original_scene
+                    // hashes are unchanged.
                     static constexpr uint64_t rgb_baseline[] = {
-                        5580241488231030766ULL,  16911564171020350757ULL, 15835571388324234354ULL,
-                        16940178151090854797ULL, 15087233233538186610ULL, 15342141872932947841ULL};
+                        10273367389924406753ULL, 8741764482650564446ULL,  11172590330531193530ULL,
+                        5135492300604021233ULL,  12373773617984251365ULL, 14537787719708835766ULL};
                     if (rgb)
                         check(checksum == rgb_baseline[(row - 1) / 2],
                               "RGB canvas output changed from pre-optimization baseline");

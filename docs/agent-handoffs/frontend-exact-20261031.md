@@ -1,7 +1,7 @@
 # frontend-exact-20261031
 
 Task: plan 13 Task 6 Step 2 remainder — exact menu pictures, GDI-hinted
-glyph bitmaps, AWE/MIDI music timbre.
+glyph bitmaps, AWE/MIDI music timbre. Pictures and text done; timbre open.
 
 Baseline: `c9eb240`, rebased onto `6b3b6be`. Build directories: `build-agent-frontend-exact-20261031`
 (Debug), `build-agent-frontend-exact-web` (emscripten Release).
@@ -28,31 +28,39 @@ that produced the git-ignored acceptance goldens other sessions already pin.
   `RR_JPEG_SOURCE_DIR`. Not built here: Linux/Windows packages and the MSVC
   branch of `cmake/jpeg_scalar.cmake` (`jpeg-static.lib`); check them in CI.
 
+## Done later the same day (owner approved fetching FreeType)
+
+- `cmake/freetype.cmake`: FreeType 2.13.3 (Wine's bundled release) built
+  static from the pinned tarball; offline `RR_FREETYPE_SOURCE_DIR` for the
+  Flatpak; `third_party/FreeType-FTL.txt` in every package and verifier.
+- `src/text.cpp` renders through FreeType. `TextSurface::rgb565` (menus)
+  draws 17-level anti-aliased glyphs and blends them like Wine's 16-bit DIB
+  driver; `indexed8` (race HUD, overlays) draws 1-bit glyphs. Wine word wrap
+  (`TEXT_WordBreak`), DrawText rect clipping, and the Restroom title's
+  unclamped text width in `src/frontend.cpp`.
+- Ground truth: `tools/glyphprobe.c` (mono, and `gray` 32bpp), new
+  `tools/blendprobe.c` (RGB565 blend), `tools/textprobe.c` (CALCRECT). Dumps
+  in `analysis/frontend/glyphs-20261031/` (git-ignored); `text-test` replays
+  them: mono 8446/8448 (BADLOC 14 Í/Ú), smoothed 8448/8448, blend
+  491520/491520.
+- `frontend-test` full-frame ceilings: characters 119, restroom 83, jukebox
+  83 (all the Wingdings focus arrow), graphics 787 (arrow + port-only
+  Display row), loading/schmooze/wrecked/busted/lost 0.
+
 ## Open
 
-1. **GDI glyph bitmaps.** Ground truth: build `tools/glyphprobe.c` with
-   `i686-w64-mingw32-gcc -O2 -o glyphprobe.exe tools/glyphprobe.c -lgdi32`
-   and run it under Wine Staging 11.18 with a scratch `WINEPREFIX`, passing
-   the folder holding the disc `TEXT/*.DLL` (trailing backslash). Model (see
-   REVERSE_ENGINEERING.md "GDI glyph bitmaps"): integer ppem,
-   `FT_LOAD_TARGET_MONO`, metric bbox, `FT_Outline_Get_Bitmap`. With
-   Homebrew FreeType 2.14.3 it is 6986/8448 exact (ASCII 99.1%). Wine ships
-   FreeType 2.13.3. Next action: add `cmake/freetype.cmake` (ExternalProject,
-   `freetype-2.13.3.tar.xz`, SHA-256
-   `0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289`,
-   zlib/bzip2/png/harfbuzz/brotli off), re-run the comparison against
-   2.13.3, then replace the stb bitmap path in `src/text.cpp` (keep the GDI
-   ppem/advance/pitch rules) and pin a glyph golden test against a
-   probe dump (git-ignored, skip 77). The fetch/build of the
-   FreeType tarball was refused by this session's permission classifier;
-   it needs owner approval.
+1. **Focus arrow.** The original draws it with Wingdings, a Windows system
+   font that is not on the disc. Exactness needs that font from the player's
+   system, or a recorded bitmap of the arrow at its sizes.
 2. **AWE/EMU8000 timbre.** `src/race_music.cpp` applies only attenuation,
    pitch and a 5 ms release. The banks use vol/mod envelopes, initialFc/Q,
-   mod/vib LFOs, pan, reverb/chorus sends and exclusive classes (igen census over
-   GRUNGE1-5.SBK and RRDRUMS.SBK; RRDRUMS also uses pan and initialQ). Wine has no EMU8000, so it cannot serve as a
-   timbre oracle (not measured which mix the oracle install selects), and
-   the factory-ROM presets need an owner-supplied ROM dump. Implementing
-   the SF1 generator semantics is the next independent slice.
+   mod/vib LFOs, pan, reverb/chorus sends and exclusive classes (igen census
+   over GRUNGE1-5.SBK and RRDRUMS.SBK). Wine has no EMU8000, so it is no
+   timbre oracle, and the factory-ROM presets need an owner-supplied ROM
+   dump. Implementing the SF1 generator semantics is the next independent
+   slice.
+3. Outside this task's screens: y=380 player/price footers (thrash,
+   bulletin, showroom, panzer) and New Courier standings rows.
 
 ## Checks
 

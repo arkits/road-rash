@@ -31,40 +31,55 @@ enum class Face { badloc, futura_regular, futura_bold, futura_demi };
 // Win32 DrawText flags used by the original menus.
 namespace dt {
 constexpr unsigned center = 0x1, right = 0x2, vcenter = 0x4, bottom = 0x8, wordbreak = 0x10,
-                   singleline = 0x20, calcrect = 0x400;
+                   singleline = 0x20, noclip = 0x100, calcrect = 0x400;
 }
 
+// Surface the text is drawn on. Wine-GDI (DEFAULT_QUALITY, system smoothing on) draws 1-bit
+// glyphs on <=8-bit DIBs (the race surface) and 17-level anti-aliased glyphs on the 16-bit
+// RGB565 menu surface.
+enum class TextSurface { indexed8, rgb565 };
+
+// Wine's 16-bit DIB anti-aliased text blend of text colour over dst (0x00RRGGBB, RGB565-exact)
+// at smoothing intensity 2..15; exposed for the blendprobe regression.
+uint32_t gdi_blend565(uint32_t dst, uint32_t text, int level);
+
 // Text drawing with the original's own TrueType fonts, read from the user's disc at runtime.
-// GDI of the period renders without anti-aliasing and advances by whole pixels; this renderer
-// does the same (coverage >= 50% is ink). Horizontal advances and multiline pitch follow the
-// GDI ppem rule (rounded design advance at the fitted ppem; tmHeight line step — textprobe
-// ground truth, 380/380 ASCII advances, 292/292 TEXTMETRIC points). The glyph bitmaps stay
-// unhinted stb coverage: exact edge pixels are not reproduced.
+// Reproduces Wine-GDI's TextOut: pinned FreeType 2.13.3 at the GDI ppem, v40 hinting, whole-pixel
+// advances and tmHeight line pitch. indexed8: mono-target 1-bit glyphs (glyphprobe 8446/8448).
+// rgb565: normal-target 17-level glyphs (8448/8448) blended as Wine's 16-bit DIB driver does
+// (blendprobe 491520/491520). Ground truth is Wine's renderer, not Windows'.
 class TextRenderer {
   public:
-    explicit TextRenderer(const Assets&);
+    explicit TextRenderer(const Assets&, TextSurface = TextSurface::indexed8);
     TextRenderer(Face, std::vector<uint8_t> ttf); // single face, for tests
     ~TextRenderer();
     TextRenderer(const TextRenderer&) = delete;
     TextRenderer& operator=(const TextRenderer&) = delete;
     bool has(Face) const;
+    // Whether the face maps this Windows-1252 byte to a glyph (else .notdef).
+    bool covers(Face, uint8_t ch) const;
     // Strings are Windows-1252 bytes as the game uses them. height is the GDI cell height.
     int width(Face, int height, const std::string& text) const;
     int line_height(Face, int height) const;
     void draw(RgbImage&, Face, int height, int x, int y, uint32_t rgb, const std::string& text) const;
     // DrawTextEx-like layout: newlines, word wrap, left/centre/right, vertical centre/bottom for single
-    // lines, clipped to the image. With dt::calcrect nothing is drawn and rect is resized to the text.
+    // lines, clipped to rect (ETO_CLIPPED) unless dt::noclip, and to the image. With dt::calcrect nothing is drawn and rect is resized to the text.
     int draw_box(RgbImage*, Face, int height, TextRect& rect, uint32_t rgb, const std::string& text,
                  unsigned flags) const;
 
   private:
     struct FontData;
+    static std::unique_ptr<FontData> open_font(std::vector<uint8_t> bytes, bool use_os2,
+                                               const std::string& what);
     struct Glyph {
         int x0 = 0, y0 = 0, w = 0, h = 0, advance = 0;
-        std::vector<uint8_t> ink;
+        std::vector<uint8_t> ink; // smoothing intensity 0..16 (1-bit glyphs: 0 or 16)
     };
     const Glyph& glyph(Face, int height, uint8_t ch) const;
     const FontData& font(Face) const;
+    void draw_clipped(RgbImage&, const TextRect* clip, Face, int height, int x, int y, uint32_t rgb,
+                      const std::string& text) const;
+    TextSurface surface_ = TextSurface::indexed8;
     std::map<Face, std::unique_ptr<FontData>> fonts_;
     mutable std::map<std::tuple<Face, int, uint8_t>, Glyph> cache_;
 };

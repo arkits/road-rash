@@ -2279,11 +2279,16 @@ void Frontend::draw_scale1(RgbImage& out) const {
             box = {640 - w, 0, 640, th + 0x2a};
         } else {
             int w = tw + 0x31;
-            if (title_slot_ == 6 && w < 0xe6) w = 0xe6;
             if (w > 640) w = 640; // item 3: clamp the banner to the screen
             box = {0, 0, w, th + 0x2a};
         }
-        fill_from(out, dark_, box.left, box.top, box.right - box.left, box.bottom - box.top);
+        // 0x0041f770 keeps the unclamped width for the text (LVar4) and widens
+        // only the banner window to 0xe6 for the Restroom title (slot 6).
+        TextRect banner = box;
+        if (!(title_format_ & 4) && title_slot_ == 6 && banner.right - banner.left < 0xe6)
+            banner.right = banner.left + 0xe6;
+        fill_from(out, dark_, banner.left, banner.top, banner.right - banner.left,
+                  banner.bottom - banner.top);
         const auto [t, flags] = title_text_layout(box, title_format_, title_slot_);
         draw_text_box(out, t, Face::badloc, 72, title, flags, colour_orange);
     }
@@ -2543,11 +2548,12 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
             const int w = tw < 0x10c ? 0x13c : tw + 0x31;
             box = {640 - w, 0, 640, th + 0x2a};
         } else {
-            int w = tw + 0x31;
-            if (title_slot_ == 6 && w < 0xe6) w = 0xe6;
-            box = {0, 0, w, th + 0x2a};
+            box = {0, 0, tw + 0x31, th + 0x2a};
         }
-        fill(box.left, box.top, box.right - box.left, box.bottom - box.top);
+        TextRect banner = box; // see draw(): only the banner widens to 0xe6
+        if (!(title_format_ & 4) && title_slot_ == 6 && banner.right - banner.left < 0xe6)
+            banner.right = banner.left + 0xe6;
+        fill(banner.left, banner.top, banner.right - banner.left, banner.bottom - banner.top);
         const auto [t, flags] = title_text_layout(box, title_format_, title_slot_);
         textbox(t, Face::badloc, 72, title, flags, colour_orange);
     }

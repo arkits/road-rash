@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
         return failures ? 1 : 77;
     }
     const auto exe = assets.read("ROADRASH.EXE");
-    const TextRenderer text(assets);
+    const TextRenderer text(assets, TextSurface::rgb565);
     // Picture pipeline vs the original's decoded RGB555 image cache
     // (0x004859c0 rows, dumped by oracle/frontend_probe.h after each capture;
     // trace lines "# fe cache <i> <name>"). Every named slot must be bit-exact:
@@ -338,8 +338,8 @@ int main(int argc, char** argv) {
         check_main_layout(scaled, scale);
     }
     // Masked original-vs-native frame comparison shared by the menu goldens
-    // below: text/chrome regions are masked (GDI hinting stays open), the
-    // unmasked background/picture fills must match. Thresholds are
+    // below: text/chrome regions are masked, the unmasked background/picture
+    // fills must match (full_compare covers screens whose text is exact). Thresholds are
     // characterization pins. Goldens live in git-ignored acceptance dirs and
     // skip 77 when absent.
     auto masked_compare = [&](const std::string& name, const RgbImage& frame, const RgbImage& gold,
@@ -393,6 +393,23 @@ int main(int argc, char** argv) {
             return false;
         };
         masked_compare(name, frame, gold, masked, cover_max, exact_min, big_max);
+    };
+    // Full-frame, unmasked comparison: pixels that differ from the golden at
+    // all. Ceilings name what is left (October 31, 2026: smoothed GDI text).
+    auto full_compare = [&](const std::string& name, const std::string& golden_path, const RgbImage& frame,
+                            int max_diff) {
+        RgbImage gold;
+        if (!read_bmp_24(golden_path, gold)) {
+            std::cout << "skip: no " << name << " golden\n";
+            return;
+        }
+        check(gold.width == frame.width && gold.height == frame.height, name + " full-frame size");
+        if (gold.width != frame.width || gold.height != frame.height) return;
+        int diff = 0;
+        for (int y = 0; y < gold.height; ++y)
+            for (int x = 0; x < gold.width; ++x) diff += frame.at(x, y) != gold.at(x, y);
+        std::cout << name << ": full frame " << diff << " pixels differ (ceiling " << max_diff << ")\n";
+        check(diff <= max_diff, name + " full-frame ceiling");
     };
     { // Plan 13 Task 6 Step 2, first slice: screen 9 vs the original
         // RR_ORACLE_MENU=9 capture (menu-09-<date>.bmp, git-ignored, skip 77).
@@ -1143,10 +1160,10 @@ int main(int argc, char** argv) {
         key2("select");
         check(fe2.screen() == 0x0e, "acceptance replay reaches characters");
         snap2("acc-characters");
-        // Bio text sits on the photo outside the masked bands, so GDI glyph
-        // fringes dominate: characterization pin. Pictures, dark fills and
-        // text colours are exact (565); only unhinted glyph edges remain.
-        masked_compare_items("fe-characters", acc + "fe-characters.bmp", img2, fe2.items(), 0.88, 0.08);
+        // Pictures, dark fills, text colours and smoothed glyphs are exact;
+        // the full frame differs only in the focus arrow (system Wingdings).
+        masked_compare_items("fe-characters", acc + "fe-characters.bmp", img2, fe2.items(), 0.999, 0.002);
+        full_compare("fe-characters", acc + "fe-characters.bmp", img2, 119);
         key2("down");
         key2("down");
         key2("select");
@@ -1156,11 +1173,13 @@ int main(int argc, char** argv) {
         fe2.enter(0x10);
         check(fe2.screen() == 0x10, "acceptance replay reaches the restroom");
         snap2("acc-restroom");
-        masked_compare_items("fe-restroom", acc + "fe-restroom.bmp", img2, fe2.items(), 0.93);
+        masked_compare_items("fe-restroom", acc + "fe-restroom.bmp", img2, fe2.items(), 0.999, 0.002);
+        full_compare("fe-restroom", acc + "fe-restroom.bmp", img2, 83); // focus arrow
         fe2.enter(0x11);
         check(fe2.screen() == 0x11, "acceptance replay reaches the jukebox");
         snap2("acc-jukebox");
-        masked_compare_items("fe-jukebox", acc + "fe-jukebox.bmp", img2, fe2.items(), 0.95);
+        masked_compare_items("fe-jukebox", acc + "fe-jukebox.bmp", img2, fe2.items(), 0.999, 0.002);
+        full_compare("fe-jukebox", acc + "fe-jukebox.bmp", img2, 83); // focus arrow
         fe2.enter(0x12);
         check(fe2.screen() == 0x12, "acceptance replay reaches Configure Input");
         snap2("acc-controls");
@@ -1173,9 +1192,10 @@ int main(int argc, char** argv) {
         fe2.enter(0x13);
         check(fe2.screen() == 0x13, "acceptance replay reaches Graphics Options");
         snap2("acc-graphics");
-        // Desc text and its metric-derived box edge extend past the masked
-        // bands; fringe-only residual now (ppem rule), standard ceiling.
-        masked_compare_items("fe-graphics", acc + "fe-graphics.bmp", img2, fe2.items(), 0.91, 0.05);
+        // Exact apart from the focus arrow and the port-only Display row,
+        // which the original's Graphics Options does not have.
+        masked_compare_items("fe-graphics", acc + "fe-graphics.bmp", img2, fe2.items(), 0.99, 0.01);
+        full_compare("fe-graphics", acc + "fe-graphics.bmp", img2, 787);
         // Plan 13 Task 6 Step 2 screens run (new Wine goldens, 20261027):
         // course/shop/result screens in script order so backgrounds chain
         // exactly like the oracle `enter` sequence. Result variants come
@@ -1194,6 +1214,7 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 8, "acceptance replay reaches race loading");
         snap2("acc-loading");
         masked_compare_items("fe-loading", acc2 + "fe-loading.bmp", img2, fe2.items());
+        full_compare("fe-loading", acc2 + "fe-loading.bmp", img2, 0);
         fe2.enter(0x14);
         check(fe2.screen() == 0x14, "acceptance replay reaches Olley's");
         snap2("acc-olleys");
@@ -1213,6 +1234,7 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x1a, "acceptance replay reaches the schmooze screen");
         snap2("acc-schmooze");
         masked_compare_items("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, fe2.items());
+        full_compare("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, 0);
         fe2.enter(0x1b);
         check(fe2.screen() == 0x1b, "acceptance replay reaches the bulletin board");
         snap2("acc-bulletin");
@@ -1222,10 +1244,12 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x1c, "acceptance replay reaches the wrecked screen");
         snap2("acc-wrecked");
         masked_compare_items("fe-wrecked", acc3 + "fe-wrecked.bmp", img2, fe2.items());
+        full_compare("fe-wrecked", acc3 + "fe-wrecked.bmp", img2, 0);
         fe2.enter(0x1d);
         check(fe2.screen() == 0x1d, "acceptance replay reaches the busted screen");
         snap2("acc-busted");
         masked_compare_items("fe-busted", acc3 + "fe-busted.bmp", img2, fe2.items());
+        full_compare("fe-busted", acc3 + "fe-busted.bmp", img2, 0);
         fe2.enter(0x1e);
         check(fe2.screen() == 0x1e, "acceptance replay reaches the won screen");
         snap2("acc-won");
@@ -1235,6 +1259,7 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x1f, "acceptance replay reaches the lost screen");
         snap2("acc-lost");
         masked_compare_items("fe-lost", acc3 + "fe-lost.bmp", img2, fe2.items());
+        full_compare("fe-lost", acc3 + "fe-lost.bmp", img2, 0);
         fe2.enter(0x21);
         check(fe2.screen() == 0x21, "acceptance replay reaches the penalty screen");
         snap2("acc-penalty");

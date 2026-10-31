@@ -333,7 +333,7 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
     display.toggle_at = cli.toggle_at;
     display.apply(480);
     draw_loading(renderer, "Preparing menus and sound...");
-    const rr::TextRenderer text(assets);
+    const rr::TextRenderer text(assets, rr::TextSurface::rgb565);
     const auto tables = rr::read_career_tables(exe);
     rr::Career career;
     // 0x00448200: srand(time(NULL)) at launch; 0x004490d0 -> 0x00442960 then

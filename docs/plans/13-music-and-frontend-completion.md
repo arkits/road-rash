@@ -202,7 +202,9 @@ audio fidelity remains subject to this plan's acceptance. See
 #### October 31, 2026 status (Task 6 Step 2)
 
 Menu pictures are bit-exact against the original's decoded-image cache (226
-dumps), and the darkened fills and text colours are RGB565-exact. Still open:
-hinted glyph bitmaps (FreeType 2.13.3 mono model measured, renderer pending)
-and AWE/EMU8000 timbre. See
+dumps), and the darkened fills and text colours are RGB565-exact. Menu text is
+Wine-GDI exact through pinned FreeType 2.13.3 (anti-aliased glyphs and the
+16-bit blend measured exhaustively; DrawText word wrap and clipping). Still
+open: the Wingdings focus arrow (system font), the y=380 footers, and
+AWE/EMU8000 timbre. See
 [frontend-exact-20261031](../agent-handoffs/frontend-exact-20261031.md).
