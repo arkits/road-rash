@@ -53,6 +53,26 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 31, 2026: run-linux.sh and run-windows.bat (build and launch)
+
+- `run-linux.sh [--debug] [ASSETS_DIR] [args]` and `run-windows.bat` /
+  `run-windows.ps1 [-Debug] [ASSETS_DIR] [args]` do what `run-macos.sh`
+  does: build Release (or Debug), then launch `rr-game` with `--assets` for
+  `../cdrom/ROADRASH` or the given folder, else the import screen.
+- Linux: checks CMake, Python, OpenSSL, X11/Wayland headers and a GCC 13+
+  or Clang 17+ compiler (falls back to `g++-14`/`g++-13` when the default
+  is older) and prints the Debian/Ubuntu, Fedora or Arch install command.
+- Windows: finds Visual Studio with `vswhere`, enters its developer shell
+  for the machine's architecture, uses `VCPKG_INSTALLATION_ROOT`,
+  `VCPKG_ROOT` or a clone in `.tools\vcpkg`, configures the
+  `windows-msvc(-arm64)` preset every run (a failed first configure would
+  otherwise be skipped next time) and waits for the GUI exe.
+- Windows CI runs `run-windows.bat --console --version` from a plain shell.
+- Limits: building needs a Git checkout (`tools/build_info.py` hashes the
+  tracked files), so a source zip download does not build on any platform.
+  Debian 12's GCC 12 is too old; the script says so and points to the
+  packages.
+
 ### October 31, 2026: Linux and Steam Deck in software (plan 33a Tasks 1–7)
 
 - **Gate:** GCC 14 and Clang 19, x86-64 and ARM64 (Debian trixie in

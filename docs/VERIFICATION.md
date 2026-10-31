@@ -1,5 +1,31 @@
 # Verification log (all sessions September 28, 2026)
 
+## run-linux.sh and run-windows.bat (October 31, 2026)
+
+- **Linux, Docker (ARM64), from a Git checkout of the tree:** each container
+  first ran `./run-linux.sh --version` with no build tools; the script
+  stopped with the distribution's install command. That command was then
+  run as printed (non-interactive flags added), followed by
+  `./run-linux.sh --version` and `--first-run-smoke` (SDL dummy drivers).
+  - Ubuntu 24.04 (GCC 13.3): built; Release `--version` and the smoke
+    passed; SDL X11 and Wayland backends ON.
+  - Fedora 42 (GCC 15.2): the same.
+  - Debian 12 (GCC 12): stops before configuring with "g++ 12 is too old"
+    (an earlier run without that check failed compiling `frontend.cpp`).
+  - Arch: every package in the printed `pacman` command exists
+    (`pacman -Si`/`-Sg`, x86-64 under emulation); not built.
+  - Without `.git` the build fails in `tools/build_info.py`
+    (`git ls-files`), as it does for every platform's build.
+- **Windows, CI (`windows-2022`, x64):** the `run-windows-script` job runs
+  `run-windows.bat --console --version` without `msvc-dev-cmd`. Run
+  41206637178 failed at vcpkg (missing `VCPKG_DEFAULT_BINARY_CACHE`
+  folder, now created by the script); run 41206790403 built and launched
+  the game but the check parsed the build log; run 41207524158 passed:
+  Release, MSVC 19.44, commit `877fd2e`. ARM64 and a real desktop are not
+  covered.
+- `pwsh` parser and PSScriptAnalyzer: no findings (`PSAvoidUsingWriteHost`
+  excluded). `sh -n run-linux.sh` passes.
+
 ## Plan 33a: Linux and Steam Deck, Tasks 1–7 (October 30–31, 2026)
 
 - **Gate, local** (`linux/gate.Dockerfile` image: Debian trixie, GCC 14.2.0,
