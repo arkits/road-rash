@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Road Rash Native
+GenericName=Motorcycle combat racing
+Comment=Native port of Road Rash (1997); needs your own disc
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Game;ActionGame;
+Keywords=racing;motorcycle;
+StartupWMClass=org.roadrash.nativeport
+X-GNOME-UsesNotifications=false
+PrefersNonDefaultGPU=false

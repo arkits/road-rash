@@ -378,6 +378,13 @@ bool RaceScreen::iterate(uint64_t now_ns) {
     if (!running_) return false;
     clock_reset_ = false;
     if (!last_) reset_clock(now);
+    // Plan 33a Task 5 Step 6: after a system suspend the race waits in the
+    // pause menu; controllers that re-enumerated on resume are picked up.
+    const bool own_freeze = g_.quitting || g_.pause_message || (opt_.menu && opt_.menu->pause_open());
+    if (!opt_.capture && !opt_.bench && !opt_.online && lifecycle_.state.frame(now, own_freeze)) {
+        if (pad_ && !SDL_GamepadConnected(pad_.get())) pad_.reset();
+        if (!pad_) pad_ = open_first_gamepad();
+    }
     FrameProfile* prof = opt_.bench ? &opt_.bench->current : nullptr;
     canvas_.profile = prof;
     if (restart_) {

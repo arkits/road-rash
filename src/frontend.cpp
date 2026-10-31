@@ -305,7 +305,7 @@ const std::string& Frontend::str(int slot) const {
 }
 
 std::string Frontend::caption_text(const MenuItem& m) const {
-    if (m.caption == edit_slot && editing_name_) return edit_buffer_ + "_";
+    if (m.caption == edit_slot && editing_name_) return pad_text_caption(edit_buffer_, name_cursor_);
     // Plan 34 Task 7: Join code entry and F1-F8 slot editing show the buffer.
     if (m.caption == ns::net_enter_code && editing_code_) return net_code_buffer_ + "_";
     if (m.caption >= 1056 && m.caption < 1064)
@@ -1655,8 +1655,13 @@ int Frontend::run_handler(size_t index) {
         edit_buffer_ = std::string(career_.state.name.data());
         open_popup(data_.popups.at(popup_name), 1, none);
         editing_name_ = true;
+        name_cursor_ = -1;
         return 0;
     case 0x004454c0: {
+        // Pad entry leaves unused slots as spaces; the keyboard keeps what was typed.
+        if (name_cursor_ >= 0)
+            while (!edit_buffer_.empty() && edit_buffer_.back() == ' ') edit_buffer_.pop_back();
+        name_cursor_ = -1;
         career_.state.name = {};
         std::copy_n(edit_buffer_.begin(), std::min<size_t>(edit_buffer_.size(), 19),
                     career_.state.name.begin());
@@ -2025,6 +2030,10 @@ void Frontend::credit_tick() {
     }
 }
 
+void Frontend::pad_name_edit(const MenuInput& in) {
+    pad_text_edit(edit_buffer_, name_cursor_, {in.up, in.down, in.left, in.right}, 19);
+}
+
 void Frontend::update(const MenuInput& raw_in, uint64_t now_ms) {
     MenuInput in = raw_in;
     if (const int bar = side_offset(); bar > 0 && (in.pointer_moved || in.pointer_click)) {
@@ -2087,9 +2096,14 @@ void Frontend::update(const MenuInput& raw_in, uint64_t now_ms) {
         return;
     }
     if (editing_name_) {
+        if (!in.text.empty() || in.backspace) name_cursor_ = -1; // typing edits the end again
         for (char c : in.text)
             if (uint8_t(c) >= 0x20 && edit_buffer_.size() < 19) edit_buffer_.push_back(c);
         if (in.backspace && !edit_buffer_.empty()) edit_buffer_.pop_back();
+        if (in.gamepad && (in.up || in.down || in.left || in.right)) {
+            pad_name_edit(in);
+            return;
+        }
     }
     if (in.alternate_artwork && !editing_name_) {
         settings_.alternate_artwork = !settings_.alternate_artwork;

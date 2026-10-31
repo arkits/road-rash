@@ -268,6 +268,39 @@ int main() {
         check(rr::gamepad_rows(generic, false)[3] == "Menus: D-pad + South/East", "generic pad positions");
         check(rr::pad_labels(nullptr).south == "South", "no pad: positional names");
     }
+    // Plan 33a Task 5 Step 5: pad-only name entry.
+    {
+        std::string name = "RASH";
+        int cursor = -1;
+        const rr::PadTextMove up{true, false, false, false}, down{false, true, false, false},
+            left{false, false, true, false}, right{false, false, false, true};
+        check(rr::pad_text_caption(name, cursor) == "RASH_", "keyboard editing shows the end cursor");
+        rr::pad_text_edit(name, cursor, up, 19);
+        check(name == "RASHA" && cursor == 4 && rr::pad_text_caption(name, cursor) == "RASH[A]",
+              "up on the empty slot after the name starts at A");
+        rr::pad_text_edit(name, cursor, down, 19);
+        rr::pad_text_edit(name, cursor, down, 19);
+        check(name == "RASH&", "down cycles backwards through space to the last symbol");
+        rr::pad_text_edit(name, cursor, left, 19);
+        rr::pad_text_edit(name, cursor, up, 19);
+        check(name == "RASI&" && cursor == 3, "left moves onto H; up gives the next character");
+        rr::pad_text_edit(name, cursor, right, 19);
+        rr::pad_text_edit(name, cursor, right, 19);
+        rr::pad_text_edit(name, cursor, right, 19);
+        check(cursor == 5 && rr::pad_text_caption(name, cursor) == "RASI&_", "right stops at the empty slot");
+        for (int i = 0; i < 6; ++i) rr::pad_text_edit(name, cursor, left, 19);
+        check(cursor == 0, "left stops at the first character");
+        std::string full(19, 'Z');
+        int at = -1;
+        rr::pad_text_edit(full, at, right, 19);
+        check(at == 18 && full.size() == 19, "a full name keeps the cursor on its last character");
+        rr::pad_text_edit(full, at, up, 19);
+        check(full.size() == 19 && full.back() == 'a', "and never grows past the limit");
+        std::string odd = "\xe9";
+        int c0 = 0;
+        rr::pad_text_edit(odd, c0, up, 19);
+        check(odd == "A", "a character outside the cycle restarts it");
+    }
     // Plan 33b Task 4 Step 2: hot-plug through SDL virtual gamepads.
     if (SDL_Init(SDL_INIT_GAMEPAD)) {
         const auto attach = [] {

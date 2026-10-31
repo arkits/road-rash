@@ -37,6 +37,16 @@ void SessionState::handle(const SDL_Event& e) {
     }
 }
 
+bool SessionState::frame(uint64_t now_ns, bool frozen) {
+    const uint64_t last = last_frame_ns_;
+    const bool was_paused = last_frame_paused_;
+    last_frame_ns_ = now_ns;
+    const bool jump = last != 0 && !was_paused && now_ns > last && now_ns - last > suspend_gap_ns;
+    if (jump) pause();
+    last_frame_paused_ = paused() || frozen;
+    return jump;
+}
+
 int TickClock::advance(uint64_t elapsed_ns, bool paused) {
     if (paused) {
         reset();

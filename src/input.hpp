@@ -68,6 +68,20 @@ std::array<std::string, 4> gamepad_rows(const PadLabels&, bool swap_punch_kick);
 // when the open pad goes away, falls back to another connected pad. Returns
 // true when the open pad was removed (races pause on that).
 bool track_gamepad(GamepadPtr&, const SDL_Event&);
+
+// Plan 33a Task 5 Step 5 (native addition): text entry with a pad alone, for
+// when the Steam on-screen keyboard does not appear. Up/down cycle the
+// character under the cursor (space, A-Z, a-z, 0-9, . - ' ! ? &), left/right
+// move it. `cursor` is -1 while the keyboard edits the end of the buffer; the
+// first pad move puts it on the empty slot after the text (the last slot when
+// the buffer is full). The slot at buffer.size() is empty until up/down.
+struct PadTextMove {
+    bool up = false, down = false, left = false, right = false;
+};
+void pad_text_edit(std::string& buffer, int& cursor, PadTextMove move, size_t max_len);
+// The buffer as shown while editing: the pad's character in brackets, or a
+// trailing underscore for the keyboard (and the pad's empty slot).
+std::string pad_text_caption(const std::string& buffer, int cursor);
 // One touch point on a width x height window (mirrored zones when left_handed).
 PlayerInput touch_input(float x, float y, float width, float height, bool left_handed = false);
 // Phone buttons use full-window normalized coordinates, including letterbox

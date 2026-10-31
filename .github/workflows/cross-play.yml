@@ -1,13 +1,14 @@
-# Plan 33b Task 6 Step 2 / plan 34 Task 10 Step 4: cross-play. One public room
-# on the production server holds a Linux, a macOS, a Windows x64, a Windows
-# ARM64 and a wasm32 (the browser build's engine and WebSocket transport,
-# under Node) client from the same commit. The server marks the result
+# Plan 33b Task 6 Step 2 / plan 33a Task 6 Step 3 / plan 34 Task 10 Step 4:
+# cross-play. One public room on the production server holds a Linux x86-64,
+# a Linux ARM64, a macOS, a Windows x64, a Windows ARM64 and a wasm32 (the
+# browser build's engine and WebSocket transport, under Node) client from the
+# same commit. The server marks the result
 # official only when every seat reports the same tick and state hash, and
 # each bot fails unless it gets that official result. Each race job then
 # runs rr-determinism --disc on the same data (plan 33b Task 6 Step 1, the
 # disc race), and the last job requires every platform's hashes to be equal.
 #
-# Builds come first so the five race jobs start together. Each race job
+# Builds come first so the six race jobs start together. Each race job
 # fetches the hosted reference data into an ephemeral directory (as the
 # production smoke test does); no game data is cached or uploaded.
 name: Cross-play
@@ -39,7 +40,12 @@ env:
 jobs:
   build-linux:
     if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
-    runs-on: ubuntu-24.04 # same image as the race job, so the binary's glibc and libssl match
+    strategy:
+      matrix:
+        include:
+          - {arch: x86_64, runner: ubuntu-24.04, artifact: bots-linux}
+          - {arch: arm64, runner: ubuntu-24.04-arm, artifact: bots-linux-arm64}
+    runs-on: ${{ matrix.runner }} # same image as the race job, so the binary's glibc and libssl match
     timeout-minutes: 40
     steps:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq g++-14 libssl-dev
@@ -52,7 +58,7 @@ jobs:
           cmake --build build --target net-bots rr-determinism --parallel
           mkdir bin && cp build/net-bots build/rr-determinism bin/
       - uses: actions/upload-artifact@v4
-        with: {name: bots-linux, path: bin, retention-days: 3}
+        with: {name: '${{ matrix.artifact }}', path: bin, retention-days: 3}
 
   build-macos:
     if: vars.RR_NET_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
@@ -148,8 +154,9 @@ jobs:
       matrix:
         include:
           # first: this seat's index (alias BotN+1 and character); the Linux
-          # job hosts. Five seats in all.
+          # job hosts. Six seats in all.
           - {name: linux, runner: ubuntu-24.04, artifact: bots-linux, first: 0, role: host}
+          - {name: linux-arm64, runner: ubuntu-24.04-arm, artifact: bots-linux-arm64, first: 5, role: join}
           - {name: macos, runner: macos-15, artifact: bots-macos, first: 1, role: join}
           - {name: windows-x64, runner: windows-2022, artifact: bots-windows-x64, first: 2, role: join}
           - {name: windows-arm64, runner: windows-11-arm, artifact: bots-windows-arm64, first: 3, role: join}
@@ -188,7 +195,7 @@ jobs:
           esac
           # WebSocket only: the Node client has no DataChannel, and one
           # transport for every seat keeps the comparison about the platforms.
-          "${bot[@]}" --url wss://road-rash.archit.xyz/net --disc "$RUNNER_TEMP/rr-net-disc" --clients 1 --seats 5 \
+          "${bot[@]}" --url wss://road-rash.archit.xyz/net --disc "$RUNNER_TEMP/rr-net-disc" --clients 1 --seats 6 \
             --first ${{ matrix.first }} "${room[@]}" --native-platform --no-udp --ticks 480 --timeout 900 | tee race.log
           test "${PIPESTATUS[0]}" -eq 0
           grep -q "net-bots OK: official cutoff results" race.log
@@ -218,7 +225,7 @@ jobs:
       - name: Every platform's disc race hashes are equal
         run: |
           ls det
-          test "$(ls det/*.txt | wc -l)" -eq 5
+          test "$(ls det/*.txt | wc -l)" -eq 6
           # Windows stdout is text mode (CRLF); compare the lines, not the bytes.
           for f in det/*.txt; do tr -d '\r' < "$f" > "$f.lf"; done
           for f in det/*.txt.lf; do

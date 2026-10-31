@@ -31,16 +31,28 @@ jobs:
       - run: brew install sdl3
       - run: tools/determinism_matrix.sh macos
 
-  linux-x86_64:
-    runs-on: ubuntu-24.04
+  # Plan 33a Task 6 Step 1: GCC 14 and Clang 19 on x86-64 and ARM64.
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, runner: ubuntu-24.04, cc: gcc, cxx: g++, packages: g++}
+          - {name: linux-x86_64-clang, runner: ubuntu-24.04, cc: clang-19, cxx: clang++-19, packages: clang-19}
+          - {name: linux-arm64, runner: ubuntu-24.04-arm, cc: gcc, cxx: g++, packages: g++}
+          - {name: linux-arm64-clang, runner: ubuntu-24.04-arm, cc: clang-19, cxx: clang++-19, packages: clang-19}
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     container: debian:trixie
     timeout-minutes: 30
     steps:
-      - run: apt-get update -qq && apt-get install -y -qq g++ cmake make libsdl3-dev python3 git
+      - run: apt-get update -qq && apt-get install -y -qq ${{ matrix.packages }} cmake make python3 git
       - uses: actions/checkout@v4
       - name: Build and compare
         run: |
-          cmake -S . -B build-det -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF -DRR_SDL_HEADLESS=ON
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake -S . -B build-det -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF -DRR_SDL_HEADLESS=ON \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
           cmake --build build-det --target rr-determinism --parallel
           build-det/rr-determinism --synthetic > linux-synthetic.txt
           diff linux-synthetic.txt tests/data/determinism_synthetic.txt

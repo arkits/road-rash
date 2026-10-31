@@ -31,19 +31,34 @@ struct CountAllocs { // RAII: counts operator new calls in scope
 } // namespace rr::test
 
 #ifdef RR_ALLOC_COUNTER_DEFINE
-void* operator new(std::size_t n) {
+namespace rr::test {
+inline void* counted_malloc(std::size_t n) noexcept {
     void* p = std::malloc(n ? n : 1);
-    if (!p) throw std::bad_alloc();
-    if (rr::test::counting.load()) {
-        const size_t i = rr::test::allocations.fetch_add(1);
-        if (i < 16) rr::test::sizes[i] = n;
+    if (p && counting.load()) {
+        const size_t i = allocations.fetch_add(1);
+        if (i < 16) sizes[i] = n;
     }
     return p;
+}
+} // namespace rr::test
+void* operator new(std::size_t n) {
+    void* p = rr::test::counted_malloc(n);
+    if (!p) throw std::bad_alloc();
+    return p;
+}
+// The nothrow form too (std::stable_sort's buffer): otherwise the runtime's
+// own nothrow new (ASan's, under the sanitizer) would pair with the free()
+// below. Plan 33a: found by the Linux ASan tree.
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept {
+    return rr::test::counted_malloc(n);
 }
 void operator delete(void* p) noexcept {
     std::free(p);
 }
 void operator delete(void* p, std::size_t) noexcept {
+    std::free(p);
+}
+void operator delete(void* p, const std::nothrow_t&) noexcept {
     std::free(p);
 }
 #endif

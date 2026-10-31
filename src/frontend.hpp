@@ -70,6 +70,9 @@ struct MenuInput {
     bool pointer_moved = false, pointer_click = false;
     int pointer_x = -1, pointer_y = -1; // 640x480 coordinates
     std::string text;                   // typed characters (Windows-1252)
+    // Plan 33a: a gamepad was the last input device, so name entry uses the
+    // pad editor (up/down change the character, left/right move, A confirms).
+    bool gamepad = false;
 };
 
 struct FrontendEvent {
@@ -296,6 +299,11 @@ class Frontend {
     int dialog_then_ = 0;
     bool editing_name_ = false;
     std::string edit_buffer_;
+    // Plan 33a Task 5 Step 5 (native addition): pad name entry. -1 while the
+    // keyboard edits the end of the buffer; otherwise the character the pad's
+    // up/down cycles (edit_buffer_.size() is the empty slot after the name).
+    int name_cursor_ = -1;
+    void pad_name_edit(const MenuInput&);
     std::vector<std::string> save_list_;
     std::vector<Standing> standings_;
     RaceReport report_;

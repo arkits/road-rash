@@ -1,4 +1,5 @@
 #include "input.hpp"
+#include <algorithm>
 #include <cstdlib>
 
 namespace rr {
@@ -201,6 +202,34 @@ bool track_gamepad(GamepadPtr& pad, const SDL_Event& e) {
         if (ids[i] != e.gdevice.which) pad.reset(SDL_OpenGamepad(ids[i]));
     SDL_free(ids);
     return true;
+}
+
+void pad_text_edit(std::string& buffer, int& cursor, PadTextMove move, size_t max_len) {
+    // Space first, so a new slot starts at 'A' going up.
+    static constexpr char cycle[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-'!?&";
+    constexpr int count = int(sizeof cycle) - 1;
+    const int last = int(max_len) - 1;
+    if (cursor < 0) cursor = std::min(int(buffer.size()), last);
+    const int size = int(buffer.size());
+    if (move.left) cursor = std::max(0, cursor - 1);
+    if (move.right) cursor = std::min({cursor + 1, size, last});
+    if (move.up != move.down) {
+        const bool fresh = cursor >= size;
+        const char current = fresh ? ' ' : buffer[size_t(cursor)];
+        const char* found = std::find(cycle, cycle + count, current);
+        const int index = found == cycle + count ? 0 : int(found - cycle);
+        const char next = cycle[(index + (move.up ? 1 : count - 1)) % count];
+        if (fresh)
+            buffer.push_back(next);
+        else
+            buffer[size_t(cursor)] = next;
+    }
+}
+
+std::string pad_text_caption(const std::string& buffer, int cursor) {
+    if (cursor < 0 || size_t(cursor) >= buffer.size()) return buffer + "_";
+    const size_t at = size_t(cursor);
+    return buffer.substr(0, at) + "[" + buffer[at] + "]" + buffer.substr(at + 1);
 }
 
 PlayerInput touch_input(float x, float y, float width, float height, bool left_handed) {

@@ -32,7 +32,17 @@ Online multiplayer (plan 34) networking, fetched by `cmake/net.cmake` when
   `libjuice-LICENSE.txt`), usrsctp `fec583d5` (BSD-3-Clause,
   `usrsctp-LICENSE.md`), plog `94899e0b` (MIT, `plog-LICENSE.txt`). The
   json and libsrtp submodules are not fetched (examples/media only).
-- TLS: OpenSSL 3 (Apache-2.0, `OpenSSL-LICENSE.txt`), the system or
-  Homebrew library, linked statically on macOS.
-MPL-2.0 source for these libraries is available at the URLs above; the port
-does not modify it.
+- TLS: OpenSSL 3 (Apache-2.0, `OpenSSL-LICENSE.txt`): the system or
+  Homebrew library, linked statically on macOS; vcpkg's static build on
+  Windows; and on Linux packages OpenSSL 3.5.9 built static from the release
+  tarball (SHA-256 `603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a`)
+  by `tools/build_linux_package.sh`.
+MPL-2.0 source for these libraries is available at the URLs above. The only
+change to it is the libdatachannel modification described above.
+
+Linux packages (plan 33a) also carry DejaVu Sans 2.37 (`fonts/`, Bitstream
+Vera / public-domain DejaVu changes licence, `DejaVu-LICENSE.txt` from the
+release tarball `dejavu-fonts-ttf-2.37.tar.bz2`, SHA-256
+`fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7`), used when
+the system has none of the fonts in `src/system_fonts.cpp`. The font files
+are downloaded at package time, not committed.

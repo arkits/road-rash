@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Plan 33a: AppStream metadata for the AppImage and Flatpak. -->
+<component type="desktop-application">
+  <id>org.roadrash.nativeport</id>
+  <name>Road Rash Native</name>
+  <summary>Native port of Road Rash (1997); needs your own disc</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>
+      A native engine for the 1997 Road Rash rerelease. Import your own disc
+      image (ISO) or extracted ROADRASH folder; no original game data is
+      included.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.roadrash.nativeport.desktop</launchable>
+  <icon type="stock">org.roadrash.nativeport</icon>
+  <categories>
+    <category>Game</category>
+    <category>ActionGame</category>
+  </categories>
+  <supports>
+    <control>keyboard</control>
+    <control>gamepad</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">moderate</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+  </content_rating>
+</component>

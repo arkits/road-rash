@@ -1,5 +1,6 @@
 #include "net/system_ca.hpp"
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -80,9 +81,38 @@ struct CaFile {
     int count = 0;
 };
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+int count_pem(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    int count = 0;
+    for (std::string line; std::getline(in, line);)
+        if (line.rfind("-----BEGIN CERTIFICATE-----", 0) == 0) ++count;
+    return count;
+}
+#endif
+
 const CaFile& ca_file() {
     static const CaFile file = [] {
         CaFile f;
+#if !defined(_WIN32) && !defined(__APPLE__)
+        // The same order as Go's crypto/x509 root search.
+        std::vector<std::string> candidates;
+        if (const char* env = std::getenv("SSL_CERT_FILE"); env && *env) candidates.emplace_back(env);
+        for (const char* path : {"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
+                                 "/etc/ssl/ca-bundle.pem", "/etc/pki/tls/cacert.pem",
+                                 "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", "/etc/ssl/cert.pem"})
+            candidates.emplace_back(path);
+        for (const auto& path : candidates) {
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(path, ec)) continue;
+            if (const int count = count_pem(path); count > 0) {
+                f.path = path;
+                f.count = count;
+                break;
+            }
+        }
+        return f;
+#endif
         const auto roots = os_roots();
         if (roots.empty()) return f;
         std::error_code ec;

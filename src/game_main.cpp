@@ -15,6 +15,7 @@
 #include "lifecycle.hpp"
 #include <SDL3/SDL_main.h>
 #include "platform_game.hpp"
+#include "platform_linux.hpp"
 #include "utf8_path.hpp"
 #include "assets.hpp"
 #include "bob.hpp"
@@ -217,6 +218,12 @@ void play_video(const rr::Assets& assets, const std::string& path, SDL_Renderer*
                 player.reset_texture();
             }
             if (e.type == SDL_EVENT_RENDER_DEVICE_LOST) throw std::runtime_error("Render device lost");
+        }
+        // Plan 33a Task 5 Step 6: a system suspend pauses the video (any key,
+        // tap or Start resumes) and picks up re-enumerated controllers.
+        if (ticks < 0 && lifecycle.state.frame(SDL_GetTicksNS())) {
+            if (pad && !SDL_GamepadConnected(pad.get())) pad.reset();
+            if (!pad) pad = rr::open_first_gamepad();
         }
         player.pause(lifecycle.state.paused());
         if (ticks < 0 && !player.update(SDL_GetTicksNS())) running = false;
@@ -457,9 +464,19 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
 #endif
     long frames = 0;
     display.frame = 0;
+    rr::platform::ScreenSaverPolicy screen_saver; // plan 33a Task 4 Step 2
+    bool pad_last = false;                        // plan 33a Task 5 Step 5: last input device
+    auto apply_screen_saver = [&](bool playing, bool input) {
+        if (screen_saver.update(SDL_GetTicks(), playing, input))
+            screen_saver.allowed() ? SDL_EnableScreenSaver() : SDL_DisableScreenSaver();
+    };
     while (running) {
         rr::FrontendEvent ev;
         while (running && fe.poll(ev)) {
+            if (ev.kind == rr::FrontendEvent::Kind::play_video ||
+                ev.kind == rr::FrontendEvent::Kind::start_race ||
+                ev.kind == rr::FrontendEvent::Kind::start_net_race)
+                apply_screen_saver(true, false); // races and videos keep the screen on
             if (ev.kind == rr::FrontendEvent::Kind::quit)
                 running = false;
             else if (ev.kind == rr::FrontendEvent::Kind::select_soundtrack)
@@ -690,8 +707,21 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
         }
         fe.set_pad_labels(rr::pad_labels(pad.get())); // plan 33b Task 4: Gamepad page names
         SDL_Event e;
+        bool menu_input = false;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = false;
+            if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_FINGER_DOWN ||
+                e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+                (e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && (e.gaxis.value > 8000 || e.gaxis.value < -8000)))
+                menu_input = true;
+            if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                e.type == SDL_EVENT_FINGER_DOWN)
+                pad_last = false;
+            else if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+                     (e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION &&
+                      (e.gaxis.value > 16000 || e.gaxis.value < -16000)))
+                pad_last = true;
             if (!rr::lifecycle_event(e.type)) lifecycle.state.handle(e);
             if (!mixer.handle(e)) SDL_Log("Audio reopen failed: %s", SDL_GetError());
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
@@ -845,6 +875,8 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
             in.up |= stick.up;
             in.down |= stick.down;
         }
+        apply_screen_saver(false, menu_input);
+        in.gamepad = pad_last;
         if (!lifecycle.state.paused()) fe.update(in, SDL_GetTicks());
         music.update();
         mixer.pause(lifecycle.state.paused() || audio_lifecycle.state.paused());
@@ -915,6 +947,7 @@ int main(int argc, char** argv) {
     int course = 0, bike = 0, level = 0, opponents = 14, character = 1;
     bool explicit_bike = false, explicit_character = false;
     long run_ticks = -1, menu_frames = -1;
+    bool import_browse = false;
     bool auto_drive = false, into_traffic = false, start_paused = false, first_run_smoke = false,
          quick_race = false;
     bool print_wiring = false; // plan 26 Task 3: print race wiring after the first tick and exit
@@ -971,6 +1004,8 @@ int main(int argc, char** argv) {
             menu_script = argv[++i];
         else if (a == "--first-run-smoke")
             first_run_smoke = true;
+        else if (a == "--import-browse") // plan 33a: open the import screen's in-game browser
+            import_browse = true;
         else if (a == "--level" && i + 1 < argc) {
             level = std::atoi(argv[++i]) - 1;
             quick_race = true;
@@ -1031,11 +1066,23 @@ int main(int argc, char** argv) {
 #endif
     int result = 0;
     try {
+        rr::platform::set_startup_hints(); // plan 33a: app ID/name, Steam on-screen keyboard
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) throw std::runtime_error(SDL_GetError());
         if (!SDL_CreateWindowAndRenderer("Road Rash Native", 960, 720,
                                          SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY, &window,
                                          &renderer))
             throw std::runtime_error(SDL_GetError());
+        // Plan 33a Task 5 Step 4: a first run on a Steam Deck or under
+        // gamescope starts fullscreen with the display-matched layout.
+        if (const auto first = rr::path_from_utf8(rr::pref_directory()) / "settings.txt";
+            !capturing && rr::platform::wants_handheld_defaults(rr::platform::process_env())) {
+            std::error_code ec;
+            if (!std::filesystem::exists(first, ec) && !ec) {
+                rr::Settings handheld = rr::default_settings();
+                rr::platform::apply_handheld_defaults(handheld);
+                rr::save_settings(rr::path_to_utf8(first), handheld);
+            }
+        }
         rr::Settings boot_settings =
             rr::load_settings((std::filesystem::path(rr::pref_directory()) / "settings.txt").string());
         apply_cli_overrides(boot_settings, cli);
@@ -1070,7 +1117,7 @@ int main(int argc, char** argv) {
             return 77;
         } // plan 26 Task 3: skip without the disc
         if (!rr::Assets(root).exists("ROADRASH.EXE")) {
-            if (!rr::run_import_screen(window, renderer, root, screenshot, first_run_smoke)) {
+            if (!rr::run_import_screen(window, renderer, root, screenshot, first_run_smoke, import_browse)) {
                 SDL_DestroyRenderer(renderer);
                 SDL_DestroyWindow(window);
                 SDL_Quit();

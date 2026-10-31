@@ -8,8 +8,8 @@ with the disc, with this host's disc run). Exit 1 on any difference.
 
   tools/determinism_matrix.py [target ...]     (default: every target)
 
-Targets: macos, linux (x86-64, Docker), linux-arm64 (Docker), wasm (emcc +
-Node), android (adb device + build-android-det/), windows, windows-clang-cl and
+Targets: macos, linux and linux-clang (x86-64, Docker, GCC 14 / Clang 19),
+linux-arm64 and linux-arm64-clang (Docker), wasm (emcc + Node), android (adb device + build-android-det/), windows, windows-clang-cl and
 windows-arm64 (native on a Windows host, inside an MSVC developer environment:
 Ninja, static SDL, no OpenSSL). Unavailable targets are skipped with the reason.
 """
@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.environ.get("RR_DET_OUT", ROOT / "analysis" / "determinism"))
 REF = ROOT / "tests" / "data" / "determinism_synthetic.txt"
 DISC = Path(os.environ.get("RR_DISC", ROOT.parent / "cdrom" / "ROADRASH"))
-TARGETS = ["macos", "linux", "linux-arm64", "wasm", "android", "windows", "windows-clang-cl", "windows-arm64"]
+TARGETS = ["macos", "linux", "linux-clang", "linux-arm64", "linux-arm64-clang", "wasm", "android", "windows",
+           "windows-clang-cl", "windows-arm64"]
 failures = 0
 # CI sets RR_DET_REQUIRE=1: a skipped target is then a failure, not a pass.
 REQUIRE = os.environ.get("RR_DET_REQUIRE") == "1"
@@ -72,17 +73,24 @@ def host_native(name, build_dir, extra=()):
             check(f"{name}-disc", OUT / f"{name}-disc.txt", host_disc)
 
 
-def docker_linux(name, docker_platform):
+def docker_linux(name, docker_platform, clang=False):
     if not shutil.which("docker") or subprocess.run(["docker", "info"], capture_output=True).returncode:
         print(f"determinism: {name} skipped (no Docker daemon)")
         return
     mounts = ["-v", f"{ROOT}:/src:ro", "-v", f"rr-det-{name}-build:/build", "-v", f"{OUT}:/out"]
+    if (ROOT / ".git").is_file():  # a worktree: its metadata lives in the main repository
+        common = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute",
+                                          "--git-common-dir"], text=True).strip()
+        mounts += ["-v", f"{common}:{common}:ro"]
     disc = os.environ.get("RR_DISC_MOUNT") and DISC.is_dir()
     if disc:
-        mounts += ["-v", f"{DISC}:/disc:ro"]
+        mounts += ["-v", f"{DISC.resolve()}:/disc:ro"]  # Docker does not follow a symlinked mount source
+    packages = "clang-19" if clang else "g++"
+    compilers = "-DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19" if clang else ""
     script = (
-        "apt-get update -qq >/dev/null && apt-get install -y -qq g++ cmake make python3 ca-certificates >/dev/null\n"
-        f"cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF -DRR_SDL_HEADLESS=ON >/out/{name}-build.log 2>&1\n"
+        f"apt-get update -qq >/dev/null && apt-get install -y -qq {packages} cmake make python3 git ca-certificates >/dev/null\n"
+        f"git config --global --add safe.directory '*'\n"
+        f"cmake --fresh -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DRR_NET_TRANSPORT=OFF -DRR_SDL_HEADLESS=ON {compilers} >/out/{name}-build.log 2>&1\n"
         f"cmake --build /build --target rr-determinism --parallel >>/out/{name}-build.log 2>&1\n"
         f"/build/rr-determinism --synthetic >/out/{name}-synthetic.txt\n"
         f"if [ -f /disc/ROADRASH.EXE ]; then /build/rr-determinism --disc /disc >/out/{name}-disc.txt; fi")
@@ -106,10 +114,8 @@ def main():
                 print("determinism: macos skipped (not on macOS)")
                 continue
             host_native("macos", ROOT / "build-det-macos")
-        elif target == "linux":
-            docker_linux("linux", "linux/amd64")
-        elif target == "linux-arm64":
-            docker_linux("linux-arm64", "linux/arm64")
+        elif target.startswith("linux"):
+            docker_linux(target, "linux/arm64" if "arm64" in target else "linux/amd64", target.endswith("-clang"))
         elif target == "wasm":
             if not shutil.which("emcc"):
                 print("determinism: wasm skipped (no emcc; source emsdk_env.sh)")

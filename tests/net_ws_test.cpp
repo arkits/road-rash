@@ -23,6 +23,9 @@ int main() {
         const std::string& file = system_ca_file();
 #if defined(_WIN32) || defined(__APPLE__)
         check(!file.empty() && system_ca_count() > 20, "OS root store exported");
+#else
+        // Plan 33a: a distribution bundle, when the host has one.
+        if (!file.empty()) check(system_ca_count() > 20, "distribution CA bundle found");
 #endif
         if (!file.empty()) {
             std::ifstream in(file, std::ios::binary);

@@ -1,0 +1,9 @@
+# Plan 33a Task 1 Step 4: third-party code excluded from the ASan/UBSan tree
+# (CMakePresets.json linux-asan). Findings there are upstream issues,
+# recorded in docs/VERIFICATION.md, not port bugs:
+# - libdatachannel src/impl/wstransport.cpp:390, misaligned uint64_t store
+#   (WebSocket frame length; benign on x86-64 and ARM64);
+# - libjuice picohash.h:680, call through a function pointer of another type
+#   (-fsanitize=function, Clang 17+).
+[undefined]
+src:*/_deps/libdatachannel-src/*

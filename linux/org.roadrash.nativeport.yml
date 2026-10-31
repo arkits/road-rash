@@ -1,0 +1,61 @@
+# Plan 33a Task 3: Flatpak manifest. Built from source (not from the
+# tarball) with the freedesktop 24.08 SDK; tools/build_linux_flatpak.sh
+# replaces @SOURCE_URL@ / @SOURCE_COMMIT@ with the repository and commit to
+# build and produces RoadRashNative-<version>-<arch>.flatpak. The build has
+# no network: SDL and libdatachannel come in as pinned sources below and
+# CMake's FetchContent uses them (FETCHCONTENT_SOURCE_DIR_*). OpenSSL and the
+# DejaVu fonts come from the runtime.
+#
+# Sandbox: Wayland with X11 fallback, PulseAudio (PipeWire's pulse server),
+# all devices (controllers and hidraw for Steam Input), network (plan 34).
+# The disc is picked through the FileChooser portal, which grants the chosen
+# ISO or folder; read-only Downloads lets the in-game browser (Game Mode,
+# where the portal may not appear) find an ISO there (decision recorded in
+# plan 33a Task 3 Step 3). Data: ~/.var/app/org.roadrash.nativeport/data.
+app-id: org.roadrash.nativeport
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: rr-game
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --socket=pulseaudio
+  - --device=all
+  - --share=network
+  - --filesystem=xdg-download:ro
+modules:
+  - name: road-rash-native
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DRR_STATIC_SDL=ON
+      - -DBUILD_TESTING=OFF
+      - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+      - -DFETCHCONTENT_SOURCE_DIR_SDL3=/run/build/road-rash-native/deps/sdl3
+      - -DFETCHCONTENT_SOURCE_DIR_LIBDATACHANNEL=/run/build/road-rash-native/deps/libdatachannel
+    no-make-install: true
+    post-install:
+      - install -Dm755 rr-game /app/bin/rr-game
+      - install -Dm644 ../linux/org.roadrash.nativeport.metainfo.xml /app/share/metainfo/org.roadrash.nativeport.metainfo.xml
+      - install -Dm644 ../assets/app-icon/roadrash.png /app/share/icons/hicolor/48x48/apps/org.roadrash.nativeport.png
+      - sed -e 's|@EXEC@|rr-game|' -e 's|@ICON@|org.roadrash.nativeport|' ../linux/road-rash-native.desktop.in > org.roadrash.nativeport.desktop
+      - install -Dm644 org.roadrash.nativeport.desktop /app/share/applications/org.roadrash.nativeport.desktop
+      - install -Dm644 -t /app/share/licenses/org.roadrash.nativeport ../third_party/SDL-LICENSE.txt ../third_party/LICENSE
+        ../third_party/libdatachannel-LICENSE.txt ../third_party/libjuice-LICENSE.txt ../third_party/usrsctp-LICENSE.md
+        ../third_party/plog-LICENSE.txt ../third_party/OpenSSL-LICENSE.txt
+    sources:
+      - type: git
+        url: '@SOURCE_URL@'
+        commit: '@SOURCE_COMMIT@'
+        disable-submodules: true
+      - type: archive
+        url: https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz
+        sha256: 9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3
+        dest: deps/sdl3
+      - type: git
+        url: https://github.com/paullouisageneau/libdatachannel.git
+        commit: 6b1e2e620f1e37f0eafeee702eaea0043cb305fd # v0.24.6
+        dest: deps/libdatachannel

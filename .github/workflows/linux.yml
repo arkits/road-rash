@@ -1,0 +1,105 @@
+# Plan 33a Task 7: Linux native gate and packages.
+# - gate: GCC 14 on x86-64 and ARM64 and Clang 19 on x86-64, Debian trixie,
+#   full build + CTest with the pinned SDL (X11/Wayland/audio backends built).
+#   No game data on CI, so disc tests exit 77; tools/ctest_skip_check.py
+#   fails the job if anything else skipped.
+# - package: the portable tarball and AppImage built in the Steam Runtime
+#   (sniper) SDK container, verified (no game data, NEEDED allowlist, glibc
+#   2.31 ceiling, launch from both packages) and launched on clean Ubuntu
+#   20.04, Debian 12, Fedora and Arch (x86-64) containers; x86-64 also builds
+#   and smoke-tests the Flatpak bundle.
+name: Linux
+
+on:
+  push:
+    branches: [main, 'port/plan33a-**']
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'oracle/**'
+      - 'server/**'
+      - 'cmake/**'
+      - 'third_party/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'linux/**'
+      - 'assets/app-icon/**'
+      - '.github/workflows/linux.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: gcc-x86_64, runner: ubuntu-24.04, preset: linux-gcc}
+          - {name: gcc-arm64, runner: ubuntu-24.04-arm, preset: linux-gcc}
+          - {name: clang-x86_64, runner: ubuntu-24.04, preset: linux-clang}
+    name: gate-${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    container: debian:trixie
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh linux/install-gate-deps.sh
+      - name: Configure and build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake --preset ${{ matrix.preset }} -B build
+          cmake --build build --parallel "$(nproc)"
+      - name: Test
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: ctest --test-dir build --output-on-failure -j "$(nproc)" --timeout 1800 --output-junit ctest.xml
+      - name: Only disc, fixture or host-specific tests skipped
+        if: always()
+        run: python3 tools/ctest_skip_check.py --build-dir build --junit build/ctest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ctest-linux-${{ matrix.name }}
+          path: build/ctest.xml
+          retention-days: 14
+
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: ubuntu-24.04}
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+    name: package-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0} # the version comes from the newest v* tag
+      - uses: actions/cache@v4
+        with:
+          path: build-linux-package/cache
+          key: linux-package-cache-${{ matrix.arch }}-${{ hashFiles('tools/build_linux_package.sh') }}
+      - name: Build and verify (sniper SDK container)
+        run: tools/build_linux_package.sh ${{ matrix.arch }}
+      - name: Launch on clean distributions
+        run: |
+          version=$(cat build-linux-package/version-${{ matrix.arch }}.txt)
+          tools/linux_clean_host_smoke.sh build-linux-package/RoadRashNative-$version-linux-${{ matrix.arch }}.tar.gz \
+            build-linux-package/RoadRashNative-$version-${{ matrix.arch }}.AppImage ${{ matrix.arch }}
+      - name: Flatpak bundle
+        if: matrix.arch == 'x86_64'
+        run: tools/build_linux_flatpak.sh x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package-${{ matrix.arch }}
+          path: |
+            build-linux-package/*.tar.gz
+            build-linux-package/*.AppImage
+            build-linux-package/*.flatpak
+          retention-days: 14

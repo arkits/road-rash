@@ -68,6 +68,39 @@ is installed, `RoadRashNative-<version>-setup-<arch>.exe`. Check them with
   signing (`tools/sign_windows.ps1`, `RR_SIGN_*`), so Windows shows "Windows
   protected your PC" on first launch. Choose "More info", then "Run anyway".
 
+Linux and Steam Deck (in development, plan 33a): x86-64 or ARM64 with glibc
+2.31 or later (SteamOS 3, Ubuntu 20.04+, Debian 11+, Fedora 34+, Arch), X11 or
+Wayland, and PipeWire, PulseAudio or ALSA. Nothing else needs installing.
+Three packages are built by `tools/build_linux_package.sh [x86_64|aarch64]`
+(Docker; Steam Runtime "sniper" SDK container) and, for the Flatpak,
+`tools/build_linux_flatpak.sh`. CI builds them on every change and `v*`
+releases attach them.
+- **Tarball** (`RoadRashNative-<version>-linux-<arch>.tar.gz`): unpack it
+  anywhere and run `road-rash-native/rr-game`.
+  `./install-desktop-entry.sh` adds a menu entry with the icon for that
+  folder (`--remove` takes it away).
+- **AppImage** (`RoadRashNative-<version>-<arch>.AppImage`): make it
+  executable (`chmod +x`, or Properties > Permissions) and run it. It needs no
+  FUSE 2 library.
+- **Flatpak** (`RoadRashNative-<version>-x86_64.flatpak`):
+  `flatpak install --user RoadRashNative-*.flatpak`, then
+  `flatpak run org.roadrash.nativeport`. It can read your Downloads folder
+  (read-only) and anything you pick in the file dialog, and nothing else.
+- **Steam Deck:** in Desktop Mode, download the AppImage, make it
+  executable, then in Steam choose *Games > Add a Non-Steam Game to My
+  Library* and pick it. It then starts from Game Mode. On a Deck, or anywhere
+  under gamescope, the first start goes fullscreen with the widescreen and
+  render scale matched to the 1280x800 screen; change them in Settings.
+
+Data on Linux: saves, settings, the imported disc and the log are in
+`~/.local/share/RoadRashNative/RoadRash` (or `$XDG_DATA_HOME/RoadRashNative/RoadRash`);
+the Flatpak keeps the same layout under
+`~/.var/app/org.roadrash.nativeport/data/RoadRashNative/RoadRash`.
+Removing a package keeps your data. For problem reports, attach `rr-game.log`
+and `rr-game.1.log` (the previous run) from that folder; `rr-game --version`
+prints the build. The packages contain no game data and have not yet been
+played on real Linux hardware or a Deck (plan 33a Task 8).
+
 ## Importing your disc
 
 First launch presents the import screen. Select the ISO (or an extracted
@@ -91,6 +124,25 @@ variable changes the root for isolated developer runs.
 `%LOCALAPPDATA%\RoadRashNative\RoadRash\rr-game.log` (this run) and
 `rr-game.1.log` (the previous run); a portable copy keeps them in its `data`
 folder.
+
+**Import with a gamepad, keyboard or mouse (desktop):** the import screen
+has three buttons: *Choose ISO* and *Choose folder* open the system file
+dialog, and *Browse* opens the game's own file browser. Move between them with
+the D-pad, left stick, arrow keys or Tab; A or Enter chooses. The browser
+starts at your home folder, Downloads and mounted drives (on Linux
+`/run/media/<user>/*` for SteamOS SD cards and USB drives, `/media/<user>/*`
+and `/mnt/*`; on macOS `/Volumes/*`). It lists folders and `.iso` files
+(any case); a folder holding ROADRASH.EXE or a ROADRASH folder offers *Use
+this folder*. A opens or chooses, B goes back, Y returns to the top, and
+LB/RB page (keyboard: Enter, Esc, Page Up/Down; mouse: click, wheel). If
+the system dialog fails, or has not answered after 3 seconds, the browser
+opens as well, and a file picked in the dialog later is still used. In Steam
+Deck Game Mode the browser opens at once, since the system dialog may not
+appear there. Shortly after the screen opens, the game also lists discs it
+found within two folder levels of those places (a ROADRASH folder, or an ISO
+of 400-800 MB) under *Found on this computer*; choose one to import it. The
+search looks at names only; the import still checks every file. The browser
+and the search are native additions.
 
 A mismatch or missing file leaves the existing destination intact. The first
 run screen displays the error. Android's actual Storage Access Framework
@@ -205,6 +257,22 @@ Disconnecting the active menu controller pauses; South/Start or a tap resumes.
 After a pause, video or race, release the stick to neutral before navigating
 again. This prevents a held race steering input from moving menu focus.
 Physical controls on the MANGMI AIR X still require device validation.
+
+**Name entry with a gamepad** (a native addition, plan 33a): when the career
+name box is open and a gamepad was the last thing you used, up and down on
+the D-pad or stick change the character in [brackets] (space, A-Z, a-z, 0-9
+and . - ' ! ? &), left and right move between characters, and A confirms.
+Unused trailing spaces are dropped. Typing on a keyboard, or Steam's
+on-screen keyboard (which the game asks Steam to show in Big Picture and Game
+Mode), goes back to normal typing at the end of the name.
+
+**Sleep and resume:** if the computer sleeps (or the game is stopped) for more
+than 2 seconds during a race or video, it comes back paused: the pause menu
+in a race, a paused video otherwise. Resume it as usual. Controllers that
+reconnected while asleep are picked up.
+
+**Screen saver:** the screen stays on during races and videos. In the menus
+the screen saver may start again after five minutes without input.
 
 ## Online mano a mano
 

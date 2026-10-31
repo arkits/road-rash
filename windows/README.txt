@@ -24,8 +24,10 @@ prints the build, and "--console" shows log output while the game runs.
 
 This program includes SDL3 (zlib licence), stb (MIT licence) and, for online
 play, libdatachannel and libjuice (MPL-2.0), usrsctp (BSD-3-Clause), plog (MIT)
-and OpenSSL (Apache-2.0). Their licences are in the "licenses" folder; MPL-2.0
-source is available from the upstream projects, unmodified.
+and OpenSSL (Apache-2.0). Their licences are in the "licenses" folder. MPL-2.0
+source is available from the upstream projects; the one change to
+libdatachannel (certificate checks stay on with the Windows root store) is in
+the port's cmake/net.cmake.
 
 The port is in development. Gameplay, presentation and original-game parity
 remain incomplete.

@@ -1,12 +1,15 @@
 // Plan 33b Task 3: per-OS process setup for rr-game.
 #include "platform_game.hpp"
-#if defined(_WIN32)
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+#define RR_GAME_LOG_FILE 1
 #include "platform_files.hpp"
 #include "utf8_path.hpp"
 #include <SDL3/SDL.h>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#endif
+#if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -14,7 +17,7 @@
 #endif
 
 namespace rr {
-#if defined(_WIN32)
+#ifdef RR_GAME_LOG_FILE
 namespace {
 std::FILE* log_file = nullptr;
 SDL_LogOutputFunction default_output = nullptr;
@@ -31,7 +34,8 @@ const char* priority_name(SDL_LogPriority priority) {
     }
 }
 void SDLCALL log_output(void*, int category, SDL_LogPriority priority, const char* message) {
-    // SDL's default output already reaches OutputDebugString and an attached console.
+    // SDL's default output already reaches OutputDebugString and an attached
+    // console on Windows, and stderr on Linux.
     if (default_output) default_output(default_userdata, category, priority, message);
     if (log_file) {
         std::fprintf(log_file, "[%10llu ms] %s %s\n", static_cast<unsigned long long>(SDL_GetTicks()),
@@ -41,7 +45,8 @@ void SDLCALL log_output(void*, int category, SDL_LogPriority priority, const cha
 }
 } // namespace
 
-void platform_game_startup(int argc, char** argv) {
+void platform_game_startup([[maybe_unused]] int argc, [[maybe_unused]] char** argv) {
+#if defined(_WIN32)
     // A GUI-subsystem process has no console. `--console` attaches to the
     // parent's, but only for streams that are not already redirected to a
     // pipe or file (for example `rr-game --console --version > out.txt`).
@@ -58,6 +63,9 @@ void platform_game_startup(int argc, char** argv) {
             if (!out_redirected) freopen_s(&stream, "CONOUT$", "w", stdout);
             if (!err_redirected) freopen_s(&stream, "CONOUT$", "w", stderr);
         }
+#endif
+    // Plan 33a: Linux too. A game started from the application menu, an
+    // AppImage or Steam has no terminal, so problem reports need the file.
     try {
         const std::filesystem::path dir = path_from_utf8(local_data_directory());
         const std::filesystem::path current = dir / "rr-game.log", previous = dir / "rr-game.1.log";

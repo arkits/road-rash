@@ -40,6 +40,31 @@
       }
     },
     {
+      "name": "linux-release",
+      "inherits": "linux-gcc",
+      "description": "Plan 33a: portable release (pinned static SDL that dlopens its backends, static libstdc++/libgcc and OpenSSL); build inside the Steam Runtime sniper SDK with tools/build_linux_package.sh",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14",
+        "RR_STRICT_WARNINGS": "OFF",
+        "RR_STATIC_SDL": "ON",
+        "OPENSSL_USE_STATIC_LIBS": "ON",
+        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc"
+      }
+    },
+    {
+      "name": "linux-asan",
+      "inherits": "linux-clang",
+      "description": "Plan 33a: ASan + UBSan tree (Clang)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -fsanitize-ignorelist=${sourceDir}/tools/sanitizer_ignorelist.txt",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -fsanitize-ignorelist=${sourceDir}/tools/sanitizer_ignorelist.txt",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
       "name": "windows-base",
       "hidden": true,
       "inherits": "base",

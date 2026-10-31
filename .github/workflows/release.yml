@@ -1,7 +1,8 @@
 # v* tags build every desktop package, then one job publishes them together
-# (plan 33b Task 7): the macOS ARM64 app zip and, for Windows x64 and ARM64,
-# the portable zip and per-user installer, all with the tag's version in the
-# file name. Windows packages are signed when the owner's RR_SIGN_PFX_* secrets
+# (plan 33b Task 7, plan 33a Task 7): the macOS ARM64 app zip; for Windows x64
+# and ARM64, the portable zip and per-user installer; for Linux x86-64 and
+# ARM64, the portable tarball and AppImage, plus the x86-64 Flatpak bundle;
+# all with the tag's version in the file name. Windows packages are signed when the owner's RR_SIGN_PFX_* secrets
 # exist and unsigned otherwise. No game data is in any package. A manual run
 # (workflow_dispatch) is a dry run: everything is built and checked, with
 # development version names, and nothing is published.
@@ -66,9 +67,51 @@ jobs:
       release_tag: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     secrets: inherit
 
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: ubuntu-24.04}
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+    name: Build Linux ${{ matrix.arch }} release
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # package version from v* tags
+
+      - name: Build and verify tarball and AppImage (sniper SDK container)
+        run: tools/build_linux_package.sh ${{ matrix.arch }}
+
+      - name: Check the version and launch on clean distributions
+        run: |
+          version=$(cat build-linux-package/version-${{ matrix.arch }}.txt)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            case "$version" in *-g*) echo "tag $GITHUB_REF_NAME is not on HEAD"; exit 1;; esac
+          fi
+          tools/linux_clean_host_smoke.sh build-linux-package/RoadRashNative-$version-linux-${{ matrix.arch }}.tar.gz \
+            build-linux-package/RoadRashNative-$version-${{ matrix.arch }}.AppImage ${{ matrix.arch }}
+
+      - name: Flatpak bundle
+        if: matrix.arch == 'x86_64'
+        run: tools/build_linux_flatpak.sh x86_64
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: |
+            build-linux-package/RoadRashNative-*.tar.gz
+            build-linux-package/RoadRashNative-*.AppImage
+            build-linux-package/RoadRashNative-*.flatpak
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
-    needs: [macos-arm64, windows]
+    needs: [macos-arm64, windows, linux]
     runs-on: ubuntu-24.04
     steps:
       - name: Download packages
@@ -81,7 +124,8 @@ jobs:
       - name: Check the asset set
         run: |
           ls -l dist
-          for name in macos-arm64.zip windows-x64.zip windows-arm64.zip setup-x64.exe setup-arm64.exe; do
+          for name in macos-arm64.zip windows-x64.zip windows-arm64.zip setup-x64.exe setup-arm64.exe \
+                      linux-x86_64.tar.gz linux-aarch64.tar.gz x86_64.AppImage aarch64.AppImage x86_64.flatpak; do
             test "$(ls dist/RoadRashNative-*-"$name" | wc -l)" -eq 1 || { echo "missing or duplicate *-$name"; exit 1; }
           done
           (cd dist && sha256sum RoadRashNative-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
