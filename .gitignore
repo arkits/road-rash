@@ -40,3 +40,6 @@ web/node_modules/
 .vcpkg-cache/
 /dist/
 /det.txt
+
+# Plan 33a: Flatpak builds unpack pinned SDL/libdatachannel sources here
+/deps/

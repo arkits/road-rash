@@ -165,8 +165,8 @@ std::vector<DiscCandidate> discover_discs(const std::vector<platform::BrowseRoot
                 const auto by_name = [](const DirEntry* a, const DirEntry* b) {
                     return name_less(a->name, b->name);
                 };
-                std::sort(sorted.begin(), sorted.end(),
-                          by_name); // total-order: folded name, then exact bytes
+                // total-order: folded name, then exact bytes
+                std::sort(sorted.begin(), sorted.end(), by_name);
                 for (const auto* e : sorted) {
                     const std::string path = join_path(dir, e->name);
                     if (e->directory && iequals(e->name, "ROADRASH")) {
