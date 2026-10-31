@@ -121,7 +121,16 @@ priority over GAS. Slide off a button to release it.
 The Touch settings page adjusts opacity and mirrors the layout for left-handed
 play. Other touch platforms use screen zones. A tap resumes while paused
 or restarts after a finish. Android Back pauses. Background/focus loss or
-controller disconnect pauses; returning requires explicit resume.
+controller disconnect pauses; returning requires explicit resume. If another
+controller is connected, it takes over at once; otherwise the next one
+plugged in does.
+
+Keyboard layouts: driving and attack keys are physical positions, so on
+AZERTY, QWERTZ or Dvorak they sit where Z, X, C and W/A/S/D are on a US
+keyboard. Configure Input shows the letter your layout
+prints on each key. The letter shortcuts (Q quits, P pauses) follow the
+printed letter. Button names on the Gamepad page follow the connected
+controller (A/B/X/Y on Xbox, Cross/Circle/Square/Triangle on PlayStation).
 
 Rebinding: Graphics Options → Configure Input lists the nine original key
 bindings with the currently bound key each. Select a row and press the new

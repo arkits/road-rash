@@ -145,11 +145,30 @@ Windows CI caught a real bug in Step 3: a successful retry kept the first attemp
 
 **Files:** Modify `src/input.cpp`, `src/race_actions.cpp`, `src/native_screens.cpp` (controls labels), `docs/REVERSE_ENGINEERING.md` (if any original key semantics are touched).
 
-- [ ] **Step 1: Scancodes.** Audit that race bindings are scancode-based and that labels come from the current layout. Test with a synthetic AZERTY key map via `SDL_GetKeyFromScancode` overrides.
-- [ ] **Step 2: Controllers.** Test Xbox (XInput and Windows.Gaming.Input), DualShock 4 / DualSense (SDL's HIDAPI driver) and a generic DirectInput pad. Hot-plug mid-race pauses, and reconnecting resumes input. The button glyphs follow `SDL_GetGamepadButtonLabel`.
-- [ ] **Step 3: Audio.** WASAPI shared mode. A default-device change (headset plugged in) mid-race and mid-video moves the output without desynchronising the video clock.
-- [ ] **Step 4: Pacing.** Run `rr-game --bench` (plan 14 frame statistics) at 60/144 Hz, with vsync on and off. The race keeps exactly 60 ticks/s (tick counter vs wall clock over 10 minutes, drift < 1 tick), and interpolation (plan 32 R2/R3) is smooth at 144 Hz.
-- [ ] **Step 5:** Commit `windows: input layout, controllers, audio device change, pacing checks`.
+- [x] **Step 1: Scancodes.** *(Done October 30.)* Race bindings are scancode-based: the default keys read `SDL_GetKeyboardState` by scancode, and custom bindings store the captured scancode. Labels on Configure Input now come from the current layout (`key_label`: `SDL_GetKeyName(SDL_GetKeyFromScancode(...))`). They used to be fixed `Z`/`X`/`C` text for the defaults and US scancode names for custom keys. `input_test` drives synthetic AZERTY, QWERTZ and Dvorak lookups through the injectable `lookup`.
+- [x] **Step 2: Controllers.** *(Code and virtual-pad tests done October 30; real Xbox, DualShock 4/DualSense and DirectInput pads are observed in Task 8.)*
+  - One hot-plug helper (`track_gamepad`) now serves the video, menu, pause-menu and race loops. Removing the open pad pauses the race. Another connected pad takes over at once, and a pad plugged in later restores input. Before, a second pad that was already connected stayed unused in races.
+  - The Gamepad page names the connected pad's buttons through `SDL_GetGamepadButtonLabel` and `SDL_GetGamepadType`:
+    - Xbox: A/B/X/Y, Menu/View;
+    - PlayStation: Cross/Circle/Square/Triangle, Options/Share or Create, L2/R2/R1;
+    - Nintendo: the printed letters, +/-, ZL/ZR;
+    - unknown pads: positional names.
+  - The rows follow the punch/kick swap. The old swap description named the wrong buttons (South and West); the swap actually trades West and North.
+  - `input_test` attaches SDL virtual gamepads: open on add, a second pad does not take over, removal reported once, fallback, reconnect.
+- [x] **Step 3: Audio.** *(Code and dummy-driver test done October 30; a real headset swap is observed in Task 8.)*
+  - The mixer opens the system default playback device. SDL then moves the stream to a new default (on Windows, the WASAPI device change) with its queue and voice cursors intact, and sends no removal for that logical device.
+  - `Mixer::handle` used to close and reopen on any playback removal, which dropped the queued audio. It now reopens only when its own device id is removed.
+  - The video clock reads the voice cursor minus queued frames and never moves backwards, so a migration keeps picture and sound together.
+  - `mixer-device` checks that an unrelated removal leaves the stream alone and that its own removal reopens it.
+- [x] **Step 4: Pacing.** *(Instrumentation and 10-minute clock tests done October 30; the 144 Hz Windows runs are part of Task 8.)*
+  - `rr-game --bench` reports a `pacing` block: wall time, expected ticks, `drift_ticks`, start-to-start frame intervals (p50/p99/max), a 0/1/2/3+ step histogram and `clock_resets`.
+  - The drift figure balances ticks plus the clock's sub-tick remainder against wall time × 60. It is exactly 0 unless the clock really lost time, for example a stall past the 20-step cap. Frames where the race resets its clock on purpose (window focus regained, resume) are counted separately.
+  - `tools/bench_report.py --max-drift 1` gates the drift.
+  - `--bench-vsync` now turns vsync on. Before, it only kept the settings value, so a settings file with vsync off measured without vsync.
+  - `session_test` runs 10 simulated minutes at 60, 144, 165 and 59.94 Hz and with vsync-off jitter. The clock stays within one tick of wall time throughout, interpolated time never steps back, and 144 Hz frames advance by an even 5/12 tick.
+- [x] **Step 5:** Commit `windows: input layout, controllers, audio device change, pacing checks`.
+
+Shortcut keys stay on keycodes, which is a choice: Q (quit), P (pause) and the menu letters follow the letter printed on the key, as Windows virtual-key codes did for the original, while driving and attacking use physical positions. Escape, Enter, Pause and the arrow keys are the same on every layout.
 
 ### Task 5: Packaging
 
@@ -240,4 +259,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: Tasks 1–3, 5 and 7 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 4 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Tasks 1–5 and 7 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check, Task 4 real controllers, headset swap and 144 Hz runs; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 6 Step 2 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

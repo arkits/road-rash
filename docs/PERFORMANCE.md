@@ -29,7 +29,8 @@ tools/bench_report.py --min-fps 60 report.json   # exit 1 below target
   `--bench-warmup` frames (default 60; the script uses 90 to cover the fade-in),
   then measures FRAMES frames and exits. It writes JSON to stdout and to
   `--bench-out PATH`, labelled by `--bench-label`. Vsync is off unless you pass
-  `--bench-vsync`, so the number is throughput. The race scale follows the
+  `--bench-vsync`, which turns it on whatever the settings file says, so the
+  number is throughput. The race scale follows the
   settings (`effective_render_scale`) unless you pass `--render-scale`.
 - Presets: `user` copies your real `settings.txt`. `original` turns every
   enhancement off at 4:3. `enhanced` turns every enhancement on with widescreen
@@ -37,6 +38,15 @@ tools/bench_report.py --min-fps 60 report.json   # exit 1 below target
   `RR_PREF_OVERRIDE` in `analysis/bench/<stamp>/pref-<preset>/`, so your real
   settings and saves are never written. The real `upscaled/` cache is
   symlinked in when it exists.
+- Pacing (plan 33b Task 4): the report's `pacing` block has wall time,
+  expected ticks, `drift_ticks`, start-to-start frame intervals (p50/p99/max),
+  a 0/1/2/3+ step histogram and `clock_resets`. Drift balances ticks plus the
+  clock's sub-tick remainder against wall time × 60, so it reads 0.000 unless
+  the race clock really lost time (a stall past the 20-step cap). Frames where
+  the race resets its clock on purpose (focus regained, resume) are counted,
+  not charged. A 10-minute vsync check at the display's rate:
+  `rr-game --bench 72000 --bench-vsync` (120 Hz; 86400 at 144 Hz), then
+  `tools/bench_report.py --max-drift 1 REPORT.json`.
 - The report includes the build type, renderer, window and pixel size,
   surface size, worker count, the cost-relevant settings, the mean fps, frame
   mean/p50/p95/p99/max, and the mean and max per phase. It also lists up to 32

@@ -53,6 +53,25 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: input layout, controllers, audio device change, pacing (plan 33b Task 4)
+
+- Configure Input labels name what the current keyboard layout prints on each
+  physical key (`key_label`). Race keys were already scancodes; the labels
+  were fixed US text. Letter shortcuts (Q, P) stay on the printed letter.
+- One controller hot-plug helper (`track_gamepad`) for the video, menu,
+  pause and race loops: removing the open pad pauses, and another connected
+  pad takes over. The Gamepad page names the pad's own buttons (Xbox,
+  PlayStation, Nintendo, positional) and follows the punch/kick swap, whose
+  description named the wrong buttons.
+- The mixer reopens only when its own device is removed. SDL already moves a
+  default-device stream to a new default (headset plugged in) with its queue
+  intact; the old any-removal reopen dropped queued audio.
+- `--bench` reports exact 60 Hz drift (ticks plus remainder against wall
+  time), frame intervals, a step histogram and clock resets;
+  `bench_report.py --max-drift` gates it; `--bench-vsync` now turns vsync on.
+- Remaining: real controllers, a headset swap and 144 Hz Windows runs (Task 8
+  hardware).
+
 ### October 30, 2026: Windows release assets and CI skip check (plan 33b Task 7)
 
 - `release.yml`: a `v*` tag builds the macOS app and the Windows x64/ARM64

@@ -1,5 +1,47 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Task 4: input layouts, controllers, audio device change, pacing (October 30, 2026)
+
+- Windows CI run `41159614938` (branch, commit `d5eb32c`): all six jobs
+  passed.
+  - MSVC x64 and ARM64, Debug and Release: 132/132 passed, with the skip
+    check "132 tests, 35 skipped (disc 29, fixture 5, posix 1)".
+  - clang-cl and MSYS2 unit tests: 85/85.
+  - Synthetic determinism matches the macOS reference on all six jobs.
+  - Both packages: 14 system DLLs, no game data, launched,
+    install/uninstall.
+- macOS Debug (`build-plan33`): 132/132.
+- MinGW cross build under Wine (local check, not Windows acceptance):
+  `input`, `session`, `mixer`, `mixer-device` and `frontend` passed.
+- What the tests cover:
+  - `input`: synthetic AZERTY/QWERTZ/Dvorak label lookups; physical-key
+    binding bits; pad names for Xbox One, DS4, DualSense, Switch Pro and
+    generic pads; swap rows; SDL virtual-gamepad hot-plug (open on add, no
+    takeover by a second pad, removal reported once, fallback, reconnect).
+  - `frontend`: Gamepad page rows for no pad and a DualSense, including the
+    swap.
+  - `mixer-device`: an unrelated device removal leaves the stream alone; the
+    stream's own removal reopens it.
+  - `session`: 10 simulated minutes at 60, 144, 165 and 59.94 Hz and with
+    vsync-off jitter. The clock stays within one tick of wall time,
+    interpolated time is monotonic, 144 Hz steps are an even 5/12 tick, and
+    the bench pacing books balance.
+- Real pacing run on this Mac (Release app, MacBook Pro built-in 3456×2234 ProMotion
+  display at 120 Hz, vsync on, Napa autopilot):
+  `rr-game --bench 72000 --bench-warmup 120 --bench-vsync` then
+  `tools/bench_report.py --max-drift 1`.
+  - 601.5 s, 120.3 fps mean.
+  - drift -0.000 ticks.
+  - frame interval p50 8.27 ms, p99 9.42 ms, max 79.97 ms.
+  - steps 0/1/2/3+: 35921/36071/6/2; 0 clock resets.
+  - Shorter Debug runs before the fix showed drift -1.2 ticks. The cause was
+    a startup focus-gained clock reset charged as drift. The bench now counts
+    resets separately, and `--bench-vsync` now really turns vsync on (the
+    first "vsync" run had reported `"vsync": 0`).
+- Not covered (Task 8 hardware): real Xbox/DualShock 4/DualSense/DirectInput
+  pads on Windows, a WASAPI headset swap mid-race and mid-video, 144 Hz
+  Windows displays with vsync on and off.
+
 ## Plan 33b Task 7: CI skip check and release assets (October 30, 2026)
 
 - Windows CI run `41120901367` (branch, commit `91fb572`): all six jobs
