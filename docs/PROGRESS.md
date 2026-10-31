@@ -53,6 +53,26 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 30, 2026: Windows determinism matrix and cross-play (plan 33b Task 6)
+
+- `determinism.yml`: MSVC x64, clang-cl x64 and MSVC ARM64 jobs
+  (`tools/determinism_matrix.py`, which now fails a required skip).
+- `cross-play.yml`: Linux, macOS, Windows x64/ARM64 and wasm32-under-Node
+  bots race one public production room after each server deploy. The
+  result must be official, with every seat reporting the same hash. Each job
+  also runs the disc determinism race on the verified hosted data, and all
+  five must be equal.
+- Three Windows bugs found and fixed:
+  - MSVC's operand order corrupted every packed resource (`explode.cpp`).
+  - CRLF checkouts changed the simulation fingerprint, which would have
+    split Windows players from everyone else.
+  - wss:// had no usable CA roots with the static OpenSSL (a Mac without
+    Homebrew could not connect), and libdatachannel skipped verification on
+    Windows. Clients now load the OS root store, and Windows verification
+    stays on.
+- Remaining: the Windows Defender Firewall prompt and a real browser tab in
+  a mixed room (hardware/manual, plan 33b Task 8 / plan 34 Task 10 Step 3).
+
 ### October 30, 2026: input layout, controllers, audio device change, pacing (plan 33b Task 4)
 
 - Configure Input labels name what the current keyboard layout prints on each

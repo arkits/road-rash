@@ -132,6 +132,20 @@ of the port:
    "a rate-looking constant" from a nearby address produced a 100× speed bug
    caught only by headless probing.
 
+## Portable C++ pitfalls (plan 33b)
+
+- **Unsequenced reads.** In `f(a(), b())` or `a() + b()` the order is
+  unspecified. Clang and GCC go left to right; MSVC may not. Two reads from a
+  stream, a bit reader or the RNG in one expression must become separate
+  statements. `explode.cpp` corrupted every packed resource under MSVC this
+  way, and only real data caught it, because Windows CI has no disc and
+  MinGW under Wine uses GCC's order. The cross-play workflow is what runs
+  MSVC on real data.
+- **Line endings.** Git on Windows checks out CRLF by default. Anything that
+  hashes sources (the simulation fingerprint) must normalise them.
+- **Static OpenSSL has no system roots.** Its default CA paths are the build
+  machine's. TLS clients use `system_ca_file()` (`src/net/system_ca.cpp`).
+
 ## Multi-session workflow
 
 Two agent sessions have worked in this repository concurrently (October 11,

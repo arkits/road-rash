@@ -208,9 +208,18 @@ Signing is wired but unconfigured. Which certificate to use, if any (a classic t
 
 **Files:** Modify `tools/determinism_matrix.py`, `.github/workflows/determinism.yml`, `docs/plans/34-multiplayer.md`.
 
-- [ ] **Step 1:** *(Synthetic part done October 30: every Windows CI job compares `rr-determinism --synthetic` with the reference, and all four match. Disc race open, blocked with Task 1 Step 7.)* Add `windows-msvc-x64`, `windows-clang-cl-x64` and `windows-msvc-arm64` jobs to the matrix, synthetic on CI. Run the disc race wherever a disc is available.
-- [ ] **Step 2:** Plan 34 cross-play: a Windows client in a room with macOS, Linux and browser clients. Results agree and hashes match. Confirm that Windows Defender Firewall shows no prompt, because connections are outgoing only. Record it in plan 34 Task 10 Step 4.
-- [ ] **Step 3:** Commit `windows: determinism matrix and cross-play`.
+- [x] **Step 1:** *(Done October 30.)* `determinism.yml` has `windows` (MSVC x64), `windows-clang-cl` and `windows-arm64` (native MSVC) jobs. `tools/determinism_matrix.py` builds them with Ninja, static SDL and no OpenSSL inside the MSVC environment. It takes the architecture from `VSCMD_ARG_TGT_ARCH`, and with `RR_DET_REQUIRE=1` (set on CI) a skipped target fails. The disc race runs in the cross-play workflow: each race job also runs `rr-determinism --disc` on the verified hosted data, and a final job requires all five platforms' hashes to be equal.
+- [x] **Step 2:** *(Done October 30 on CI; the Windows Defender Firewall check needs a desktop and moves to Task 8.)* `.github/workflows/cross-play.yml`:
+  - Linux, macOS, Windows x64, Windows ARM64 and wasm32 bots from one commit race one public room on the production server.
+  - The wasm32 bot is the browser build's engine and WebSocket transport, running under Node. It is not a browser, and it has no DataChannel, so every seat races over WebSocket.
+  - `net-bots` gained `--host-alias`/`--join-alias`, so one process hosts and the others find the room in the public list, plus `--seats`, `--first` and `--native-platform`. A seat that leaves without a result now fails the run; the server would otherwise agree over the seats that did report.
+  - The workflow runs after each server deploy, weekly and on demand, gated on `RR_NET_DEPLOY_ENABLED`.
+  - Run `41167612427`: room `48CVQV`, five platforms, the same fingerprint and the same state hash at tick 480, official. The disc race is equal on all five, and equal to the local macOS run on the original disc.
+  - The runs found three Windows bugs, all fixed:
+    - **Every packed resource was corrupt under MSVC.** `explode.cpp` read the distance's extra bits and its Huffman code in one unsequenced `+`, and MSVC evaluated them in the other order. Windows CI has no game data, and MinGW (GCC order) passed under Wine, so nothing had caught it. The zlib `blast` DCL example is now a regression test.
+    - **Windows checkouts had a different simulation fingerprint.** It hashed CRLF line endings (`core.autocrlf`, the runner default), so Windows players would have been refused by every other platform's rooms. `cmake/net.cmake` now normalises CRLF; LF hashes are unchanged.
+    - **Server certificates were not checked properly.** The statically linked OpenSSL had no usable CA paths off the build machine. On a Mac without Homebrew, wss:// failed (reproduced with `SSL_CERT_FILE`/`SSL_CERT_DIR` pointed at nothing), and on Windows the pinned libdatachannel turned verification off altogether. `src/net/system_ca.cpp` now writes the OS root store (Windows ROOT, macOS anchors) to a PEM file for `caCertificatePemFile`, and a configure-time patch keeps Windows verification on when one is given (`third_party/README.md`).
+- [x] **Step 3:** Commit `windows: determinism matrix and cross-play`.
 
 ### Task 7: CI and release
 
@@ -259,4 +268,4 @@ Run plan 33's per-OS acceptance list on:
   - uninstall, then reinstall, and confirm the data is kept.
 - [ ] **Step 5:** Document install, SmartScreen, import, controls and data locations in USER_GUIDE.md. Commit `docs: Windows acceptance`.
 
-Status: Tasks 1–5 and 7 done except the hardware observations (Task 1 Step 7 disc run, Task 3 Step 4 desktop check, Task 4 real controllers, headset swap and 144 Hz runs; blocked: no Windows machine); Task 6 Step 1 synthetic part done; Tasks 6 Step 2 and 8 open. Tracked in [00-INDEX.md](00-INDEX.md).
+Status: Tasks 1–7 done except the hardware observations (Task 1 Step 7 disc run on a real Windows machine, Task 3 Step 4 desktop check, Task 4 real controllers, headset swap and 144 Hz runs, Task 6 firewall prompt; blocked: no Windows machine). The MSVC disc race itself runs on CI runners in the cross-play workflow. Task 8 open. Tracked in [00-INDEX.md](00-INDEX.md).

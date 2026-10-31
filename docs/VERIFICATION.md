@@ -1,5 +1,47 @@
 # Verification log (all sessions September 28, 2026)
 
+## Plan 33b Task 6: determinism matrix and cross-play (October 30, 2026)
+
+- Determinism matrix run `41166186066` (`main`, `6f94c35`): all six jobs
+  passed (macOS, Linux x86-64, wasm32, and the new `windows` MSVC x64,
+  `windows-clang-cl` and `windows-arm64` MSVC); synthetic hashes equal the
+  reference.
+- Cross-play run `41167612427` (`main`, `e55eb3a`): all jobs passed.
+  - Five seats in public production room `48CVQV`: Linux x86-64 (GCC 14),
+    macOS ARM64 (Apple clang), Windows x64 and ARM64 (MSVC), and wasm32 under
+    Node 22.
+  - Every bot printed fingerprint `fcd49d17...` (same build, CRLF
+    normalised) and confirmed tick 480 with hash `17197354468746764753`.
+    The server's result was official, with every seat reporting.
+  - `rr-determinism --disc` on the verified hosted data: all five equal
+    (Windows output compared without CR). The Linux output also equals the
+    local macOS run on the original disc (`cdrom/ROADRASH`).
+  - The earlier run `41166186114` (`6f94c35`, before the disc step) was
+    official in room `W28HRK` with equal hashes.
+- How the runs got there:
+  - The first run (`41164323603`) failed both Windows seats with "course
+    scene NAPA: Compressed distance too far back": MSVC's operand order in
+    `explode.cpp`.
+  - That run's other three seats passed, because the server agrees over
+    the seats that reported. `net-bots` now requires every seat to report.
+  - The room alias was empty because of the `${RUN: -14}` bash slice.
+- Windows CI run `41166186070` (`main`, `6f94c35`): all six jobs passed.
+  `net_ws` (the OS root store check) and `resource-bounds` (blast
+  back-reference) pass on MSVC x64/ARM64.
+- Local macOS: 132/132.
+  - `resource-bounds` fails when the distance reads are swapped back to
+    MSVC's order (mutation check), and passes with the fix.
+  - With `SSL_CERT_FILE`/`SSL_CERT_DIR` pointing nowhere (a Mac without
+    Homebrew), net-bots failed against `wss://road-rash.archit.xyz/net`
+    before the fix and was welcomed after it (157 roots).
+  - A three-process room on a local `rr-netd` (two native processes plus a
+    wasm/Node process) was official with equal hashes.
+- The fingerprint's CRLF normalisation leaves LF hashes unchanged: all 208
+  sources hash the same as `file(SHA256)`.
+- Not covered: the Windows Defender Firewall prompt (needs a desktop; Task
+  8), a real browser tab in a mixed room (plan 34 Task 10 Step 3), and
+  negative-path proof of the every-seat check (reviewed in code only).
+
 ## Plan 33b Task 4: input layouts, controllers, audio device change, pacing (October 30, 2026)
 
 - Windows CI run `41159614938` (branch, commit `d5eb32c`): all six jobs

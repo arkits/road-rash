@@ -534,7 +534,7 @@ October 27: implementation and live UDP/fallback acceptance complete; RTC remain
   - A Wi-Fi↔cellular switch reconnects with the seat token and fast-forwards.
   - Test on the MANGMI AIR X: record the observed race, lifecycle and reconnect in VERIFICATION.md.
 - [ ] **Step 3: Browser (plan 23).** Same rooms and races; cross-play with native in both directions. The game data comes from the existing hosted manifest. The Asyncify main loop polls the channel each frame.
-- [ ] **Step 4: Linux and Windows** with plan 33, in the determinism matrix and the cross-play tests.
+- [x] **Step 4: Linux and Windows** with plan 33, in the determinism matrix and the cross-play tests. *(October 30, plan 33b Task 6.)* `determinism.yml` has Linux x86-64, MSVC x64, clang-cl x64 and MSVC ARM64 jobs. `cross-play.yml` races Linux, macOS, Windows x64/ARM64 and wasm32-under-Node bots in one production room after each server deploy: run `41167612427` was official with equal hashes on all five. Each job also runs the disc determinism race, which was equal on all five. A real browser tab and the Windows firewall prompt are still observed by hand (Step 3, plan 33b Task 8).
 - [ ] **Step 5:** Commit: `platform: online mano-a-mano on all targets`.
 
 ---
