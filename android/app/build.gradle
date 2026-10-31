@@ -14,7 +14,7 @@ def taggedVersion = '0.1-research'
 def noticeDirectory = layout.buildDirectory.dir('generated/notices')
 def prepareNotices = tasks.register('prepareNotices', Copy) {
     from new File(rootProject.projectDir.parentFile, 'third_party')
-    include 'LICENSE', 'SDL-LICENSE.txt'
+    include 'LICENSE', 'SDL-LICENSE.txt', 'JPEG-LICENSE.md', 'JPEG-README.ijg'
     into noticeDirectory.map { it.dir('licenses') }
 }
 try {

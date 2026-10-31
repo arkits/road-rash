@@ -198,3 +198,11 @@ per unpaused render frame, with PCM backpressure and synchronous mixer detach
 at stop. The thirty-second Napa streaming regression passes; exact AWE/MIDI
 audio fidelity remains subject to this plan's acceptance. See
 [handoff](../agent-handoffs/playtest-audio-ai-loading.md).
+
+#### October 31, 2026 status (Task 6 Step 2)
+
+Menu pictures are bit-exact against the original's decoded-image cache (226
+dumps), and the darkened fills and text colours are RGB565-exact. Still open:
+hinted glyph bitmaps (FreeType 2.13.3 mono model measured, renderer pending)
+and AWE/EMU8000 timbre. See
+[frontend-exact-20261031](../agent-handoffs/frontend-exact-20261031.md).

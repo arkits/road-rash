@@ -102,8 +102,10 @@ enum DialogKind { dialog_message = 0, dialog_unsaved = 1, dialog_quit_race = 2 }
 // Plan 34 Task 7: lobby dialogs (handled in finish_dialog).
 enum DialogNet { dialog_net_error = 3, dialog_net_connecting = 4 };
 
-constexpr uint32_t colour_light = 0xdefff0, colour_grey = 0xa0a0a0, colour_orange = 0xff6432,
-                   colour_focus = 0xe1e180, colour_yellow = 0xffff00;
+// 0x0041fc90 colours #DEFFF0/#A0A0A0/#FF6432/#E1E180 as they land on the 16-bit
+// menu surface (RGB565, bit-replicated): golden pixels defff7/a5a2a5/ff6531/e7e384.
+constexpr uint32_t colour_light = 0xdefff7, colour_grey = 0xa5a2a5, colour_orange = 0xff6531,
+                   colour_focus = 0xe7e384, colour_yellow = 0xffff00;
 constexpr int dynamic_slot = 1;  // string slot 1 points at 0x00496a18 (0x004239a8)
 constexpr int edit_slot = 184;   // name entry caption slot -> 0x004b8430
 constexpr int label_slot = 1000; // native labels (save file names)
@@ -370,28 +372,7 @@ bool Frontend::poll(FrontendEvent& e) {
 
 void Frontend::set_background(const std::string& name) {
     if (name.empty() || name == background_name_ || !menu_image_exists(assets_, name)) return;
-    RgbImage img = load_menu_image(assets_, name);
-    background_ = RgbImage(640, 480, 0);
-    // 0x0041e240: a "Postcard/" or "Street/" picture starts from a copy of its
-    // base picture and is decoded over it. The insets are partial: 397x480
-    // postcards sit right of the 243-wide "Postcard" strip, 258x250 street
-    // views at (146,230). Offsets are fixed by artwork continuity (seam and
-    // pixel match against the base); the decoder's placement is not yet traced.
-    int x = 0, y = 0;
-    const bool postcard = name.rfind("Postcard/", 0) == 0, street = name.rfind("Street/", 0) == 0;
-    if ((postcard || street) && menu_image_exists(assets_, postcard ? "Postcard" : "Street")) {
-        const RgbImage base = load_menu_image(assets_, postcard ? "Postcard" : "Street");
-        fill_from(background_, base, 0, 0, base.width, base.height);
-        if (postcard)
-            x = 640 - img.width;
-        else {
-            x = 146;
-            y = 230;
-        }
-    }
-    for (int row = 0; row < img.height; ++row)
-        for (int col = 0; col < img.width; ++col)
-            if (background_.contains(x + col, y + row)) background_.at(x + col, y + row) = img.at(col, row);
+    background_ = compose_menu_picture(assets_, name);
     dark_ = background_;
     for (auto& p : dark_.pixels) p = darken555(p);
     background_name_ = name;

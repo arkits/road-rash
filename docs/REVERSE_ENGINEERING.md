@@ -555,7 +555,20 @@ The course screens share one item array; the sixth item is copied from `0x004691
 - DrawText CALCRECT returns the measured wrapped width even under maxw (probe: 296/293/269/156 vs input 300); the port's old wordbreak carve-out pinned boxes to maxw and shifted right-aligned text. Fixed.
 - Remaining GDI deltas (open): hinted bitmap shapes (1-bit scan conversion); `>=0x80` cp1252 bytes differ (GDI has real default-char widths; the port uses .notdef advance).
 
-**Colours** (`0x0041fc90`): normal `#DEFFF0`, focused `#E1E180` with a Wingdings arrow, disabled/dimmed `#A0A0A0`, skipped `#FF6432`, titles `#FF6432`. All text has a 2-pixel black shadow.
+**Menu picture pipeline (October 31, 2026; bit-exact against the original's decoded-image cache)**
+- The oracle frontend probe dumps the nine 640x480 RGB555 image-cache rows at `0x004859c0` (stride `0x58`, pixels at `+4`, name at `+8`) after each capture. Across the four acceptance runs, 226 dumps of 20 distinct pictures are bit-identical to the port: Main, Splash, Street, Postcard, Olleys, Panzer, `Chars/{Axle,Bose,Cydney,Pearl}-N`, `Chars/Cydney-F`, `Restroom/Rest3`/`Rest6`, `Results/{Wreck3,Wreck4,Bust4,Win4,Lose1}`, and the composites `Postcard/City` and `Street/Klub`.
+- Decode: IJG libjpeg with `dct_method = JDCT_IFAST` (`0x0041e496`, `cinfo+0x44 = 1`) and the 1408-byte sample-range table rebuilt with `& 0xf8` by `0x004293a0`, so Y/Cb/Cr and the colour converter output are both truncated to 5 bits. Only the scalar IJG path reads that table (SIMD bypasses it), hence the pinned scalar libjpeg-turbo build.
+- Composition (`0x0041e240`): `Street/<x>` 258x250 insets at (146,230) over `Street`; `Postcard/<x>` 397x480 right-aligned over `Postcard`. Street/Klub: 64500/64500 inset pixels exact; the remaining 242700 equal Street.
+- Display: RGB555 through the `0x0041e090` table to RGB565 with a zero green low bit. The darkened surface (`0x0041e6e0`, text boxes and button bar) halves each 5-bit channel and goes through the same table, so its green is also even in 6-bit terms (golden `0x38`, not `0x39`).
+- Menu text colours land on the 16-bit surface: `#DEFFF0` reads back `#DEFFF7`, `#A0A0A0` `#A5A2A5`, `#FF6432` `#FF6531`, `#E1E180` `#E7E384` (golden pixel census, restroom).
+
+**GDI glyph bitmaps (October 31, 2026; Wine 11.18 Staging ground truth via `tools/glyphprobe.c`)**
+- Wine draws non-antialiased menu text with its bundled FreeType 2.13.3 (`libfreetype.6.dylib`, `FT_Library_Version`). The probe dumps every byte 0x20..0xff of the four disc faces at cell heights 14..72 (9856 glyphs) as TextOutA 1-bit ink relative to the pen.
+- Matching model (Homebrew FreeType 2.14.3): integer ppem from the documented rule (`FT_Set_Pixel_Sizes(0, ppem)`; REAL_DIM/CELL/fractional requests are much worse, 3159/8448), `FT_LOAD_TARGET_MONO` hinting (v35 and v40 identical in mono), bbox from hinted metrics floored/ceiled to whole pixels, `FT_Outline_Get_Bitmap` mono, glyph top = tmAscent - ceil(bearingY). Result: 6986/8448 font-covered glyphs exact; ASCII 4185/4224 (99.1%; misses on diagonal stems `v y X < > & M`); accented composites mostly differ by one component offset or accent pixel. Unhinted advances (v40 normal mode) equal the probe's advances 8448/8448, confirming `round(design*ppem/upm)`.
+- Bytes the faces do not cover (`0x80..0x9f`, `¤ ¦ ­ ¯ ² ³ ¸ ¹ ¼..¾` and others) are drawn by Wine from fallback fonts. That is Wine font linking, not original behaviour; Windows 95 draws the face's default glyph. None appear in the game's strings.
+- Wine's unhinted outline (GGO_NATIVE|GGO_UNHINTED) is exactly font units x 25/1072 for Futura Regular 32, so the scale is integral ppem; the residual is FreeType-version hinting/rasterising, to be closed by building 2.13.3 itself.
+
+**Colours** (`0x0041fc90`): normal `#DEFFF0`, focused `#E1E180` with a Wingdings arrow, disabled/dimmed `#A0A0A0`, skipped `#FF6432`, titles `#FF6432`. All text has a 2-pixel black shadow. On the 16-bit menu surface these read back as RGB565 values (see the picture pipeline above).
 
 **Box geometry:**
 - Title box (`0x0041f770`): left (text + 0x31 by text + 0x2a), right-aligned (min 0x13c), centred at 3/4 height, or 640×300.

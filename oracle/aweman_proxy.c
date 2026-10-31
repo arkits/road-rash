@@ -27,6 +27,7 @@ int rr_patch_call(uint8_t* site, uint32_t expected_target, void* hook) {
 static FILE* g_out;
 static char g_scenario[256] = "unnamed";
 static int g_capture_course;
+static int g_frontend_probe;
 /* Display level 1..5 selected through the original level popup setter
  * (0x004453f0); 0 leaves the bootstrapped startup level (display 1) alone. */
 static int g_capture_level;
@@ -115,14 +116,15 @@ static void sim_freeze_others(void) {
 // Test-only bootstrap through the original race setup. Avoid waiting for the
 // interactive intro/menu during capture; never modify the installed executable.
 static uint32_t __fastcall hook_menu_video(int screen) {
-    if (g_capture_course) return 1;
+    if (g_capture_course || g_frontend_probe) return 1;
     return ((uint32_t(__fastcall*)(int))0x00449150)(screen);
 }
 static void __fastcall hook_menu_enter(int screen) {
     // Course entries 1..5 perform the original menu exit themselves. Entering
     // credits first would leave its timer running after race setup freed the
     // menu surfaces, making subsequent oracle frames fault in that timer.
-    ((void(__fastcall*)(int))0x00421df0)(g_capture_course ? g_capture_course : screen);
+    ((void(__fastcall*)(int))0x00421df0)(g_capture_course ? g_capture_course
+                                                          : (g_frontend_probe && screen == 7 ? 9 : screen));
     if (g_sim && g_seed >= 0 && !g_race_started) {
         // Pin the stream before race setup (rider building consumes rand):
         // identical runs then build identical grids. Only the first entry
@@ -4297,8 +4299,11 @@ static DWORD WINAPI menu_watchdog(LPVOID arg) {
     return 0;
 }
 
+#include "frontend_probe.h"
+
 static int rr_install_hooks(void) {
     char buf[32], path[MAX_PATH];
+    if (GetEnvironmentVariableA("RR_ORACLE_FRONTEND", buf, sizeof buf)) g_frontend_probe = atoi(buf) != 0;
     if (GetEnvironmentVariableA("RR_ORACLE_FRAMES", buf, sizeof buf)) g_quit_after = atoi(buf);
     if (GetEnvironmentVariableA("RR_ORACLE_PIXELS", buf, sizeof buf)) g_pixels = atoi(buf) != 0;
     if (GetEnvironmentVariableA("RR_ORACLE_GROUPS", buf, sizeof buf)) g_groups = atoi(buf) != 0;
@@ -4482,6 +4487,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
             fputs("end\n", g_out);
             fclose(g_out);
             g_out = NULL;
+        }
+        if (g_frontend_probe) {
+            HANDLE thread = CreateThread(NULL, 0, frontend_probe, NULL, 0, NULL);
+            if (thread) CloseHandle(thread);
         }
         if (g_menu_screen >= 0) {
             HANDLE thread = CreateThread(NULL, 0, menu_watchdog, (LPVOID)(intptr_t)g_menu_screen, 0, NULL);

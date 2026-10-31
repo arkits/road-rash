@@ -14,6 +14,7 @@
 #include <functional>
 #include <iostream>
 #include "temp_dir.hpp"
+#include <map>
 
 using namespace rr;
 
@@ -102,7 +103,7 @@ int main(int argc, char** argv) {
     };
     // Synthetic checks that need no disc: 15-bit quantisation and the darkened surface.
     check(quantise565(0xffffff) == 0xffffff && quantise565(0x070707) == 0x000400, "quantise565");
-    check(darken555(0xffffff) == 0x7b7b7b && darken555(0x080808) == 0, "darken555");
+    check(darken555(0xffffff) == 0x7b797b && darken555(0x080808) == 0, "darken555");
 
     const std::string root =
         argc > 1 && std::string(argv[1]) != "--dump" ? argv[1] : RR_SOURCE_DIR "/../cdrom/ROADRASH";
@@ -122,6 +123,56 @@ int main(int argc, char** argv) {
     }
     const auto exe = assets.read("ROADRASH.EXE");
     const TextRenderer text(assets);
+    // Picture pipeline vs the original's decoded RGB555 image cache
+    // (0x004859c0 rows, dumped by oracle/frontend_probe.h after each capture;
+    // trace lines "# fe cache <i> <name>"). Every named slot must be bit-exact:
+    // JPEG decode, 5-bit range table, Postcard/Street composition, and the
+    // 565 display mapping (green compared at 5-bit precision). Skips when the
+    // git-ignored acceptance runs are absent.
+    {
+        size_t compared = 0;
+        const std::filesystem::path acc_root = RR_SOURCE_DIR "/analysis/frontend";
+        std::error_code ec;
+        for (const auto& day : std::filesystem::directory_iterator(acc_root, ec)) {
+            if (day.path().filename().string().rfind("acceptance-", 0) != 0) continue;
+            for (const auto& run : std::filesystem::directory_iterator(day.path(), ec)) {
+                std::ifstream trace(run.path() / "trace.log");
+                std::string line, label;
+                std::map<std::string, std::string> done; // raw file -> picture
+                while (std::getline(trace, line)) {
+                    if (line.rfind("# fe c", 0) != 0) continue;
+                    if (line.rfind("# fe command capture ", 0) == 0) label = line.substr(21);
+                    unsigned slot = 0;
+                    char name[128] = {};
+                    if (label.empty() || std::sscanf(line.c_str(), "# fe cache %u %127s", &slot, name) != 2)
+                        continue;
+                    const std::string raw =
+                        (run.path() / ("fe-" + label + "-cache" + std::to_string(slot) + ".raw")).string();
+                    if (done.count(raw) || !std::filesystem::exists(raw)) continue;
+                    done[raw] = name;
+                }
+                for (const auto& [raw, name] : done) {
+                    std::ifstream f(raw, std::ios::binary);
+                    std::vector<uint16_t> px(640 * 480);
+                    f.read(reinterpret_cast<char*>(px.data()), std::streamsize(px.size() * 2));
+                    if (!f) continue;
+                    const RgbImage pic = compose_menu_picture(assets, name);
+                    size_t bad = 0;
+                    for (int y = 0; y < 480; ++y)
+                        for (int x = 0; x < 640; ++x) {
+                            const uint32_t p = pic.at(x, y), q = px[size_t(y) * 640 + x];
+                            if ((p >> 19 & 31) != (q >> 10 & 31) || (p >> 11 & 31) != (q >> 5 & 31) ||
+                                (p >> 3 & 31) != (q & 31))
+                                ++bad;
+                        }
+                    check(bad == 0, "picture " + name + " bit-exact vs original cache (" +
+                                        std::to_string(bad) + " px differ) " + raw);
+                    ++compared;
+                }
+            }
+        }
+        std::cout << "original picture caches compared bit-exact: " << compared << "\n";
+    }
     const auto tables = read_career_tables(exe);
     auto data = read_frontend_data(exe);
     add_native_screens(data, false);
@@ -271,8 +322,8 @@ int main(int argc, char** argv) {
     // and the final description line at x=18. Allow four pixels of font metric
     // difference, never the old centered paragraph or vertically centered title.
     auto check_main_layout = [&](const RgbImage& frame, int scale) {
-        const auto title = ink_bounds(frame, {0, 0, 300 * scale, 115 * scale}, 0xff6432);
-        const auto last = ink_bounds(frame, {0, 230 * scale, 330 * scale, 270 * scale}, 0xdefff0);
+        const auto title = ink_bounds(frame, {0, 0, 300 * scale, 115 * scale}, 0xff6531);
+        const auto last = ink_bounds(frame, {0, 230 * scale, 330 * scale, 270 * scale}, 0xdefff7);
         check(std::abs(title.left - 33 * scale) <= 4 * scale &&
                   std::abs(title.top - 48 * scale) <= 4 * scale &&
                   std::abs(title.bottom - 92 * scale) <= 4 * scale,
@@ -1093,9 +1144,9 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x0e, "acceptance replay reaches characters");
         snap2("acc-characters");
         // Bio text sits on the photo outside the masked bands, so GDI glyph
-        // fringes dominate: characterization pin. Advances and pitch now match
-        // (ppem rule); only unhinted bitmap edges remain.
-        masked_compare_items("fe-characters", acc + "fe-characters.bmp", img2, fe2.items(), 0.80, 0.08);
+        // fringes dominate: characterization pin. Pictures, dark fills and
+        // text colours are exact (565); only unhinted glyph edges remain.
+        masked_compare_items("fe-characters", acc + "fe-characters.bmp", img2, fe2.items(), 0.88, 0.08);
         key2("down");
         key2("down");
         key2("select");
@@ -1105,11 +1156,11 @@ int main(int argc, char** argv) {
         fe2.enter(0x10);
         check(fe2.screen() == 0x10, "acceptance replay reaches the restroom");
         snap2("acc-restroom");
-        masked_compare_items("fe-restroom", acc + "fe-restroom.bmp", img2, fe2.items());
+        masked_compare_items("fe-restroom", acc + "fe-restroom.bmp", img2, fe2.items(), 0.93);
         fe2.enter(0x11);
         check(fe2.screen() == 0x11, "acceptance replay reaches the jukebox");
         snap2("acc-jukebox");
-        masked_compare_items("fe-jukebox", acc + "fe-jukebox.bmp", img2, fe2.items());
+        masked_compare_items("fe-jukebox", acc + "fe-jukebox.bmp", img2, fe2.items(), 0.95);
         fe2.enter(0x12);
         check(fe2.screen() == 0x12, "acceptance replay reaches Configure Input");
         snap2("acc-controls");
@@ -1118,13 +1169,13 @@ int main(int argc, char** argv) {
         // script's direct `enter` (the original refreshes them in the
         // restroom-row handler path, which real play always takes); both sit
         // inside masked item rects.
-        masked_compare_items("fe-controls", acc + "fe-controls.bmp", img2, fe2.items(), 0.12, 0.05, 0.95);
+        masked_compare_items("fe-controls", acc + "fe-controls.bmp", img2, fe2.items(), 0.94, 0.05, 0.95);
         fe2.enter(0x13);
         check(fe2.screen() == 0x13, "acceptance replay reaches Graphics Options");
         snap2("acc-graphics");
         // Desc text and its metric-derived box edge extend past the masked
         // bands; fringe-only residual now (ppem rule), standard ceiling.
-        masked_compare_items("fe-graphics", acc + "fe-graphics.bmp", img2, fe2.items(), 0.70, 0.05);
+        masked_compare_items("fe-graphics", acc + "fe-graphics.bmp", img2, fe2.items(), 0.91, 0.05);
         // Plan 13 Task 6 Step 2 screens run (new Wine goldens, 20261027):
         // course/shop/result screens in script order so backgrounds chain
         // exactly like the oracle `enter` sequence. Result variants come

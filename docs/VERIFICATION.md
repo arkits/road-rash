@@ -1,5 +1,24 @@
 # Verification log (all sessions September 28, 2026)
 
+## Exact menu pictures, dark fills and text colours (October 31, 2026)
+
+- Build `build-agent-frontend-exact-20261031` (Debug): configure/build PASS;
+  `ctest` 121/121 PASS, zero skips (final tree, before the rebase onto
+  upstream).
+- `frontend-test ../cdrom/ROADRASH`: "original picture caches compared
+  bit-exact: 226" (all `fe-*-cache<i>.raw` named slots under
+  `analysis/frontend/acceptance-*`); masked screens characters 90%,
+  restroom 95%, jukebox 97%, controls 96%, graphics 93% exact (pins 0.88,
+  0.93, 0.95, 0.94, 0.91).
+- `python3 tools/cpp_quality.py format-check` PASS;
+  `python3 tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-03e2011a872746da99ee3f1feb8c163d`,
+  hardware not run); emscripten Release build PASS
+  (`build-agent-frontend-exact-web`, ctest not run).
+- Glyph research: `tools/glyphprobe.c` (i686 mingw, Wine 11.18 Staging,
+  scratch prefix) wrote 9856 glyphs; scratch comparator against Homebrew
+  FreeType 2.14.3: 6986/8448 covered glyphs exact, ASCII 4185/4224. Not a
+  shipped renderer and not an acceptance claim.
 ## run-linux.sh and run-windows.bat (October 31, 2026)
 
 - **Linux, Docker (ARM64), from a Git checkout of the tree:** each container

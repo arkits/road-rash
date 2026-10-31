@@ -56,12 +56,13 @@
     {
       "area": "Frontend/settings",
       "implementation": "Menus, career, saves, jukebox, sound mix and controls implemented; online mano-a-mano (plan 34) live through `rr-netd` with room codes, invite links and six-platform CI cross-play",
-      "verification": "Seeded original-writer save byte identity; main-menu capture and 1x/2x/4x layout checks",
-      "remaining": "Driven-career original-save round trip; all-screen pixel acceptance; plan 34 device cross-play and soak (Tasks 10-11); exact music fidelity",
+      "verification": "Seeded original-writer save byte identity; main-menu capture and 1x/2x/4x layout checks; menu pictures bit-exact vs 226 original decoded-image caches; dark fills and text colours RGB565-exact",
+      "remaining": "Driven-career original-save round trip; GDI-hinted glyph bitmaps (FreeType 2.13.3 mono path, vendoring pending); plan 34 device cross-play and soak (Tasks 10-11); AWE/EMU8000 music timbre",
       "evidence": [
         "plans/18-settings-and-options.md",
         "plans/13-music-and-frontend-completion.md",
         "agent-handoffs/frontend-layout-20261026.md",
+        "agent-handoffs/frontend-exact-20261031.md",
         "plans/34-multiplayer.md"
       ],
       "last_verified_commit": null,

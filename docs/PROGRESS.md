@@ -14,7 +14,7 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Executable analysis (Ghidra, 1,585 functions exported) | Done; types and names not manually validated | `tools/decompile.sh`, `analysis/decompiled/` |
 | Disc inventory (341 files, SHA-256) | Done | `tools/inventory.py`, `analysis/inventory.json` |
 | Resource container directory (`CRSR`/`LBTR`) | Done; all 13 containers validated | `src/resource.cpp`, `tests/resource_test.cpp` |
-| Menu images (`.RRI` JPEG), dashboard and horizon `.BOB`, palette | Done (display only; no scrolling/cropping) | `src/viewer.cpp` |
+| Menu images (`.RRI` JPEG), dashboard and horizon `.BOB`, palette | Done; menu pictures bit-exact against the original's decoded-image cache (226 dumps, October 31) | `src/rri.cpp`, `src/viewer.cpp` |
 | Course graph (`NOD `: roads, splits, merges, ends) | Done; all 5 courses | `src/course.cpp` |
 | Course path (`HTPR` bend/rise) and lanes (`NALR`) | Done | `src/course.cpp` |
 | Road projection (33 slices, original depth table) | Done; integer port | `src/road.cpp`, `tests/road_test.cpp` |
@@ -33,7 +33,7 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Rider contact | Rider, car and pedestrian contact branches ported; pedestrian pairs never contact, as in `0x004368f0` (October 26) | `src/race.cpp` |
 | Combat | Original live AI attack selection, descriptor/frame hit gates, relationship reactions and animation queues; measured in the 2400-tick Napa field replay. Steal resolver gates/transfer measured in 31 original component cases (October 26); free-running steal capture remains open | `src/race.cpp` |
 | Language strings (`TEXT/*.DLL`) | All five languages, original table assembly and continuations | `src/pe_strings.cpp` |
-| Menu text | Disc TrueType fonts (Badloc, Futura); GDI hinting not reproduced | `src/text.cpp` |
+| Menu text | Disc TrueType fonts (Badloc, Futura); GDI metrics and RGB565 colours exact; hinted glyph bitmaps measured (FreeType mono model 99.1% ASCII vs Wine), not yet in the renderer | `src/text.cpp` |
 | Front end (menus, Thrash/Big Game flow, shop, Schmooze, restroom, results, credits) | Ported from the EXE screen tables and handlers; jukebox, sound mix and controls implemented; mano-a-mano disabled (plan 34); layout sweep of all 223 items, full pixel equality open on GDI text hinting. Native Display/Sound/Pause/Enhancements screens, visual-style presets, single widescreen setting (October 13) | `src/frontend.cpp` |
 | Career rules and save files | Prize, fines, repairs, shop, level-up and the original 0xa0-byte save format; seeded original-writer file round-trips byte-exact (`career-save-corpus`), driven-career saves round-trip (`career-test --corpus`, October 26) | `src/career.cpp` |
 | Settings | Registry values as a preference file | `src/settings.cpp` |
@@ -53,6 +53,30 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### October 31, 2026: exact menu pictures, dark fills and text colours
+
+- Menu pictures decode with pinned scalar libjpeg-turbo 3.1.4.1
+  (`cmake/jpeg_scalar.cmake`, adopted from the abandoned October 26
+  frontend-acceptance worktree): IFAST DCT plus the original's 5-bit
+  sample-range table. `frontend-test` now compares every named slot of the
+  original's decoded-image cache dumped by the acceptance runs: 226 dumps
+  (20 pictures, including the Postcard/City and Street/Klub composites) are
+  bit-exact. Composition moved to `compose_menu_picture` (`src/rri.cpp`).
+- `darken555` keeps 6-bit green even (the halved 555 value goes through the
+  same display table), and menu text colours are the RGB565 read-backs
+  (`#DEFFF7`, `#A5A2A5`, `#FF6531`, `#E7E384`). Full-frame exact vs goldens:
+  restroom 74% to 96%, jukebox 79% to 98%, graphics 73% to 97%, characters
+  89% to 95%. Pins raised to 0.88-0.95 masked exact.
+- GDI glyphs: `tools/glyphprobe.c` dumps 9856 Wine TextOut glyphs. Wine
+  renders through its bundled FreeType 2.13.3; a FreeType mono-hinted model
+  matches 99.1% of ASCII glyphs with Homebrew 2.14.3 (composites differ). The
+  renderer still uses stb coverage: pinning FreeType 2.13.3 in the build was
+  not done this session (fetching and building it needs owner approval in
+  this environment).
+- Licences: libjpeg-turbo/IJG notices ship in the macOS bundle and APK.
+- Remaining: hinted glyph renderer (FreeType 2.13.3 vendoring), AWE/EMU8000
+  music timbre (envelopes, filter, LFO, pan and effects sends from the SBK
+  generators; factory-ROM presets need an owner-supplied ROM).
 ### October 31, 2026: run-linux.sh and run-windows.bat (build and launch)
 
 - `run-linux.sh [--debug] [ASSETS_DIR] [args]` and `run-windows.bat` /

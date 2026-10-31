@@ -275,7 +275,7 @@ void Frontend::net_results_table() {
 void Frontend::draw_net_overlay(RgbImage& out, int scale) const {
     if (screen_ == screen_id::net_rooms) {
         TextRect box{24 * scale, 114 * scale, 620 * scale, 132 * scale};
-        text_.draw_box(&out, Face::futura_bold, 16 * scale, box, 0xdefff0, str(1016), 0);
+        text_.draw_box(&out, Face::futura_bold, 16 * scale, box, 0xdefff7, str(1016), 0);
     }
     if (screen_ != screen_id::net_lobby || net_chat_log_.empty()) return;
     for (int y = 304 * scale; y < 468 * scale; ++y)
@@ -283,7 +283,7 @@ void Frontend::draw_net_overlay(RgbImage& out, int scale) const {
             if (out.contains(x, y)) out.at(x, y) = dark_.at(x / scale, y / scale);
     for (size_t i = 0; i < net_chat_log_.size(); ++i) {
         TextRect box{322 * scale, (308 + int(i) * 26) * scale, 632 * scale, (334 + int(i) * 26) * scale};
-        text_.draw_box(&out, Face::futura_regular, 16 * scale, box, 0xdefff0, net_chat_log_[i],
+        text_.draw_box(&out, Face::futura_regular, 16 * scale, box, 0xdefff7, net_chat_log_[i],
                        dt::wordbreak);
     }
 }

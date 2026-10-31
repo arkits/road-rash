@@ -82,8 +82,10 @@ else()
         include(cmake/sdl3_static.cmake)
     endif()
 endif()
+include(cmake/jpeg_scalar.cmake)
 add_library(rr-resource STATIC src/resource.cpp src/course.cpp src/road.cpp src/assets.cpp src/framebuffer.cpp src/bike.cpp src/race.cpp src/input.cpp src/bob.cpp src/session.cpp src/iso9660.cpp src/sha256.cpp src/importer.cpp src/import_job.cpp src/wav.cpp src/mixer.cpp src/ima_adpcm.cpp src/avi.cpp src/cinepak.cpp src/video_player.cpp src/raster.cpp src/terrain.cpp src/scene.cpp src/polygon.cpp src/texture.cpp src/cel.cpp src/world_renderer.cpp src/render_threads.cpp src/road_panels.cpp src/road_materials.cpp src/exe_tables.cpp src/pe_strings.cpp src/career.cpp src/text.cpp src/settings.cpp src/rri.cpp src/frontend.cpp src/sound.cpp src/explode.cpp src/rider_sprites.cpp src/mmpx.cpp src/upscale_cache.cpp src/atomic_file.cpp src/display.cpp src/native_strings.cpp src/native_screens.cpp src/view_state.cpp src/texture_perspective.cpp src/framebuffer_rgb.cpp src/raster_rgb.cpp src/fog.cpp src/post_chain.cpp src/upscale_import.cpp src/race_actions.cpp src/race_overlay.cpp src/race_helpers.cpp src/game_types.cpp src/race_screen.cpp)
-target_link_libraries(rr-resource PUBLIC SDL3::SDL3 Threads::Threads)
+target_link_libraries(rr-resource PUBLIC SDL3::SDL3 Threads::Threads PRIVATE rr-jpeg)
+target_include_directories(rr-resource BEFORE PRIVATE "${RR_JPEG_SOURCE}/src" "${RR_JPEG_BINARY}")
 if(WIN32)
     target_link_libraries(rr-resource PUBLIC shell32 ole32) # SHGetKnownFolderPath (plan 33b)
 endif()
@@ -147,6 +149,8 @@ else()
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/third_party/SDL-LICENSE.txt"
                 "${CMAKE_SOURCE_DIR}/third_party/LICENSE"
+                "${CMAKE_SOURCE_DIR}/third_party/JPEG-LICENSE.md"
+                "${CMAKE_SOURCE_DIR}/third_party/JPEG-README.ijg"
                 "${CMAKE_SOURCE_DIR}/macos/README.txt"
                 "$<TARGET_BUNDLE_DIR:rr-game>/Contents/Resources"
             COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:rr-game>"
