@@ -64,12 +64,18 @@ if (-not (Test-Path (Join-Path $vcpkg 'vcpkg.exe'))) {
     if ($LASTEXITCODE -ne 0) { Fail 'bootstrapping vcpkg failed.' }
 }
 $env:VCPKG_INSTALLATION_ROOT = $vcpkg
+# vcpkg refuses to run when a configured binary cache folder is missing.
+if ($env:VCPKG_DEFAULT_BINARY_CACHE) { New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null }
 
 Push-Location $Root
 try {
-    if (-not (Test-Path (Join-Path $Build 'CMakeCache.txt'))) {
-        cmake --preset $Preset
-        if ($LASTEXITCODE -ne 0) { Fail 'CMake configure failed.' }
+    # Always configure: quick when nothing changed, and it retries after a
+    # failed first configure (which leaves a CMakeCache.txt behind).
+    cmake --preset $Preset
+    if ($LASTEXITCODE -ne 0) {
+        $log = Join-Path $Build 'vcpkg-manifest-install.log'
+        if (Test-Path $log) { Get-Content $log -Tail 40 }
+        Fail 'CMake configure failed.'
     }
     cmake --build $Build --config $Type --parallel --target rr-game
     if ($LASTEXITCODE -ne 0) { Fail 'build failed.' }
