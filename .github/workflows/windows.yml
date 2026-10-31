@@ -97,7 +97,8 @@ jobs:
           if-no-files-found: ignore
 
   # run-windows.bat from a plain shell: it must find Visual Studio, enter the
-  # MSVC environment and vcpkg itself, build Release and launch the game.
+  # MSVC environment and vcpkg itself, build Release and launch the game
+  # (build output and the game's --version JSON share stdout).
   run-script:
     name: run-windows-script
     runs-on: windows-2022
@@ -107,10 +108,9 @@ jobs:
       - name: Build and launch with run-windows.bat
         shell: cmd
         run: |
-          call run-windows.bat --console --version > version.json
+          call run-windows.bat --console --version > run.log
           if errorlevel 1 exit /b 1
-          type version.json
-          python -c "import json; d = json.load(open('version.json')); assert d['configuration'] == 'Release', d"
+          python -c "import json; v = [l for l in open('run.log') if l.startswith('{')]; d = json.loads(v[-1]); print(d); assert d['configuration'] == 'Release', d"
 
   mingw:
     name: msys2-clang64
