@@ -26,7 +26,9 @@ This Git repository is `native-port/`; its parent `rr/` is a workspace containin
 the owner's disc, a legacy Wine install and a separate Wine-on-Android setup.
 Run Git and native build commands from this repository.
 
-The deliverable is native C++/SDL3 on macOS ARM64 and Android ARM64, then Linux and Windows (plan 33). Wine is
+The deliverable is native C++/SDL3 on macOS ARM64, Android ARM64, Linux
+(including Steam Deck) and Windows (plan 33: builds, tests and packages done;
+hardware acceptance open). Wine is
 used only to inspect/capture the original for this port. The opening Napa race
 is the current fidelity milestone, followed by all courses and the whole game; consult `docs/plans/00-INDEX.md` for current
 dependencies before implementation or planning. Read `docs/CURRENT_STATUS.md` for the

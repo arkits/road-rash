@@ -35,7 +35,8 @@ arguments. Version name comes from the latest Git tag, falling back to
 `0.1-research`. Hardware acceptance remains pending; builds and signatures
 alone do not establish Android runtime behavior.
 
-Windows (in development, plan 33b): Windows 10 version 1903 or later, or
+Windows (plan 33b; builds and packages done, not yet tested on real
+Windows hardware): Windows 10 version 1903 or later, or
 Windows 11, x64 or ARM64. Build with CMake presets from an MSVC developer
 prompt: `cmake --preset windows-msvc` (ARM64: `windows-msvc-arm64`), then
 `cmake --build --preset windows-msvc`. The game is
@@ -68,7 +69,8 @@ is installed, `RoadRashNative-<version>-setup-<arch>.exe`. Check them with
   signing (`tools/sign_windows.ps1`, `RR_SIGN_*`), so Windows shows "Windows
   protected your PC" on first launch. Choose "More info", then "Run anyway".
 
-Linux and Steam Deck (in development, plan 33a): x86-64 or ARM64 with glibc
+Linux and Steam Deck (plan 33a; builds and packages done, not yet tested on
+a real desktop or a Steam Deck): x86-64 or ARM64 with glibc
 2.31 or later (SteamOS 3, Ubuntu 20.04+, Debian 11+, Fedora 34+, Arch), X11 or
 Wayland, and PipeWire, PulseAudio or ALSA. Nothing else needs installing.
 Three packages are built by `tools/build_linux_package.sh [x86_64|aarch64]`

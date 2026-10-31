@@ -3,9 +3,11 @@
 Native C++20 / SDL3 port of the 1996 Windows rerelease of Road Rash.
 Runs the game directly on modern systems: no Wine, no x86 emulation at runtime.
 
-Primary target is macOS ARM64, second is Android ARM64. Linux and Windows
-are planned (see `docs/plans/33-linux-windows-ports.md`). The port is
-incomplete; see Status below.
+Platforms: macOS ARM64 (primary), Android ARM64, Linux x86-64/ARM64
+(including Steam Deck) and Windows x64/ARM64, plus a WebAssembly browser
+build. Linux and Windows builds, tests and packages are done (plans 33a and
+33b); Android, Linux, Steam Deck and Windows still await testing on real
+hardware. The port is incomplete; see Status below.
 
 Reference for reverse engineering is the unmodified disc binary at
 `../cdrom/ROADRASH/ROADRASH.EXE`. Oracle captures run it under Wine to
@@ -22,7 +24,8 @@ What matches the original on receipted captures:
 
 - Napa level 1, full 14-rider offline field: 2400/2400 ticks identical.
 - Napa level 1, recorded human-input run: 1431/1431 ticks identical.
-- Full native suite: 105/105 CTests, zero skips; sanitizer suites clean.
+- Full native suite: 134/134 CTests with the disc, zero skips, on macOS and
+  on Linux (GCC and Clang, x86-64 and ARM64); sanitizer suites clean.
 
 Still open (see `docs/CURRENT_STATUS.md` and `docs/PROGRESS.md`):
 
@@ -80,6 +83,10 @@ See [docs/WEB.md](docs/WEB.md) for deployment, tests and current limitations.
   folder, 341 files, SHA-256 verified on import). No game data is included
   or redistributed.
 - CMake 3.22+, a C++20 compiler, SDL3 3.2+ (`brew install cmake sdl3`).
+  Linux: GCC 14 or Clang 19 with `cmake --preset linux-gcc` (or
+  `linux-clang`); the pinned SDL is built from source, and
+  `linux/install-gate-deps.sh` lists the Debian packages. Windows: Visual
+  Studio 2022 with `cmake --preset windows-msvc` (see Windows packaging).
 - Android builds additionally need JDK 21, Android SDK 35 / NDK 28, Gradle
   wrapper in `android/`.
 
