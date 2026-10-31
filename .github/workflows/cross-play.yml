@@ -218,8 +218,10 @@ jobs:
       - name: Every platform's disc race hashes are equal
         run: |
           ls det
-          test "$(ls det | wc -l)" -eq 5
-          for f in det/*.txt; do
-            if cmp -s "$f" det/det-disc-linux.txt; then echo "determinism: $(basename "$f" .txt) matches linux"; \
-            else echo "determinism: $(basename "$f" .txt) DIFFERS"; diff "$f" det/det-disc-linux.txt | head; exit 1; fi
+          test "$(ls det/*.txt | wc -l)" -eq 5
+          # Windows stdout is text mode (CRLF); compare the lines, not the bytes.
+          for f in det/*.txt; do tr -d '\r' < "$f" > "$f.lf"; done
+          for f in det/*.txt.lf; do
+            if cmp -s "$f" det/det-disc-linux.txt.lf; then echo "determinism: $(basename "$f" .txt.lf) matches linux"; \
+            else echo "determinism: $(basename "$f" .txt.lf) DIFFERS"; diff "$f" det/det-disc-linux.txt.lf | head; exit 1; fi
           done
