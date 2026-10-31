@@ -15,59 +15,57 @@ produce comparison traces. It is never executed by the game itself.
 
 ## Status
 
-Playable today via `rr-game`: full menu / career / shop / save flow leads
-into races on all five courses (Napa, City, Highway, Canyon, Medley) with
-the original bike physics, AI field, combat, traffic, pedestrians, engine /
-effect audio, soundtrack, and cutscene playback.
+The port is playable but not finished. `rr-game` runs the full original
+front end (menus, Thrash and Big Game careers, shop, Schmooze, results,
+saves, credits) into races on all five courses (Napa, City, Highway,
+Canyon, Medley). Races have the original bike physics, AI field, combat,
+traffic, pedestrians, police, engine and effect audio, soundtrack and
+cutscenes. Online mano-a-mano for two to eight players (plan 34) works over
+the internet through the `rr-netd` server, with room codes and invite links.
 
-What matches the original on receipted captures:
+Measured against the original:
 
-- Napa level 1, full 14-rider offline field: 2400/2400 ticks identical.
-- Napa level 1, recorded human-input run: 1431/1431 ticks identical.
-- Full native suite: 134/134 CTests with the disc, zero skips, on macOS and
-  on Linux (GCC and Clang, x86-64 and ARM64); sanitizer suites clean.
+- **Simulation:** Napa level 1 with the full 14-rider field matches for
+  2400/2400 ticks; a recorded human-input run matches for 1431/1431 ticks.
+  Both use one RNG anchor and then run freely.
+- **Police:** pursuit, siren and arrest match tick for tick on parked,
+  crashed and on-foot captures, and on City up to the arrest.
+- **Front end:** all 223 original menu items pass the layout sweep; every
+  captured screen passes masked pixel checks (98–100% exact on most, 75–85%
+  on screens with portrait or background art). Seeded original-writer saves
+  round-trip byte for byte, as do saves from a driven career.
+- **Tests:** 134/134 CTests with the disc and zero skips on macOS and on
+  Linux (GCC and Clang, x86-64 and ARM64); ASan/UBSan and TSan clean.
+- **Determinism:** the determinism matrix gives equal race results on
+  macOS, Linux (GCC/Clang, x86-64/ARM64), Windows (MSVC, clang-cl, ARM64)
+  and WebAssembly. In CI, bots on six platforms (macOS, Linux x86-64/ARM64,
+  Windows x64/ARM64, WebAssembly under Node) finish one live online room
+  with equal hashes and an official result. A real browser tab in a mixed
+  room has not been tested yet.
+
+Platforms:
+
+| Platform | State |
+| --- | --- |
+| macOS ARM64 | Main development target; app bundle and zip |
+| Android ARM64 | APK builds; not yet tested on a device |
+| Linux x86-64/ARM64, Steam Deck | Tarball, AppImage and Flatpak built and smoke-tested on clean distributions; not yet tested on a real desktop or a Deck (plan 33a) |
+| Windows x64/ARM64 | Zip and per-user installer built and install-tested on CI; unsigned; not yet tested on real hardware (plan 33b) |
+| Browser (WebAssembly) | Playable; see [docs/WEB.md](docs/WEB.md) |
 
 Still open (see `docs/CURRENT_STATUS.md` and `docs/PROGRESS.md`):
 
-- Simulation parity outside those captures: other courses/levels, human
-  paths beyond the receipted run, isolated fight/steal/traffic cases.
-- Gameplay: live police (periodic 4096-tick and DZHR spawns, chase, siren,
-  arrest, BUSTED flow) is implemented, native-tested, and matches the
-  original tick-for-tick: parked (635 pursuit ticks, RNG/field to 4730,
-  arrest 4552), crashed (935 ticks, field to 5030, no arrest either side),
-  on-foot ×2 (605 ticks each, full parity to 4700, arrests 4616/4544), and
-  City (456 ticks, field to 4551; original arrests at 4552, not asserted
-  while City AI RNG stays open past 954). Walls (`0x0043a610`), crash entry/motion/recovery
-  (`0x00403d60` family) and rider/car/pedestrian contact branches are ported;
-  pedestrian pairs never contact in the original (`0x004368f0` `& 3` gate),
-  and the traffic draw order approximation is visual-only. Race MIDI
-  (`SBKGRNG1..5` + `KLOWN` via `RaceMusicPlayer`, hooked at race start/stop),
-  sirens (slots 30/31, event 19) and car engines (slots 4/6, `Engcar11`,
-  `0x00435090` Doppler route) play; the player engine switches to the tunnel
-  variant (slot 2, `EngTunne`) on terrain type 3 (`0x00434a80`,
-  `Race::player_in_tunnel`, pinned). Exact AWE/MIDI timbre remains open.
-- Frontend: jukebox, sound mix and controls are implemented; mano-a-mano
-  stays disabled — online multiplayer (plan 34) is in scope per the owner's
-  October 26 decision and is not yet implemented. Seeded original-writer saves round-trip byte-identical and
-  driven-career saves round-trip (win + purchase + save + reload pinned in
-  `career-test --corpus`, plus an original-driven save that round-trips
-  byte-identical with its dumped game state (`career-test --save-corpus`).
-  Menu layout acceptance covers all 223 original
-  items plus native screens (2 scrollable, 28 hidden placeholders) with
-  main-menu 1x/2x/4x checks; masked pixel checks pass for main menu
-  (menu-09 and fe-main goldens: 60% masked, 98% exact, 0% large-diff) and the
-  Big Game street screen (fe-career-start golden, item-driven mask: 67%
-  masked, 96% exact, 0% large-diff). Characters/restroom/jukebox/graphics
-  still diverge in background/portrait art (measured ~1% exact unmasked on
-  restroom-class screens); full unmasked pixel equality remains open on
-  GDI-hinting text shapes and that art mapping.
-- Android builds and packages but hardware validation (render, input,
-  import, lifecycle, performance) is pending.
-- Linux and Windows build and pass their tests (Linux x86-64/ARM64 with GCC
-  and Clang, in Docker and on GitHub runners, including the tarball, AppImage
-  and Flatpak; Windows x64/ARM64 on GitHub runners, including the zip and
-  installer packages), but neither has been played on real hardware or a
-  Steam Deck yet (plans 33a/33b).
+- **Simulation parity** outside the captured runs: other courses and
+  levels, City AI RNG past tick 954, human paths beyond the recorded run,
+  and isolated fight, steal and traffic cases (plans 10, 16, 17).
+- **Front end:** exact GDI-hinted glyph bitmaps and the portrait and
+  background art on the characters, restroom, jukebox and graphics screens;
+  exact AWE/MIDI music timbre.
+- **Online:** device and cross-play acceptance on Android and real
+  desktops, and the long soak tests (plan 34 Tasks 10–11).
+- **Hardware:** Android, desktop Linux, Steam Deck and Windows (plans 14,
+  33a, 33b). Owner decisions remain on signing, the licence and Flathub
+  (plan 15).
 
 ## Browser build
 

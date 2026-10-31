@@ -5,7 +5,7 @@
     {
       "area": "Native build",
       "implementation": "Playable native game + research viewer",
-      "verification": "Strict Debug full build and104/104 CTests, zero skips; viewer smoke and all-course sweep (October18 full-field source); ASan/UBSan10/10",
+      "verification": "Strict Debug full build, 134/134 CTests with the disc, zero skips (macOS and Linux, October 31); viewer smoke and all-course sweep (October18 full-field source); ASan/UBSan10/10",
       "remaining": "Simulation acceptance separate",
       "evidence": [
         "VERIFICATION.md",
@@ -55,9 +55,9 @@
     },
     {
       "area": "Frontend/settings",
-      "implementation": "Menus, career, saves, jukebox, sound mix and controls implemented; mano-a-mano disabled until plan 34",
+      "implementation": "Menus, career, saves, jukebox, sound mix and controls implemented; online mano-a-mano (plan 34) live through `rr-netd` with room codes, invite links and six-platform CI cross-play",
       "verification": "Seeded original-writer save byte identity; main-menu capture and 1x/2x/4x layout checks",
-      "remaining": "Driven-career original-save round trip; all-screen pixel acceptance; online mano-a-mano (plan 34); exact music fidelity",
+      "remaining": "Driven-career original-save round trip; all-screen pixel acceptance; plan 34 device cross-play and soak (Tasks 10-11); exact music fidelity",
       "evidence": [
         "plans/18-settings-and-options.md",
         "plans/13-music-and-frontend-completion.md",
