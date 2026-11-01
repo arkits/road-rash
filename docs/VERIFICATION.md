@@ -1,5 +1,39 @@
 # Verification log (all sessions September 28, 2026)
 
+## SBK generator semantics in the race-music renderer (October 31, 2026, night)
+
+- Scope: native component and render tests of a spec-derived synthesizer.
+  There is no EMU8000 timbre oracle (Wine has none), so nothing here is a
+  measured match against the original's music.
+- Build `build-sbk-timbre` (Debug): configure/build PASS; `ctest` 134/134
+  PASS, zero failures. A first run on an earlier revision failed only
+  `portability-lint` (A11: `std::` libm calls); the maths now goes through
+  `det_math` plus a series sine.
+- `music-test ../cdrom/ROADRASH`: all 50 synthetic SF1 rule checks pass
+  (fixture builder in the test, no disc bytes). They cover attenuation
+  levels and the rendered 19.8 dB ratio, samplePitch/58 root and cents, an
+  882 Hz pitch from a 44100 Hz sample, loop offsets with +1/+2 and the
+  end + 1 clamp, the sampleModes gate, global zones, the SF1 merge, unit
+  conversions, envelope stages (attack ramp, decay to the silent SBK
+  default sustain, a release linear in dB), the Fc cut and mod-env sweep, Q,
+  vibrato and tremolo, hard pan, the exclusive class, CC7 and the RPN 0 bend
+  range. The corpus checks still pass: eleven songs parse, the five AWE
+  songs and Napa render audibly, the factory-note audit (SBKGRNG1 190,
+  KLOWN 2850), and the live Napa stream over thirty seconds.
+- Scratch corpus dump (not committed): SBKGRNG1..5 mono peaks
+  19777/20835/17021/15237/19610, zero clipped samples, at the −12 dB master
+  gain.
+- Pitch evidence (scratch Python on the local disc): the GRUNGE2/5 zones
+  with only samplePitch 4281/4782 autocorrelate to 42.8/47.9 semitones at
+  44100 Hz.
+- `python3 tools/cpp_quality.py format-check` on the changed files PASS;
+  `python3 tools/portability_check.py` 0 problems.
+- `python3 tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-de212f0b7f0a4af5a74848da71ce1e00`,
+  hardware not run). Nothing was played back on a device or by ear.
+- Not run: sanitizers, fuzzers (the `read_sf1` interface is unchanged),
+  emscripten, Linux/Windows.
+
 ## System faces, footers and full-frame menus (October 31, 2026, evening)
 
 - Ground truth: `glyphprobe.exe <dir> {mono|gray} sys` (Wine 11.18 Staging,

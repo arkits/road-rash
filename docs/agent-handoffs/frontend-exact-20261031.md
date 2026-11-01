@@ -69,7 +69,11 @@ that produced the git-ignored acceptance goldens other sessions already pin.
 
 ## Open
 
-1. **AWE/EMU8000 timbre.** `src/race_music.cpp` applies only attenuation,
+1. **AWE/EMU8000 timbre.** *Update (October 31, night):* the SF1 generator
+   semantics below are now implemented. See
+   [sbk-timbre-20261031](sbk-timbre-20261031.md). The result is spec-derived
+   and unmeasured; reverb/chorus and the factory ROM remain open. Original
+   note: `src/race_music.cpp` applies only attenuation,
    pitch and a 5 ms release. The banks use vol/mod envelopes, initialFc/Q,
    mod/vib LFOs, pan, reverb/chorus sends and exclusive classes (igen census
    over GRUNGE1-5.SBK and RRDRUMS.SBK). Wine has no EMU8000, so it is no

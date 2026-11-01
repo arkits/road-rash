@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "assets.hpp"
+#include "det_math.hpp"
 #include "mixer.hpp"
 
 namespace rr {
@@ -51,6 +52,150 @@ bool ieq_prefix(const std::string& s, const char* prefix, size_t n) {
     for (size_t i = 0; i < n; ++i)
         if (tolower((unsigned char)s[i]) != tolower((unsigned char)prefix[i])) return false;
     return true;
+}
+
+// SoundFont generator numbers used below (SF2 numbering, shared by SF1).
+constexpr int kGenCount = 61;
+constexpr double kPi = 3.141592653589793;
+
+// Platform-independent maths (plan 33 A11): det_math plus a series sine, so
+// renders are identical on every target.
+double pow2(double x) {
+    return det_exp(x * 0.6931471805599453);
+}
+double log10d(double x) {
+    return det_log(x) / 2.302585092994046;
+}
+double sin_series(double x) {
+    x -= 2.0 * kPi * std::floor((x + kPi) / (2.0 * kPi)); // [-pi, pi)
+    const double x2 = x * x;
+    double term = x, sum = x;
+    for (int n = 1; n <= 11; ++n) { // |error| < 1e-10 on [-pi, pi]
+        term *= -x2 / double((2 * n) * (2 * n + 1));
+        sum += term;
+    }
+    return sum;
+}
+double cos_series(double x) {
+    return sin_series(x + kPi / 2.0);
+}
+
+// SBK -> SF2 unit conversions, one per generator class (rules as in
+// TiMidity's sbkconv.c, read as a reference; docs/REVERSE_ENGINEERING.md
+// "SBK generator semantics"). Integer truncation follows that reader.
+int sbk_time_tc(int ms) { // milliseconds -> timecents
+    if (ms <= 0) ms = 1;
+    return int(det_log2(double(ms) / 1000.0) * 1200.0);
+}
+float tc_seconds(int tc) {
+    return float(pow2(double(std::clamp(tc, -12000, 5000)) / 1200.0));
+}
+int sbk_freq_ac(int gen, int v) { // LFO rate -> absolute cents
+    if (v == 0) return gen == 22 ? -725 : -15600;
+    return int(1200 * det_log2(double(v)) - 7925.0);
+}
+float ac_hz(int ac) {
+    return float(8.176 * pow2(double(std::clamp(ac, -16000, 4500)) / 1200.0));
+}
+int sbk_pshift(int v) {
+    return (1200 * v / 64 + 1) / 2;
+}
+int sbk_atten_cb(int v) {
+    if (v <= 0) return 1000;
+    return std::clamp(int(-200.0 * log10d(double(v) / 127.0) * 10), 0, 1440);
+}
+
+Sf1Zone convert_sbk_zone(const int32_t* val, const bool* set, uint32_t hs, uint32_t he, uint32_t hls,
+                         uint32_t hle, size_t sample_count) {
+    auto get = [&](int g, int def) { return set[g] ? int(val[g]) : def; };
+    Sf1Zone z;
+    if (set[43]) {
+        z.low_key = uint8_t(val[43] & 0xff);
+        z.high_key = uint8_t((val[43] >> 8) & 0xff);
+    }
+    if (set[44]) {
+        z.low_vel = uint8_t(val[44] & 0xff);
+        z.high_vel = uint8_t((val[44] >> 8) & 0xff);
+    }
+    if (z.low_key > z.high_key || z.high_key > 127) throw std::runtime_error("SF1: inverted key range");
+    if (z.low_vel > z.high_vel || z.high_vel > 127) throw std::runtime_error("SF1: inverted velocity range");
+
+    // Root: samplePitch (55) gives root = v/100 and tune = -(v%100), rounded
+    // to the nearer key; overridingRootKey (58) replaces the key only.
+    int root = 60, tune = 0;
+    if (set[55]) {
+        root = val[55] / 100;
+        tune = -(val[55] % 100);
+        if (tune <= -50) {
+            ++root;
+            tune += 100;
+        }
+    }
+    if (set[58]) root = val[58];
+    z.root_key = uint8_t(std::clamp(root, 0, 127));
+    z.pitch_correction = int16_t(tune);
+    z.coarse_tune = int8_t(std::clamp(get(51, 0), -120, 120));
+    z.fine_tune = int8_t(std::clamp(get(52, 0), -99, 99));
+    z.scale_tuning = int16_t(set[56] ? (val[56] ? 50 : 100) : 100);
+    if (set[46] && val[46] >= 0 && val[46] <= 127) z.fixed_key = int8_t(val[46]);
+    if (set[47] && val[47] > 0 && val[47] <= 127) z.fixed_velocity = int8_t(val[47]);
+    z.attenuation_cb = int16_t(set[48] ? sbk_atten_cb(val[48]) : 0);
+
+    // Addresses: header plus offset generators (coarse = 32768 samples), and
+    // the SF1 loop correction (+1 start, +2 end) of TiMidity's correct_samples.
+    auto addr = [&](int64_t base, int fine, int coarse) {
+        return base + int64_t(get(fine, 0)) + int64_t(get(coarse, 0)) * 32768;
+    };
+    const int64_t n = int64_t(sample_count);
+    const int64_t start = std::clamp<int64_t>(addr(hs, 0, 4), 0, n);
+    const int64_t end = std::clamp<int64_t>(addr(he, 1, 12), start, n);
+    int64_t ls = addr(int64_t(hls) + 1, 2, 45);
+    int64_t le = addr(int64_t(hle) + 2, 3, 50);
+    le = std::min(le, std::min(end + 1, n)); // TiMidity: loop end <= len + 1
+    ls = std::clamp<int64_t>(ls, start, end);
+    if (ls >= le) ls = le = end;
+    z.sample_start = uint32_t(start);
+    z.sample_end = uint32_t(end);
+    z.loop_start = uint32_t(ls);
+    z.loop_end = uint32_t(le);
+    z.sample_modes = uint8_t(get(54, 0) & 3);
+    z.sample_rate = 44100;
+
+    z.pan = int16_t(set[17] ? std::clamp(val[17] * 1000 / 127 - 500, -500, 500) : 0);
+    z.chorus_send = int16_t(set[15] ? std::clamp(val[15] * 1000 / 256, 0, 1000) : 0);
+    z.reverb_send = int16_t(set[16] ? std::clamp(val[16] * 1000 / 256, 0, 1000) : 0);
+
+    // Envelopes: times are milliseconds; unset times are -12000 timecents.
+    auto t = [&](int g) { return tc_seconds(set[g] ? sbk_time_tc(val[g]) : -12000); };
+    auto key_scale = [&](int g) { return int16_t(set[g] ? std::clamp(int(val[g] * 5.55), -1200, 1200) : 0); };
+    z.mod_env = {t(25), t(26), t(27), t(28), t(30), 0.0f, key_scale(31), key_scale(32)};
+    z.vol_env = {t(33), t(34), t(35), t(36), t(38), 0.0f, key_scale(39), key_scale(40)};
+    // Sustain levels are 0..127; unset sustain is TiMidity's SBK default
+    // 1000 (silent / zero level), so a zone with only a decay dies away.
+    const int ms = set[29] ? (val[29] < 96 ? 1000 * (96 - val[29]) / 96 : 0) : 1000;
+    const int vs = set[37] ? (val[37] < 96 ? (2000 - 21 * val[37]) / 2 : 0) : 1000;
+    z.mod_env.sustain = 1.0f - float(std::clamp(ms, 0, 1000)) / 1000.0f;
+    z.vol_env.sustain = float(std::clamp(vs, 0, 1440));
+
+    z.mod_lfo_delay = t(21);
+    z.vib_lfo_delay = t(23);
+    z.mod_lfo_hz = ac_hz(set[22] ? sbk_freq_ac(22, val[22]) : -725);
+    z.vib_lfo_hz = ac_hz(set[24] ? sbk_freq_ac(24, val[24]) : -15600);
+    z.mod_lfo_to_pitch = int16_t(set[5] ? std::clamp(sbk_pshift(val[5]), -12000, 12000) : 0);
+    z.vib_lfo_to_pitch = int16_t(set[6] ? std::clamp(sbk_pshift(val[6]), -12000, 12000) : 0);
+    z.mod_env_to_pitch = int16_t(set[7] ? std::clamp(sbk_pshift(val[7]), -12000, 12000) : 0);
+    // Filter: 127 = open (14400, outside TiMidity's 1500..13500 window).
+    if (set[8]) {
+        const int fc = val[8] == 127 ? 14400 : 59 * val[8] + 4366;
+        z.filter_fc = int16_t(std::clamp(fc, 0, 14400));
+        z.filter_on = fc >= 1500 && fc <= 13500;
+    }
+    z.filter_q_cb = int16_t(set[9] ? std::clamp(val[9] * 3 / 2, 0, 960) : 0);
+    z.mod_lfo_to_fc = int16_t(set[10] ? std::clamp(1200 * 3 * val[10] / 64, -12000, 12000) : 0);
+    z.mod_env_to_fc = int16_t(set[11] ? std::clamp(1200 * 6 * val[11] / 64, -12000, 12000) : 0);
+    z.mod_lfo_to_volume = int16_t(set[13] ? std::clamp(120 * val[13] / 64, -960, 960) : 0);
+    z.exclusive_class = uint8_t(set[57] ? std::clamp(int(val[57]), 0, 127) : 0);
+    return z;
 }
 
 } // namespace
@@ -232,9 +377,10 @@ std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool 
     if (n_presets < 1 || pbags.empty()) throw std::runtime_error("SF1: bad preset bags");
     if (n_inst < 1 || ibags.empty()) throw std::runtime_error("SF1: bad instrument bags");
     // Sample headers in these banks are a compact 16 bytes: start, end,
-    // loopStart, loopEnd (no name/rate/pitch fields). Sample rate is 22050 Hz
-    // (the AWE32 engine default) and the root pitch comes from generator 58
-    // (overridingRootKey), defaulting to 60.
+    // loopStart, loopEnd (no name/rate/pitch fields). The rate is 44100 Hz
+    // (TiMidity's SBK assumption; the GRUNGE2/5 bass zones that set only
+    // samplePitch 4281/4782 measure 42.8/47.9 semitones at that rate) and the
+    // root pitch comes from samplePitch (55), overridden by 58.
     if (shdr->size % 16 != 0) throw std::runtime_error("SF1: bad shdr alignment");
     const uint32_t n_samples = shdr->size / 16;
 
@@ -254,14 +400,30 @@ std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool 
         return R{start, end, loop_start, loop_end};
     };
 
-    // Global + per-zone generators for one bag range: last occurrence wins.
-    auto collect = [&](const std::vector<Gen>& gens, uint32_t lo, uint32_t hi) {
-        std::map<uint16_t, uint16_t> m;
+    // Generator table for one zone: set flags plus raw SBK amounts.
+    struct Table {
+        int32_t val[kGenCount] = {};
+        bool set[kGenCount] = {};
+    };
+    auto apply = [&](Table& t, const std::vector<Gen>& gens, uint32_t lo, uint32_t hi) {
         for (uint32_t i = lo; i < hi; ++i) {
             if (i >= gens.size()) throw std::runtime_error("SF1: generator index out of range");
-            if (gens[i].op != 0) m[gens[i].op] = gens[i].amount;
+            if (gens[i].op == 0 || gens[i].op >= kGenCount) continue;
+            t.val[gens[i].op] = int16_t(gens[i].amount);
+            t.set[gens[i].op] = true;
         }
-        return m;
+    };
+    auto has = [&](const std::vector<Gen>& gens, uint32_t lo, uint32_t hi, uint16_t op) {
+        for (uint32_t i = lo; i < hi && i < gens.size(); ++i)
+            if (gens[i].op == op) return true;
+        return false;
+    };
+    auto bag_gens = [&](const std::vector<std::pair<uint16_t, uint16_t>>& bags, const std::vector<Gen>& gens,
+                        uint32_t bi) {
+        const uint32_t lo = bags[bi].first;
+        const uint32_t hi = (bi + 1 < bags.size()) ? bags[bi + 1].first : uint32_t(gens.size());
+        if (lo > hi || hi > gens.size()) throw std::runtime_error("SF1: generator bag out of range");
+        return std::pair<uint32_t, uint32_t>{lo, hi};
     };
 
     for (uint32_t pi = 0; pi + 1 < n_presets; ++pi) {
@@ -274,14 +436,22 @@ std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool 
         if (!want) continue;
         if (bag_lo > bag_hi || bag_hi > pbags.size())
             throw std::runtime_error("SF1: preset bag out of range");
-        for (uint32_t bi = bag_lo; bi < bag_hi; ++bi) {
-            const uint32_t g_lo = (bi < pbags.size()) ? pbags[bi].first : 0;
-            const uint32_t g_hi = (bi + 1 < pbags.size()) ? pbags[bi + 1].first : uint32_t(pgens.size());
-            if (g_lo > g_hi || g_hi > pgens.size()) throw std::runtime_error("SF1: pgen out of range");
-            const auto pzone = collect(pgens, g_lo, g_hi);
-            auto it_inst = pzone.find(41);        // instrument
-            if (it_inst == pzone.end()) continue; // global preset zone
-            const uint32_t inst_id = it_inst->second;
+        // A first preset zone without an instrument is the preset's global zone.
+        Table pglobal;
+        uint32_t first = bag_lo;
+        if (first < bag_hi) {
+            const auto [g_lo, g_hi] = bag_gens(pbags, pgens, first);
+            if (!has(pgens, g_lo, g_hi, 41)) {
+                apply(pglobal, pgens, g_lo, g_hi);
+                ++first;
+            }
+        }
+        for (uint32_t bi = first; bi < bag_hi; ++bi) {
+            const auto [g_lo, g_hi] = bag_gens(pbags, pgens, bi);
+            Table pzone = pglobal;
+            apply(pzone, pgens, g_lo, g_hi);
+            if (!pzone.set[41]) continue; // later zones without an instrument are ignored
+            const uint32_t inst_id = uint16_t(pzone.val[41]);
             if (inst_id >= n_inst) throw std::runtime_error("SF1: instrument out of range");
             const uint16_t ib_lo = u16le(bytes, inst->off + 22 * size_t(inst_id) + 20);
             const uint16_t ib_hi = (inst_id + 1 < n_inst)
@@ -289,35 +459,34 @@ std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool 
                                        : uint16_t(ibags.size() - 1);
             if (ib_lo > ib_hi || ib_hi > ibags.size())
                 throw std::runtime_error("SF1: instrument bag out of range");
-            const int16_t preset_coarse = pzone.count(51) ? int16_t(pzone.at(51)) : int16_t(0);
-            const int16_t preset_fine = pzone.count(52) ? int16_t(pzone.at(52)) : int16_t(0);
-            const int16_t preset_att = pzone.count(48) ? int16_t(pzone.at(48)) : int16_t(0);
-            for (uint32_t bj = ib_lo; bj < ib_hi; ++bj) {
-                const uint32_t h_lo = (bj < ibags.size()) ? ibags[bj].first : 0;
-                const uint32_t h_hi = (bj + 1 < ibags.size()) ? ibags[bj + 1].first : uint32_t(igens.size());
-                if (h_lo > h_hi || h_hi > igens.size()) throw std::runtime_error("SF1: igen out of range");
-                const auto izone = collect(igens, h_lo, h_hi);
-                auto it_s = izone.find(53);        // sampleID
-                if (it_s == izone.end()) continue; // global instrument zone
-                const auto r = sample_range(it_s->second);
-                Sf1Zone z;
+            // Instrument global zone (first zone without a sampleID): defaults.
+            Table iglobal;
+            uint32_t ifirst = ib_lo;
+            if (ifirst < ib_hi) {
+                const auto [h_lo, h_hi] = bag_gens(ibags, igens, ifirst);
+                if (!has(igens, h_lo, h_hi, 53)) {
+                    apply(iglobal, igens, h_lo, h_hi);
+                    ++ifirst;
+                }
+            }
+            for (uint32_t bj = ifirst; bj < ib_hi; ++bj) {
+                const auto [h_lo, h_hi] = bag_gens(ibags, igens, bj);
+                Table t = iglobal;
+                apply(t, igens, h_lo, h_hi);
+                if (!t.set[53]) continue; // zones without a sample are skipped
+                // SF1 merge (TiMidity merge_table, version 1): preset values
+                // fill only unset instrument generators; ranges always copy.
+                for (int g = 1; g < kGenCount; ++g) {
+                    if (!pzone.set[g] || g == 41) continue;
+                    if (!t.set[g] || g == 43 || g == 44) {
+                        t.val[g] = pzone.val[g];
+                        t.set[g] = true;
+                    }
+                }
+                const auto r = sample_range(uint16_t(t.val[53]));
+                Sf1Zone z = convert_sbk_zone(t.val, t.set, r.s, r.e, r.ls, r.le, sample_count);
                 z.program = uint8_t(program & 127);
                 z.bank = uint8_t(bank_id == 128 ? 128 : 0);
-                // Generators 43/44 (keyRange/velRange) pack low+(high<<8).
-                z.low_key = izone.count(43) ? uint8_t(izone.at(43) & 0xff) : uint8_t(0);
-                z.high_key = izone.count(43) ? uint8_t(izone.at(43) >> 8) : uint8_t(127);
-                if (z.low_key > z.high_key) throw std::runtime_error("SF1: inverted key range");
-                z.root_key = izone.count(58) ? uint8_t(izone.at(58) & 127) : uint8_t(60);
-                const int16_t coarse = int16_t(izone.count(51) ? int16_t(izone.at(51)) : 0) + preset_coarse;
-                const int16_t fine = int16_t(izone.count(52) ? int16_t(izone.at(52)) : 0) + preset_fine;
-                z.coarse_tune = int8_t(std::clamp(coarse, int16_t(-127), int16_t(127)));
-                z.fine_tune = int8_t(std::clamp(fine, int16_t(-127), int16_t(127)));
-                z.volume_db_cb = int16_t(izone.count(48) ? int16_t(izone.at(48)) : 0) + preset_att;
-                z.sample_start = r.s;
-                z.sample_end = r.e;
-                z.loop_start = (r.le > r.ls && r.ls >= r.s && r.le <= r.e) ? r.ls : r.s;
-                z.loop_end = (r.le > r.ls) ? r.le : r.s; // <= start: no loop
-                z.sample_rate = 22050;
                 bank->zones.push_back(z);
             }
         }
@@ -326,31 +495,43 @@ std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool 
 }
 
 namespace {
-// Offline song renderer used by the test hook: maps channel events to zones
-// (channel 9 -> drum kit, others -> melodic preset by last program change)
-// and mixes pitched sample spans with a 5 ms release ramp.
-struct Note {
-    uint32_t start_frame = 0, frames = 0;
-    uint8_t velocity = 0;
-    uint8_t key = 0;
-    const Sf1Zone* zone = nullptr;
-};
+constexpr size_t kControlFrames = 32; // envelope/LFO/filter update period
+// Output headroom for up to 32 summed voices. The EMU8000 mix level is
+// unmeasured; -12 dB keeps the five AWE corpus songs below full scale.
+constexpr double kMasterGain = 0.25;
 
-const Sf1Zone* pick_zone(const Sf1Bank& melodic, const Sf1Bank& drums, const Sf1Bank* factory,
-                         const uint8_t* program, uint8_t ch, uint8_t key) {
-    const Sf1Bank& b = (ch == 9) ? drums : melodic;
-    const uint8_t prog = (ch == 9) ? 0 : program[ch];
-    for (const Sf1Zone& z : b.zones) {
-        if (ch != 9 && z.program != prog) continue;
-        if (key >= z.low_key && key <= z.high_key) return &z;
-    }
-    if (factory && ch != 9) {
-        for (const Sf1Zone& z : factory->zones) {
-            if (z.program != prog) continue;
-            if (key >= z.low_key && key <= z.high_key) return &z;
-        }
-    }
-    return nullptr; // unmapped (program,key): silent without factory presets.
+bool zone_matches(const Sf1Zone& z, bool drums, uint8_t program, uint8_t key, uint8_t vel) {
+    if (!drums && z.program != program) return false;
+    return key >= z.low_key && key <= z.high_key && vel >= z.low_vel && vel <= z.high_vel;
+}
+
+bool bank_covers(const Sf1Bank* bank, bool drums, uint8_t program, uint8_t key, uint8_t vel) {
+    if (!bank) return false;
+    for (const Sf1Zone& z : bank->zones)
+        if (zone_matches(z, drums, program, key, vel)) return true;
+    return false;
+}
+
+double cb_amp(double cb) {
+    return det_pow10(-cb / 200.0);
+}
+
+// SF2 default-modulator concave curve (velocity, CC7, CC11): 960 cB range,
+// amplitude proportional to the square of the normalised controller value.
+double concave_cb(double x) {
+    return x <= 0.0 ? 960.0 : std::min(960.0, -400.0 * log10d(x));
+}
+
+// SF2 LFO: triangle starting at 0 and rising.
+double triangle(double phase) {
+    phase -= std::floor(phase);
+    if (phase < 0.25) return 4.0 * phase;
+    if (phase < 0.75) return 2.0 - 4.0 * phase;
+    return 4.0 * phase - 4.0;
+}
+
+double key_scaled(float seconds, int16_t tc_per_key, int key) {
+    return double(seconds) * pow2(double(tc_per_key) * double(60 - key) / 1200.0);
 }
 } // namespace
 
@@ -371,9 +552,11 @@ const Sf1Bank& factory_bank() {
             z.high_key = 127;
             z.root_key = 60;
             z.sample_rate = 22050;
+            z.sample_modes = 1;
+            z.vol_env.release = 0.005f; // the previous renderer's 5 ms release
             z.sample_start = uint32_t(b.samples.size());
             for (int i = 0; i < kLen; ++i) {
-                const double ph = double(i) / kLen * 2.0 * 3.141592653589793;
+                const double ph = double(i) / kLen * 2.0 * kPi;
                 // Program-parametrised harmonic mix keeps timbres distinct.
                 const double h2 = (p % 3 + 1) / 12.0, h3 = (p % 5 + 1) / 24.0;
                 const double v = sin(ph) + h2 * sin(2 * ph) + h3 * sin(3 * ph);
@@ -407,20 +590,348 @@ size_t count_factory_notes(const MidsSong& song, const Sf1Bank& melodic, const S
         if (op == 0xC0) {
             program[ch] = e.data0 & 127;
         } else if (op == 0x90 && e.data1 != 0u) {
-            if (!pick_zone(melodic, drums, nullptr, program, ch, e.data0)) ++missing;
+            const bool drum = ch == 9;
+            if (!bank_covers(drum ? &drums : &melodic, drum, program[ch], e.data0, e.data1)) ++missing;
         }
     }
     return missing;
 }
 
-float note_gain(uint8_t velocity, int16_t cb) {
-    const float vel = velocity / 127.0f;
-    return vel * float(pow(10.0, -double(cb) / 200.0)); // centibels -> amplitude
+// One sounding zone. Envelope stages: 0 delay, 1 attack, 2 hold, 3 decay,
+// 4 sustain, 5 release.
+struct Sf1Synth::Voice {
+    const Sf1Zone* zone = nullptr;
+    const std::vector<int16_t>* samples = nullptr;
+    uint8_t channel = 0, key = 0, velocity = 0, pitch_key = 0;
+    uint64_t serial = 0;
+    bool released = false, done = false;
+    double pos = 0.0, step = 0.0; // source samples from zone start
+    double base_cents = 0.0, vel_cb = 0.0;
+    double vol_hold = 0, vol_decay = 0, mod_hold = 0, mod_decay = 0, vol_release = 0, mod_release = 0;
+    int vol_stage = 0, mod_stage = 0;
+    double vol_t = 0, mod_t = 0, vol_cb = 1000.0, mod_level = 0.0;
+    double time = 0.0, mod_phase = 0.0, vib_phase = 0.0;
+    double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+    float gl = 0, gr = 0, dgl = 0, dgr = 0;
+    size_t control_left = 0;
+
+    double vol_amp() const {
+        if (vol_stage == 0) return 0.0;
+        if (vol_stage == 1) return std::min(1.0, vol_t / double(zone->vol_env.attack));
+        return cb_amp(vol_cb);
+    }
+    void release(double seconds_override = 0.0) {
+        if (released && seconds_override <= 0.0) return;
+        if (vol_stage <= 1) {
+            const double a = vol_amp();
+            vol_cb = a > 0.0 ? -200.0 * log10d(a) : 1000.0;
+        }
+        if (vol_stage == 0) done = true;
+        vol_stage = 5;
+        if (mod_stage == 1) mod_level = std::min(1.0, mod_t / double(zone->mod_env.attack));
+        if (mod_stage == 0) mod_level = 0.0;
+        mod_stage = 5;
+        if (seconds_override > 0.0) vol_release = mod_release = seconds_override;
+        released = true;
+    }
+    void advance(double dt) {
+        const Sf1Envelope& ve = zone->vol_env;
+        vol_t += dt;
+        switch (vol_stage) {
+        case 0:
+            if (vol_t >= ve.delay) vol_stage = 1, vol_t -= ve.delay;
+            break;
+        case 1:
+            if (vol_t >= ve.attack) vol_stage = 2, vol_t -= ve.attack, vol_cb = 0.0;
+            break;
+        case 2:
+            if (vol_t >= vol_hold) vol_stage = 3, vol_t -= vol_hold;
+            break;
+        case 3:
+            vol_cb += 1000.0 * dt / vol_decay;
+            if (vol_cb >= ve.sustain) vol_cb = ve.sustain, vol_stage = 4;
+            break;
+        case 5:
+            vol_cb += 1000.0 * dt / vol_release;
+            break;
+        default:
+            break;
+        }
+        if (vol_stage >= 2 && vol_cb >= 960.0) done = true;
+        const Sf1Envelope& me = zone->mod_env;
+        mod_t += dt;
+        switch (mod_stage) {
+        case 0:
+            if (mod_t >= me.delay) mod_stage = 1, mod_t -= me.delay;
+            break;
+        case 1:
+            mod_level = std::min(1.0, mod_t / double(me.attack));
+            if (mod_t >= me.attack) mod_stage = 2, mod_t -= me.attack, mod_level = 1.0;
+            break;
+        case 2:
+            if (mod_t >= mod_hold) mod_stage = 3, mod_t -= mod_hold;
+            break;
+        case 3:
+            mod_level -= dt / mod_decay;
+            if (mod_level <= me.sustain) mod_level = me.sustain, mod_stage = 4;
+            break;
+        case 5:
+            mod_level = std::max(0.0, mod_level - dt / mod_release);
+            break;
+        default:
+            break;
+        }
+        time += dt;
+        if (time >= zone->mod_lfo_delay) mod_phase += double(zone->mod_lfo_hz) * dt;
+        if (time >= zone->vib_lfo_delay) vib_phase += double(zone->vib_lfo_hz) * dt;
+    }
+    double at(uint32_t k, bool looping) const {
+        if (looping && k >= zone->loop_end)
+            k = zone->loop_start + (k - zone->loop_start) % (zone->loop_end - zone->loop_start);
+        // A loop may end one sample past `end` (TiMidity: data length len + 1).
+        if (k >= std::max(zone->sample_end, zone->loop_end) || k >= samples->size()) return 0.0;
+        return double((*samples)[k]) / 32768.0;
+    }
+};
+
+Sf1Synth::Sf1Synth(const Sf1Bank* melodic, const Sf1Bank* drums, const Sf1Bank* factory, double rate)
+    : melodic_(melodic), drums_(drums), factory_(factory), rate_(rate) {
+    voices_.reserve(kMaxVoices);
 }
+
+Sf1Synth::~Sf1Synth() = default;
+
+void Sf1Synth::reset() {
+    voices_.clear();
+    for (Channel& c : channels_) c = Channel{};
+}
+
+size_t Sf1Synth::active_voices() const {
+    return voices_.size();
+}
+
+void Sf1Synth::event(uint8_t status, uint8_t data0, uint8_t data1) {
+    const uint8_t op = status & 0xf0, ch = status & 0x0f;
+    Channel& c = channels_[ch];
+    if (op == 0x90 && data1 != 0u) {
+        note_on(ch, data0 & 127, data1 & 127);
+    } else if (op == 0x80 || op == 0x90) {
+        for (Voice& v : voices_)
+            if (v.channel == ch && v.key == data0 && !v.released) v.release();
+    } else if (op == 0xB0) {
+        controller(ch, data0 & 127, data1 & 127);
+    } else if (op == 0xC0) {
+        c.program = data0 & 127;
+    } else if (op == 0xE0) {
+        c.bend = uint16_t((data0 & 127) | ((data1 & 127) << 7));
+    }
+}
+
+void Sf1Synth::controller(uint8_t ch, uint8_t cc, uint8_t value) {
+    Channel& c = channels_[ch];
+    const bool rpn0 = c.rpn_msb == 0 && c.rpn_lsb == 0;
+    switch (cc) {
+    case 1:
+        c.mod = value;
+        break;
+    case 6: // data entry MSB: RPN 0 bend range semitones
+        if (rpn0) c.bend_range = value * 100 + c.bend_range % 100;
+        break;
+    case 38: // data entry LSB: RPN 0 bend range cents
+        if (rpn0) c.bend_range = (c.bend_range / 100) * 100 + std::min<int>(value, 99);
+        break;
+    case 7:
+        c.volume = value;
+        break;
+    case 10:
+        c.pan = value;
+        break;
+    case 11:
+        c.expression = value;
+        break;
+    case 98:
+    case 99: // NRPN select deselects the RPN
+        c.rpn_msb = c.rpn_lsb = 127;
+        break;
+    case 100:
+        c.rpn_lsb = value;
+        break;
+    case 101:
+        c.rpn_msb = value;
+        break;
+    case 120: // all sound off
+        voices_.erase(
+            std::remove_if(voices_.begin(), voices_.end(), [&](const Voice& v) { return v.channel == ch; }),
+            voices_.end());
+        break;
+    case 121: // reset all controllers (RP-015: volume and pan kept)
+        c.expression = 127;
+        c.mod = 0;
+        c.bend = 8192;
+        c.rpn_msb = c.rpn_lsb = 127;
+        break;
+    case 123: // all notes off
+        for (Voice& v : voices_)
+            if (v.channel == ch) v.release();
+        break;
+    default: // bank select, reverb/chorus depth: no effect without effects
+        break;
+    }
+}
+
+void Sf1Synth::note_on(uint8_t ch, uint8_t key, uint8_t vel) {
+    // A repeated key releases its previous voices (single note-off per key).
+    for (Voice& v : voices_)
+        if (v.channel == ch && v.key == key && !v.released) v.release();
+    const bool drum = ch == 9;
+    const uint8_t program = drum ? 0 : channels_[ch].program;
+    const Sf1Bank* bank = drum ? drums_ : melodic_;
+    const uint64_t first_serial = serial_ + 1;
+    auto start_all = [&](const Sf1Bank* b) {
+        bool any = false;
+        if (!b) return false;
+        for (const Sf1Zone& z : b->zones) {
+            if (!zone_matches(z, drum, program, key, vel)) continue;
+            // Exclusive class: the new note cuts this channel's earlier voices
+            // of the same class (RRDRUMS hi-hats 42/44/46) as fast as possible.
+            if (z.exclusive_class)
+                for (Voice& v : voices_)
+                    if (v.channel == ch && v.serial < first_serial &&
+                        v.zone->exclusive_class == z.exclusive_class)
+                        v.release(0.001);
+            start_voice(z, b->samples, ch, key, vel);
+            any = true;
+        }
+        return any;
+    };
+    if (!start_all(bank) && !drum) start_all(factory_);
+}
+
+void Sf1Synth::start_voice(const Sf1Zone& z, const std::vector<int16_t>& samples, uint8_t ch, uint8_t key,
+                           uint8_t vel) {
+    if (z.sample_end <= z.sample_start || z.sample_end > samples.size()) return;
+    Voice* slot = nullptr;
+    if (voices_.size() < kMaxVoices) {
+        voices_.emplace_back();
+        slot = &voices_.back();
+    } else {
+        // Steal: the quietest released voice, else the oldest voice.
+        Voice* best = nullptr;
+        for (Voice& v : voices_)
+            if (v.released && (!best || v.vol_amp() < best->vol_amp())) best = &v;
+        if (!best)
+            for (Voice& v : voices_)
+                if (!best || v.serial < best->serial) best = &v;
+        *best = Voice{};
+        slot = best;
+    }
+    Voice& v = *slot;
+    v.zone = &z;
+    v.samples = &samples;
+    v.channel = ch;
+    v.key = key;
+    v.velocity = z.fixed_velocity >= 0 ? uint8_t(z.fixed_velocity) : vel;
+    v.pitch_key = z.fixed_key >= 0 ? uint8_t(z.fixed_key) : key;
+    v.serial = ++serial_;
+    v.base_cents = double(z.scale_tuning) * (int(v.pitch_key) - int(z.root_key)) + z.pitch_correction +
+                   100.0 * z.coarse_tune + z.fine_tune;
+    v.vel_cb = concave_cb(v.velocity / 127.0);
+    v.vol_hold = key_scaled(z.vol_env.hold, z.vol_env.key_to_hold, v.pitch_key);
+    v.vol_decay = key_scaled(z.vol_env.decay, z.vol_env.key_to_decay, v.pitch_key);
+    v.mod_hold = key_scaled(z.mod_env.hold, z.mod_env.key_to_hold, v.pitch_key);
+    v.mod_decay = key_scaled(z.mod_env.decay, z.mod_env.key_to_decay, v.pitch_key);
+    v.vol_release = z.vol_env.release;
+    v.mod_release = z.mod_env.release;
+    started_any_ = true;
+}
+
+void Sf1Synth::render(float* left, float* right, size_t frames) {
+    const double dt = double(kControlFrames) / rate_;
+    for (Voice& v : voices_) {
+        const Sf1Zone& z = *v.zone;
+        size_t i = 0;
+        while (i < frames && !v.done) {
+            if (v.control_left == 0) {
+                // Control point: current modulators, then advance one period.
+                const Channel& c = channels_[v.channel];
+                const double mod_lfo = v.time >= z.mod_lfo_delay ? triangle(v.mod_phase) : 0.0;
+                const double vib_lfo = v.time >= z.vib_lfo_delay ? triangle(v.vib_phase) : 0.0;
+                const double bend = (double(c.bend) - 8192.0) / 8192.0 * c.bend_range;
+                const double vib_depth = z.vib_lfo_to_pitch + 50.0 * c.mod / 127.0; // CC1 -> vibrato
+                const double cents = v.base_cents + bend + v.mod_level * z.mod_env_to_pitch +
+                                     mod_lfo * z.mod_lfo_to_pitch + vib_lfo * vib_depth;
+                v.step = double(z.sample_rate) / rate_ * pow2(cents / 1200.0);
+                const double cb =
+                    std::clamp(double(z.attenuation_cb) + v.vel_cb + concave_cb(c.volume / 127.0) +
+                                   concave_cb(c.expression / 127.0) + mod_lfo * z.mod_lfo_to_volume,
+                               0.0, 1440.0);
+                const double amp = kMasterGain * cb_amp(cb) * v.vol_amp();
+                const double pan =
+                    std::clamp(double(z.pan) + (double(c.pan) - 64.0) / 64.0 * 500.0, -500.0, 500.0);
+                const double theta = (pan + 500.0) / 1000.0 * kPi / 2.0;
+                v.dgl = (float(amp * cos_series(theta)) - v.gl) / float(kControlFrames);
+                v.dgr = (float(amp * sin_series(theta)) - v.gr) / float(kControlFrames);
+                if (z.filter_on) {
+                    const double fc_cents =
+                        z.filter_fc + v.mod_level * z.mod_env_to_fc + mod_lfo * z.mod_lfo_to_fc;
+                    const double hz = std::clamp(8.176 * pow2(fc_cents / 1200.0), 5.0, 0.45 * rate_);
+                    const double q = std::max(det_pow10(z.filter_q_cb / 200.0), 0.7071);
+                    const double w = 2.0 * kPi * hz / rate_, cw = cos_series(w),
+                                 alpha = sin_series(w) / (2.0 * q);
+                    const double a0 = 1.0 + alpha;
+                    v.b0 = (1.0 - cw) / 2.0 / a0;
+                    v.b1 = (1.0 - cw) / a0;
+                    v.b2 = v.b0;
+                    v.a1 = -2.0 * cw / a0;
+                    v.a2 = (1.0 - alpha) / a0;
+                }
+                v.advance(dt);
+                v.control_left = kControlFrames;
+            }
+            const size_t n = std::min(frames - i, v.control_left);
+            const bool looping = z.loops() && (z.sample_modes == 1 || !v.released);
+            const double loop_len = double(z.loop_end - z.loop_start);
+            const double loop_end = double(z.loop_end - z.sample_start);
+            const double length = double(z.sample_end - z.sample_start);
+            for (size_t k = 0; k < n; ++k) {
+                if (looping)
+                    while (v.pos >= loop_end) v.pos -= loop_len;
+                if (!looping && v.pos >= length) {
+                    v.done = true;
+                    break;
+                }
+                const uint32_t idx = z.sample_start + uint32_t(v.pos);
+                const double frac = v.pos - std::floor(v.pos);
+                double s = v.at(idx, looping) * (1.0 - frac) + v.at(idx + 1, looping) * frac;
+                if (z.filter_on) {
+                    const double y = v.b0 * s + v.z1;
+                    v.z1 = v.b1 * s - v.a1 * y + v.z2;
+                    v.z2 = v.b2 * s - v.a2 * y;
+                    s = y;
+                }
+                v.gl += v.dgl;
+                v.gr += v.dgr;
+                left[i + k] += float(s) * v.gl;
+                right[i + k] += float(s) * v.gr;
+                v.pos += v.step;
+            }
+            i += n;
+            v.control_left -= n;
+        }
+    }
+    voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [](const Voice& v) { return v.done; }),
+                  voices_.end());
+}
+
 namespace {
+// Offline song renderer used by the test hook: sequences the song's events
+// into an Sf1Synth at their exact frames and lets the last voices release.
 void render_song(const MidsSong& song, const Sf1Bank& melodic, const Sf1Bank& drums,
                  std::vector<int16_t>& mono, const Sf1Bank* factory) {
     constexpr double kRate = 22050.0;
+    constexpr size_t kMaxFrames = size_t(kRate * 1200); // cap 20 minutes
+    constexpr size_t kMaxTail = size_t(kRate * 20);     // stuck-note guard
+    mono.clear();
     std::vector<std::pair<uint32_t, uint32_t>> tempo = song.tempo;
     if (tempo.empty() || tempo[0].first != 0) tempo.insert(tempo.begin(), {0, 500000});
     auto tick_to_frames = [&](uint32_t tick) {
@@ -434,72 +945,29 @@ void render_song(const MidsSong& song, const Sf1Bank& melodic, const Sf1Bank& dr
             last_tick = edge;
             usec = tempo[i].second;
         }
-        return uint32_t(frames);
+        return size_t(frames);
     };
-    uint8_t program[16] = {};
-    struct On {
-        uint32_t tick;
-        uint8_t vel, key;
-        const Sf1Zone* zone;
+    Sf1Synth synth(&melodic, &drums, factory, kRate);
+    std::vector<float> left, right;
+    auto run = [&](size_t frames) {
+        const size_t o = left.size();
+        left.resize(o + frames, 0.0f);
+        right.resize(o + frames, 0.0f);
+        synth.render(left.data() + o, right.data() + o, frames);
     };
-    std::map<std::pair<uint8_t, uint8_t>, On> active;
-    std::vector<Note> notes;
     for (const MidsEvent& e : song.events) {
-        const uint8_t op = e.status & 0xf0, ch = e.status & 0x0f;
-        if (op == 0xC0) {
-            program[ch] = e.data0 & 127;
-        } else if (op == 0x90 && e.data1 != 0u) {
-            const Sf1Zone* z = pick_zone(melodic, drums, factory, program, ch, e.data0);
-            if (z) active[{ch, e.data0}] = {e.tick, e.data1, e.data0, z};
-            // Unmapped notes stay silent (nullptr factory).
-        } else if (op == 0x90 || op == 0x80) { // note off (incl. vel-0 on)
-            auto it = active.find({ch, e.data0});
-            if (it == active.end()) continue;
-            const uint32_t s = tick_to_frames(it->second.tick);
-            const uint32_t en = tick_to_frames(e.tick);
-            if (en > s && en - s < uint32_t(kRate * 60))
-                notes.push_back({s, en - s, it->second.vel, it->second.key, it->second.zone});
-            active.erase(it);
-        }
+        const size_t at = std::min(tick_to_frames(e.tick), kMaxFrames);
+        if (at > left.size()) run(at - left.size());
+        synth.event(e.status, e.data0, e.data1);
     }
-    uint32_t total = 0;
-    for (const Note& n : notes) total = std::max(total, n.start_frame + n.frames);
-    if (!total || total > uint32_t(kRate * 1200)) return; // cap 20 minutes
-    std::vector<double> mix(total, 0.0);
-    for (const Note& n : notes) {
-        const Sf1Zone* z = n.zone;
-        // Factory zones address the factory bank; disc zones address melodic/drums.
-        const std::vector<int16_t>& smp =
-            (factory && z >= factory->zones.data() && z < factory->zones.data() + factory->zones.size())
-                ? factory->samples
-                : ((z->bank == 128) ? drums.samples : melodic.samples);
-        const double semis =
-            double(int(n.key) - int(z->root_key) + z->coarse_tune) + double(z->fine_tune) / 100.0;
-        const double step = double(z->sample_rate) / kRate * pow(2.0, semis / 12.0);
-        const bool loop = z->loop_end > z->loop_start;
-        const float gain = note_gain(n.velocity, z->volume_db_cb);
-        const uint32_t rel = uint32_t(kRate * 0.005); // 5 ms release ramp
-        double pos = 0.0;
-        for (uint32_t i = 0; i < n.frames; ++i) {
-            uint32_t idx = z->sample_start + uint32_t(pos);
-            const double frac = pos - floor(pos);
-            auto at = [&](uint32_t k) -> double {
-                if (k >= z->sample_end) {
-                    if (!loop) return 0.0;
-                    k = z->loop_start + (k - z->loop_start) % (z->loop_end - z->loop_start);
-                }
-                return double(smp[k]) / 32768.0;
-            };
-            const double v = at(idx) * (1.0 - frac) + at(idx + 1) * frac;
-            float g = gain;
-            if (rel > 1 && i + rel >= n.frames) g *= float(n.frames - 1 - i) / float(rel);
-            mix[n.start_frame + i] += v * g;
-            pos += step;
-            if (!loop && z->sample_start + uint32_t(pos) >= z->sample_end) break;
-        }
+    for (size_t tail = 0; synth.active_voices() && tail < kMaxTail && left.size() < kMaxFrames; tail += 1024)
+        run(1024);
+    if (!synth.started_any()) return; // nothing sounded (unmapped notes only)
+    mono.resize(left.size());
+    for (size_t i = 0; i < left.size(); ++i) {
+        const double m = (double(left[i]) + double(right[i])) * 0.7071067811865476;
+        mono[i] = int16_t(lrint(std::clamp(m, -1.0, 1.0) * 32767.0));
     }
-    mono.resize(total);
-    for (uint32_t i = 0; i < total; ++i) mono[i] = int16_t(lrint(std::clamp(mix[i], -1.0, 1.0) * 32767.0));
 }
 } // namespace
 
@@ -561,6 +1029,7 @@ void RaceMusicPlayer::play_race(int original_course_index, const std::string& al
     song_ = song;
     loaded_ = true;
     playing_ = true;
+    synth_ = std::make_unique<Sf1Synth>(melodic_.get(), drums_.get(), &factory_bank());
     // Live path: sequence into the mixer ring (update() renders blocks).
     // Deleting with `delete` (not reset): MusicStream is mixer-visible but
     // player-owned; the mixer only borrows the pointer until stop().
@@ -581,8 +1050,7 @@ void RaceMusicPlayer::stop() {
     song_data_ = MidsSong{};
     melodic_.reset();
     drums_.reset();
-    voices_.clear();
-    live_on_.clear();
+    synth_.reset();
     position_frames_ = 0;
     event_cursor_ = 0;
     tick_ = 0;
@@ -602,140 +1070,72 @@ void RaceMusicPlayer::test_play(const MidsSong& song, std::shared_ptr<const Sf1B
     song_ = "TEST";
     loaded_ = true;
     playing_ = true;
+    synth_ = std::make_unique<Sf1Synth>(melodic_.get(), drums_.get(), &factory_bank());
     stream_ = new MusicStream(1 << 14);
     stream_voice_ = mixer_.play_stream(stream_, 127);
 }
 
 void RaceMusicPlayer::update() {
-    // Game-thread sequencer: advance song ticks by whole rendered blocks and
-    // push stereo PCM into the mixer ring. No allocation here (voices_ only
-    // grows on note-on, bounded by the song's polyphony); the audio thread
-    // consumes lock-free and hears silence on underrun.
-    if (!playing_ || paused_ || !loaded_ || !melodic_ || !drums_ || !stream_) return;
+    // Game-thread sequencer: render whole blocks into the mixer ring, firing
+    // each event at its exact frame inside the block. No allocation here
+    // (the synth reserves its 32 voices); the audio thread consumes
+    // lock-free and hears silence on underrun.
+    if (!playing_ || paused_ || !loaded_ || !melodic_ || !drums_ || !stream_ || !synth_) return;
     constexpr double kRate = 22050.0;
     constexpr size_t kBlock = 512;
+    const auto& events = song_data_.events;
+    const double division = double(song_data_.division ? song_data_.division : 480);
     // Backpressure: never advance the sequencer past PCM refused by the ring.
     // Keep a short buffer and fill it on each game-frame pump.
     for (int refill = 0; refill < 8 && stream_->available() < 2048; ++refill) {
-        // Current tempo (microseconds per quarter note) at the playhead tick.
-        uint32_t usec = 500000;
-        for (const auto& t : song_data_.tempo) {
-            if (t.first > tick_) break;
-            if (t.second) usec = t.second;
-        }
-        const double frames_per_tick =
-            double(usec) / 1e6 / double(song_data_.division ? song_data_.division : 480) * kRate;
-        double advance = double(kBlock);
-        int16_t block[2 * kBlock] = {};
-        // Loop the song (0x00433e30 enables looping on the MIDI stream).
-        auto reset_loop = [&] {
-            tick_ = 0;
-            tick_frac_ = 0.0;
-            event_cursor_ = 0;
-            voices_.clear();
-            live_on_.clear();
-            memset(live_program_, 0, sizeof(live_program_));
-        };
-        if (event_cursor_ >= song_data_.events.size()) reset_loop();
-        const double start_tick = double(tick_) + tick_frac_;
-        const double end_tick = start_tick + double(kBlock) / (frames_per_tick > 0 ? frames_per_tick : 1.0);
-        // Fire events whose tick falls inside this block.
-        while (event_cursor_ < song_data_.events.size() &&
-               double(song_data_.events[event_cursor_].tick) <= end_tick) {
-            const MidsEvent& e = song_data_.events[event_cursor_];
-            const uint8_t op = e.status & 0xf0, ch = e.status & 0x0f;
-            if (op == 0xC0) {
-                live_program_[ch] = e.data0 & 127;
-            } else if (op == 0x90 && e.data1 != 0u) {
-                const Sf1Zone* z = pick_zone(*melodic_, *drums_, &factory_bank(), live_program_, ch, e.data0);
-                if (z) {
-                    const double semis = double(int(e.data0) - int(z->root_key));
-                    LiveVoice v;
-                    v.zone = z;
-                    v.step = double(z->sample_rate) / kRate * pow(2.0, semis / 12.0);
-                    v.gain = note_gain(e.data1, z->volume_db_cb);
-                    v.channel = ch;
-                    v.key = e.data0;
-                    // Note length unknown yet; voice ends at note-off (or song loop).
-                    auto it = live_on_.find({ch, e.data0});
-                    if (it != live_on_.end() && it->second < voices_.size())
-                        voices_[it->second].has_off = true;
-                    live_on_[{ch, e.data0}] = voices_.size();
-                    voices_.push_back(v);
+        float left[kBlock] = {}, right[kBlock] = {};
+        size_t filled = 0;
+        while (filled < kBlock) {
+            // Loop the song at its end (0x00433e30 enables looping on the MIDI
+            // stream): release every note, reset controllers, restart.
+            if (event_cursor_ >= events.size() && !events.empty() && tick_ >= song_data_.total_ticks) {
+                for (uint8_t ch = 0; ch < 16; ++ch) {
+                    synth_->event(uint8_t(0xB0 | ch), 123, 0);
+                    synth_->event(uint8_t(0xB0 | ch), 121, 0);
                 }
-            } else if (op == 0x90 || op == 0x80) {
-                auto it = live_on_.find({ch, e.data0});
-                if (it != live_on_.end()) {
-                    if (it->second < voices_.size()) voices_[it->second].has_off = true;
-                    live_on_.erase(it);
-                }
+                tick_ = 0;
+                tick_frac_ = 0.0;
+                event_cursor_ = 0;
             }
-            ++event_cursor_;
-        }
-        (void)advance;
-        tick_frac_ += double(kBlock) / (frames_per_tick > 0 ? frames_per_tick : 1.0);
-        while (tick_frac_ >= 1.0) {
-            tick_frac_ -= 1.0;
-            ++tick_;
-        }
-        // Mix live voices (linear interpolation; factory zones read the factory
-        // bank, disc zones the melodic/drum banks). Voices flagged off decay
-        // over 5 ms; looped samples sustain until note-off.
-        const float level = float(music_level_) / 80.0f;
-        const uint32_t rel = uint32_t(kRate * 0.005);
-        for (size_t vi = 0; vi < voices_.size();) {
-            LiveVoice& v = voices_[vi];
-            const Sf1Zone* z = v.zone;
-            const Sf1Bank* bank = &factory_bank();
-            bool is_factory = z >= bank->zones.data() && z < bank->zones.data() + bank->zones.size();
-            const std::vector<int16_t>& smp =
-                is_factory ? bank->samples : ((z->bank == 128) ? drums_->samples : melodic_->samples);
-            bool dead = false;
-            for (size_t i = 0; i < kBlock; ++i) {
-                double sample = 0.0;
-                if (!smp.empty() && z->sample_end <= smp.size()) {
-                    const bool loop = z->loop_end > z->loop_start;
-                    uint32_t idx = z->sample_start + uint32_t(v.pos);
-                    const double frac = v.pos - floor(v.pos);
-                    auto at = [&](uint32_t k) -> double {
-                        if (k >= z->sample_end) {
-                            if (!loop) return 0.0;
-                            k = z->loop_start + (k - z->loop_start) % (z->loop_end - z->loop_start);
-                        }
-                        return double(smp[k]) / 32768.0;
-                    };
-                    sample = at(idx) * (1.0 - frac) + at(idx + 1) * frac;
-                    v.pos += v.step;
-                    if (!loop && z->sample_start + uint32_t(v.pos) >= z->sample_end) {
-                        dead = true;
-                        sample = 0.0;
-                    }
-                    if (v.has_off) {
-                        if (v.off_frame >= rel)
-                            dead = true;
-                        else
-                            sample *= 1.0 - double(v.off_frame++) / double(rel ? rel : 1);
-                    }
-                }
-                const float g = v.gain * level;
-                const int32_t s = int32_t(lrint(std::clamp(sample * g, -1.0, 1.0) * 32767.0));
-                block[2 * i] = int16_t(std::clamp<int32_t>(int32_t(block[2 * i]) + (s >> 1), -32768, 32767));
-                block[2 * i + 1] =
-                    int16_t(std::clamp<int32_t>(int32_t(block[2 * i + 1]) + (s >> 1), -32768, 32767));
+            const double now = double(tick_) + tick_frac_;
+            while (event_cursor_ < events.size() && double(events[event_cursor_].tick) <= now) {
+                const MidsEvent& e = events[event_cursor_++];
+                synth_->event(e.status, e.data0, e.data1);
             }
-            if (dead) {
-                for (auto it = live_on_.begin(); it != live_on_.end();) {
-                    if (it->second == vi)
-                        it = live_on_.erase(it);
-                    else {
-                        if (it->second > vi) --it->second;
-                        ++it;
-                    }
+            // Tempo (microseconds per quarter note) at the playhead, and the
+            // next tick where it or an event changes the synth state.
+            uint32_t usec = 500000;
+            double next = double(song_data_.total_ticks);
+            for (const auto& t : song_data_.tempo) {
+                if (double(t.first) > now) {
+                    next = std::min(next, double(t.first));
+                    break;
                 }
-                voices_.erase(voices_.begin() + int64_t(vi));
-            } else {
-                ++vi;
+                if (t.second) usec = t.second;
             }
+            if (event_cursor_ < events.size()) next = std::min(next, double(events[event_cursor_].tick));
+            const double frames_per_tick = std::max(double(usec) / 1e6 / division * kRate, 1e-6);
+            size_t n = kBlock - filled;
+            if (next > now) n = std::min(n, size_t(std::ceil((next - now) * frames_per_tick)));
+            n = std::max<size_t>(n, 1);
+            synth_->render(left + filled, right + filled, n);
+            filled += n;
+            tick_frac_ += double(n) / frames_per_tick;
+            const double whole = std::floor(tick_frac_);
+            tick_ += uint32_t(whole);
+            tick_frac_ -= whole;
+        }
+        // Centre-panned voices land at half scale per channel, as before.
+        const float level = float(music_level_) / 80.0f * 0.70710678f;
+        int16_t block[2 * kBlock];
+        for (size_t i = 0; i < kBlock; ++i) {
+            block[2 * i] = int16_t(lrint(std::clamp(left[i] * level, -1.0f, 1.0f) * 32767.0f));
+            block[2 * i + 1] = int16_t(lrint(std::clamp(right[i] * level, -1.0f, 1.0f) * 32767.0f));
         }
         stream_->push(block, kBlock);
         position_frames_ += kBlock;

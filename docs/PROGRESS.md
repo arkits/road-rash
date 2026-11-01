@@ -47,11 +47,61 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Disc import | ISO/folder reader, SHA-256 verification of 341 files, first-run picker/progress UI | `src/importer.cpp`, `src/import_ui.cpp` |
 | Android data packaging | Normal APK excludes game data; guarded developer assets are opt-in | `android/app/build.gradle` |
 | Audio decoding/mixing | All 72 effects and 14 RRA tracks decode; queued stereo mixer, resampling, pause and device reopening | `src/wav.cpp`, `src/mixer.cpp` |
-| Race sounds and soundtrack | Original effect slots, event codes at ported trigger points, engines with Doppler/pan/rpm, volume curve; RRA soundtrack cycling in menus; race MIDI (`RaceMusicPlayer`), sirens (slots 30/31) and car engines (slots 4/6) play; exact AWE/MIDI timbre open (October 26) | `src/sound.cpp` |
+| Race sounds and soundtrack | Original effect slots, event codes at ported trigger points, engines with Doppler/pan/rpm, volume curve; RRA soundtrack cycling in menus; race MIDI (`RaceMusicPlayer`, SBK generator semantics through `Sf1Synth`, October 31), sirens (slots 30/31) and car engines (slots 4/6) play; exact AWE/MIDI timbre unmeasured (no EMU8000 oracle), effects sends and factory ROM open | `src/sound.cpp` |
 | Video | AVI scan, Cinepak and IMA: all 59 videos match FFmpeg RGB/audio; native playback via `--video`; frontend selection and hardware A/V sync open | `src/avi.cpp`, `src/cinepak.cpp`, `src/video_player.cpp` |
 | Flat polygon raster | Normalization matches 2,048 original calls; full flat path matches 64 indexed fixtures; scene integration open | `src/raster.cpp`, `src/polygon.cpp` |
 
 ## Timeline
+
+### October 31, 2026 (night): SBK generator semantics in the race-music renderer
+
+- `src/race_music.cpp`/`.hpp`: `read_sf1` now builds a generator table per
+  zone. The instrument global zone gives the defaults and the instrument
+  zone overrides them; preset generators fill only unset ones (key/velocity
+  ranges always copy, as in SF1). Values are converted from SBK units with
+  TiMidity's `sbkconv.c` rules, used as a reading reference and not vendored.
+  `Sf1Zone` carries the converted parameters.
+- Fixed facts (no oracle needed):
+  - `initialAttenuation` is a 0..127 level (127 = full; 101 = −19.8 dB). The
+    old centibel misread put every note 12.7 dB down.
+  - The root comes from `samplePitch` (55) plus its cents, overridden by 58,
+    with 44100 Hz samples. The two bass zones that set only 55 (4281/4782)
+    measure 42.8/47.9 semitones at 44100 Hz, which settles the 22050 Hz
+    question. With 55 = 7200 and no 58 the pitch is unchanged; the other
+    zones that set 55 move an octave from the old 22050/root-60 reading.
+  - Loops are the header plus gens 2/3 (+45/50 coarse) with the SF1 +1/+2
+    correction, clamped to end + 1, and play only when `sampleModes` is 1/3.
+- New `Sf1Synth` (a spec-derived voice engine, shared by the offline
+  `render_race_song` and the live `RaceMusicPlayer`):
+  - SF2 volume envelope (attack linear in amplitude, decay/release linear in
+    dB) and modulation envelope, with key scaling. Unset SBK sustains are
+    silent / zero level, so drum zones with only a decay die away.
+  - Mod and vib triangle LFOs to pitch, Fc and volume. RBJ low-pass from Fc
+    and Q (cB above DC), modulated by the mod envelope and the LFO.
+  - Constant-power pan; exclusive classes (the RRDRUMS hi-hats cut each
+    other); all matching zones sound; 32-voice cap with stealing.
+  - SF2 default modulators for the songs' controllers: velocity, CC7 and
+    CC11 on the concave 960 cB curve, CC10 pan, pitch bend times the RPN 0
+    range, CC1 vibrato, and CC120/121/123.
+  - Events fire at their exact frame in both paths. The live player used to
+    quantise them to 512-frame blocks. The offline render now runs the
+    release tails.
+  - Master gain −12 dB, because attenuation 127 is now full level: the five
+    AWE songs peak at 15–21k without clipping. The EMU8000 mix level is
+    unmeasured.
+  - Maths through `det_math` and a series sine (portability rule A11).
+- Tests: 50 synthetic SF1 checks in `music_test` (general fixture builder,
+  no disc bytes) cover each rule: attenuation, root/samplePitch/44100 Hz
+  pitch, loops/modes, global zones, the merge, unit conversions, envelope
+  stages, filter cut and env sweep, vibrato, tremolo, pan, exclusive class,
+  CC7 and the bend range. The corpus renders still pass.
+- Remaining: the timbre is spec-derived, not measured (Wine has no
+  EMU8000). Reverb/chorus sends (gens 15/16, CC91/93) are parsed but not
+  rendered (no effects engine). The factory-ROM presets still use the
+  synthesized stand-ins (an owner-supplied ROM dump is needed). The SF2.01
+  velocity-to-Fc default modulator is left out, as SF2.04 does. TiMidity
+  quirks (drum keynote retune, root −60 correction, mod-env sustain tune
+  shift) are not copied.
 
 ### October 31, 2026 (evening): system faces, footers and full-frame menus
 

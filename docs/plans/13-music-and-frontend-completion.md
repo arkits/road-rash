@@ -210,3 +210,10 @@ footers were added the same evening: 18 of 20 acceptance screens are
 pixel-exact full frame, and the other two differ only in port-only rows.
 Still open: controls arrow-key label icons and AWE/EMU8000 timbre. See
 [frontend-exact-20261031](../agent-handoffs/frontend-exact-20261031.md).
+The SBK banks now play with their SF1 generator semantics (October 31,
+[sbk-timbre-20261031](../agent-handoffs/sbk-timbre-20261031.md)): attenuation
+level, samplePitch root at 44100 Hz, loop offsets and modes, global zones and
+the SF1 merge, both envelopes, filter, LFOs, pan, exclusive classes and the
+SF2 default controller modulators. This timbre is spec-derived and unmeasured
+(no EMU8000 oracle). Still open for the timbre: reverb/chorus effects, the
+factory-ROM presets (owner-supplied ROM dump), and any measured comparison.

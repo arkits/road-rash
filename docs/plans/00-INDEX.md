@@ -11,7 +11,7 @@ The October 14 snapshot below is historical. [../CURRENT_STATUS.md](../CURRENT_S
 - **Simulation:** the full Napa level-1 field matches the original for 2400/2400 ticks and a human-input capture for 1431/1431 ticks, with one RNG anchor. Other levels, courses and scenarios remain open (plan 10).
 - **Police:** live (periodic and DZHR spawns, chase, siren, arrest, BUSTED flow) and native-tested; comparison with an original capture is open.
 - **Crashes:** walls `0x0043a610` and the crash/remount family `0x00403d60` are ported; rider, car and pedestrian contact are ported.
-- **Sound:** race MIDI, sirens and car engines play; exact AWE/MIDI timbre is open.
+- **Sound:** race MIDI, sirens and car engines play; exact AWE/MIDI timbre is open (SBK generator semantics applied October 31, spec-derived and unmeasured; effects and factory ROM open).
 - **Front end:** jukebox, sound mix and controls are implemented; driven-career saves round-trip. Mano-a-mano stays disabled until plan 34.
 - **Still not started:** Android hardware validation. Linux/Windows (plan 33) are done in software (33a Tasks 1–7, 33b Tasks 1–7) and wait for hardware acceptance; online multiplayer (plan 34) is live through `rr-netd`, with device cross-play and soak acceptance (Tasks 10–11) open.
 

@@ -39,18 +39,50 @@ struct MidsSong {
 // truncated or garbage input.
 MidsSong read_mids(const std::vector<uint8_t>& bytes);
 
-// One playable (program,key) sample zone of a SoundFont 1 bank.
+// SF2-style envelope in seconds (SBK milliseconds converted at parse time).
+// Volume envelopes hold their sustain as attenuation in centibels (1000 =
+// silent); modulation envelopes as a 0..1 level. Key scaling is timecents per
+// key relative to key 60 (SF2 keynumToHold/Decay).
+struct Sf1Envelope {
+    float delay = 0.001f, attack = 0.001f, hold = 0.001f, decay = 0.001f, release = 0.001f;
+    float sustain = 0.0f; // volume: cB attenuation; modulation: level 0..1
+    int16_t key_to_hold = 0, key_to_decay = 0;
+};
+
+// One playable sample zone of a SoundFont 1 bank, with the preset and
+// instrument generators merged and converted from SBK units to SF2 units
+// (docs/REVERSE_ENGINEERING.md "SBK generator semantics"). Defaults are the
+// neutral values used by the synthesized factory zones; read_sf1 applies the
+// SBK defaults (unset sustain = silent, LFO rates) instead.
 struct Sf1Zone {
     uint8_t program = 0; // melodic preset program (bank 0), or 0 for drums
     uint8_t bank = 0;    // 0 melodic, 128 drums
     uint8_t low_key = 0, high_key = 127;
-    uint8_t root_key = 60;
-    int8_t coarse_tune = 0;
-    int8_t fine_tune = 0;                      // semitones + cents/100
-    int16_t volume_db_cb = 0;                  // initial attenuation, centibels (negative ok)
-    uint32_t sample_start = 0, sample_end = 0; // sample indices into samples
-    uint32_t loop_start = 0, loop_end = 0;     // sample indices; loop_end<=start = no loop
-    uint16_t sample_rate = 22050;
+    uint8_t low_vel = 0, high_vel = 127;
+    uint8_t root_key = 60;                      // samplePitch (55) / overridingRootKey (58)
+    int16_t pitch_correction = 0;               // cents, fractional part of samplePitch
+    int8_t coarse_tune = 0;                     // semitones (51)
+    int8_t fine_tune = 0;                       // cents (52)
+    int16_t scale_tuning = 100;                 // cents per key (56)
+    int8_t fixed_key = -1, fixed_velocity = -1; // keynum (46) / velocity (47)
+    int16_t attenuation_cb = 0;                 // initialAttenuation (48) in centibels
+    uint32_t sample_start = 0, sample_end = 0;  // sample indices into samples
+    uint32_t loop_start = 0, loop_end = 0;      // sample indices, end exclusive
+    uint8_t sample_modes = 0;                   // 54: 1 loop, 3 loop until release, else one-shot
+    uint32_t sample_rate = 44100;               // SBK headers carry no rate (TiMidity: 44100)
+    int16_t pan = 0;                            // -500 (left) .. 500 (right), 0.1% units
+    int16_t chorus_send = 0, reverb_send = 0;   // 0.1% units; no effects engine
+    Sf1Envelope vol_env, mod_env;
+    float mod_lfo_delay = 0.001f, mod_lfo_hz = 8.176f;
+    float vib_lfo_delay = 0.001f, vib_lfo_hz = 8.176f;
+    int16_t mod_lfo_to_pitch = 0, vib_lfo_to_pitch = 0, mod_env_to_pitch = 0; // cents
+    int16_t filter_fc = 13500; // absolute cents; filter_on false = open
+    bool filter_on = false;
+    int16_t filter_q_cb = 0;                      // resonance above DC gain, centibels
+    int16_t mod_lfo_to_fc = 0, mod_env_to_fc = 0; // cents
+    int16_t mod_lfo_to_volume = 0;                // centibels at LFO peak
+    uint8_t exclusive_class = 0;                  // 57
+    bool loops() const { return (sample_modes & 1) && loop_end > loop_start; }
 };
 
 struct Sf1Bank {
@@ -58,9 +90,12 @@ struct Sf1Bank {
     std::vector<Sf1Zone> zones;
 };
 
-// Bounds-checked SoundFont 1 (`sfbk`, `ifil` major 1) parser. Only the zone
-// fields the renderer consumes are extracted; unknown generator/modulator
-// operators are skipped. Throws std::runtime_error on malformed input.
+// Bounds-checked SoundFont 1 (`sfbk`, `ifil` major 1) parser. Instrument
+// global zones are defaults for the instrument's zones; preset generators
+// apply only where the instrument zone leaves one unset (key/velocity ranges
+// always copy, as in SF1). Values are converted from SBK units with the rules
+// of TiMidity's sbkconv.c (reading reference; not vendored). Unknown
+// generators are skipped. Throws std::runtime_error on malformed input.
 // `melodic=true` keeps bank-0 presets, `melodic=false` keeps the bank-128 kit.
 std::shared_ptr<const Sf1Bank> read_sf1(const std::vector<uint8_t>& bytes, bool melodic);
 
@@ -78,6 +113,46 @@ bool factory_covers(uint8_t program);
 // `melodic`/`drums` nor the factory table (`factory_prog_key` lists the
 // census-observed soundings as (bank,program) for the report).
 size_t count_factory_notes(const MidsSong& song, const Sf1Bank& melodic, const Sf1Bank& drums);
+
+// Spec-derived EMU-style voice engine shared by the offline render and the
+// live player: SF2 volume/modulation envelopes, mod/vib LFOs, resonant
+// low-pass filter, pan, exclusive classes, sample loops, and the SF2 default
+// modulators (velocity, CC7/CC11 volume, CC10 pan, pitch bend with RPN 0
+// range, CC1 vibrato). No EMU8000 timbre oracle exists (Wine has none), so
+// none of this is a measured match. Reverb/chorus sends are parsed only.
+class Sf1Synth {
+  public:
+    static constexpr size_t kMaxVoices = 32; // EMU8000 oscillator count
+    // `melodic`/`drums` may be null (no notes on that side); unmapped melodic
+    // notes fall back to `factory` when non-null.
+    Sf1Synth(const Sf1Bank* melodic, const Sf1Bank* drums, const Sf1Bank* factory, double rate = 22050.0);
+    ~Sf1Synth();
+    void reset(); // all voices off, controllers to MIDI defaults
+    void event(uint8_t status, uint8_t data0, uint8_t data1);
+    // Adds `frames` of output into the two channel buffers (not cleared).
+    void render(float* left, float* right, size_t frames);
+    size_t active_voices() const;
+    bool started_any() const { return started_any_; }
+
+  private:
+    struct Voice;
+    struct Channel {
+        uint8_t program = 0, volume = 100, expression = 127, pan = 64, mod = 0;
+        uint16_t bend = 8192;
+        int bend_range = 200; // cents (RPN 0)
+        uint8_t rpn_msb = 127, rpn_lsb = 127;
+    };
+    void note_on(uint8_t ch, uint8_t key, uint8_t vel);
+    void start_voice(const Sf1Zone& z, const std::vector<int16_t>& samples, uint8_t ch, uint8_t key,
+                     uint8_t vel);
+    void controller(uint8_t ch, uint8_t cc, uint8_t value);
+    const Sf1Bank *melodic_, *drums_, *factory_;
+    double rate_;
+    Channel channels_[16];
+    std::vector<Voice> voices_;
+    uint64_t serial_ = 0;
+    bool started_any_ = false;
+};
 
 // Offline render of a parsed song against melodic + drum banks (no audio
 // hardware). Returns true when at least one sample was rendered. Unmapped
@@ -137,17 +212,7 @@ class RaceMusicPlayer {
     uint32_t tick_ = 0;
     double tick_frac_ = 0.0;
     int music_level_ = 80; // 0x004362e0 music channel default
-    struct LiveVoice {
-        const Sf1Zone* zone = nullptr;
-        double pos = 0.0, step = 1.0;
-        float gain = 0.0f;
-        uint32_t off_frame = 0;
-        bool has_off = false;
-        uint8_t channel = 0, key = 0;
-    };
-    std::vector<LiveVoice> voices_;
-    uint8_t live_program_[16] = {};
-    std::map<std::pair<uint8_t, uint8_t>, size_t> live_on_;
+    std::unique_ptr<Sf1Synth> synth_;
 };
 // Jukebox music videos (options-and-hud.md 59-video audit): table 0x00473f98
 // holds JESSIE/DUEL, shown by the jukebox popup 0x00445730.
