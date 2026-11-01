@@ -75,7 +75,11 @@ that produced the git-ignored acceptance goldens other sessions already pin.
    over GRUNGE1-5.SBK and RRDRUMS.SBK). Wine has no EMU8000, so it is no
    timbre oracle, and the factory-ROM presets need an owner-supplied ROM
    dump. Implementing the SF1 generator semantics is the next independent
-   slice.
+   slice. The bank dump and unit rules are now recorded in
+   REVERSE_ENGINEERING.md ("SBK generator semantics"). The current renderer
+   is also wrong on facts that need no oracle: attenuation 127 means full
+   level, root from `samplePitch` (55), loop offsets (2/3) with the SF1 +1/+2
+   correction, `sampleModes`, and the instrument global zones.
 2. Controls key labels: arrow keys should draw Wingdings icons
    (`0x0040e7b0` bytes 1..4, `0x00420280`); the port prints SDL key names.
    No capture shows filled labels.
