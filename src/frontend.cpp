@@ -346,6 +346,20 @@ std::string Frontend::player_name() const {
     return alias.empty() ? name : format_c("%s (%s %s)", {A(name), A(str(219)), A(alias)});
 }
 
+// 0x0041c060, the results screen's name: in Big Game the character's full
+// name (strings 0x20..0x27, "Cydney Bass") with the alias appended; otherwise
+// the alias or "Player N" as 0x0041c140.
+std::string Frontend::results_name() const {
+    const std::string alias(career_.state.name.data());
+    if (career_.mode != GameMode::big_game) {
+        if (!alias.empty()) return alias;
+        return format_c("%s %d", {A(str(191)), A(career_.state.player + 1)});
+    }
+    const int c = career_.state.character;
+    const std::string name = c >= 1 && c <= 8 ? str(size_t(0x1f + c)) : "Thrash";
+    return alias.empty() ? name : format_c("%s (%s %s)", {A(name), A(str(219)), A(alias)});
+}
+
 void Frontend::queue_video(const std::string& base, int variants) {
     if (settings_.video_mode == 0 || base.empty()) return;
     std::string name = base;
@@ -507,17 +521,6 @@ void Frontend::describe(const MenuItem& m) {
         const char decimal = settings_.language == Language::english ? '.' : ',';
         const std::string value = format_c("%d%c%d", {A(length / 10), A(decimal), A(length % 10)});
         strings_[dynamic_slot] = format_c(str(21 + m.caption - 0x10), {A(value), A(str(units))});
-        // The showroom draws the Length line as its own Demi footer (traced
-        // y=301) rather than embedding it; keep the formatted tail handy.
-        // It is the text after the last blank line of the course template.
-        length_footer_.clear();
-        {
-            const std::string& full = strings_[dynamic_slot];
-            size_t p = full.rfind("\n\n");
-            std::string tail = p == std::string::npos ? full : full.substr(p + 2);
-            while (!tail.empty() && (tail.front() == '\n' || tail.front() == '\r')) tail.erase(tail.begin());
-            length_footer_ = tail;
-        }
     }
     if (m.desc >= native_slot_base) {
         // Native value item: "<description>\nCurrent: <value>" via the dynamic slot.
@@ -551,10 +554,36 @@ void Frontend::describe(const MenuItem& m) {
     }
 }
 
+// 0x004208d0 hands its footer to 0x00420470 with layout bits 0x800/0x100 and
+// 0xc. That path measures the line (DT_CALCRECT|DT_SINGLELINE, 640 wide),
+// moves the box to x = (0x270 - w) / 2, y = 0x17c (0x16c on screen 0x0b),
+// w + 16 by h - 14 + 16, repaints it dark (bit 3), and draws the text
+// single-line from (x + 10, y + 2) with the shadow pass, left-aligned
+// (format 0x4852 drops to 0x4850 unless the item has bit 0x80). The rect
+// arithmetic is in the disassembly at 0x0042072f; Ghidra mislabels it.
+// Both callers (0x0041fe25, 0x0042411e) pass item flags & 0x20f00, so bit
+// 0x80 never reaches it: Futura Regular 32 (36 on screen 0x1a), 0x4850.
+Frontend::FooterLayout Frontend::footer_layout(const std::string& s) const {
+    const uint32_t flags = (footer_flags_ & 0x20f00u) | 0x800u | 0xcu;
+    FooterLayout f;
+    f.face = Face::futura_regular;
+    f.height = screen_ == 0x1a ? 36 : 32;
+    TextRect m{0, 0, 0x280, 0x1e};
+    text_.draw_box(nullptr, f.face, f.height, m, 0, s, dt::singleline | dt::calcrect);
+    const int w = m.right - m.left, h = m.bottom - m.top - 0xe;
+    const int x = (0x270 - w) / 2, y = screen_ == 0x0b ? 0x16c : 0x17c;
+    f.box = {x, y, x + w + 16, y + h + 16};
+    const auto [text, format] = description_text_layout(f.box, flags, 0x4852);
+    f.text = text;
+    f.format = format;
+    return f;
+}
+
 void Frontend::set_focus(size_t index) {
     if (index >= items_.size()) return;
     focus_ = int(index);
     const MenuItem& m = items_[index];
+    footer_flags_ = m.flags;
     set_background(focus_image(m));
     qualified_overlay_ = career_.mode != GameMode::mano && m.caption >= 0x10 && m.caption <= 0x14 &&
                          (career_.state.qualified & (1u << (m.caption - 0x10)));
@@ -752,12 +781,6 @@ void Frontend::prepare_screen(int previous, int screen) {
             }
         break;
     }
-    case 0x12: {
-        // Plan 18 Task 7: key labels (caps 160-168) show the bound key per action.
-        auto& items = data_.screens[0x12].items;
-        for (int i = 0; i < 9 && 13 + i < int(items.size()); ++i) strings_[size_t(160 + i)] = key_name(i);
-        break;
-    }
     case 0x1a:
         prepare_schmooze(previous);
         break;
@@ -770,13 +793,16 @@ void Frontend::prepare_screen(int previous, int screen) {
         data_.screens[0x1e].title =
             career_.state.level == 4 && career_.state.qualified == all_qualified ? 0x178 : 0xb2;
         if (career_.state.place < 3)
-            strings_[dynamic_slot] = format_c(str(201 + career_.state.place), {A(player_name())});
+            strings_[dynamic_slot] = format_c(str(201 + career_.state.place), {A(results_name())});
         break;
     }
     case 0x21: {
-        // 0x004214e0
+        // 0x004214e0 is the busted/wrecked button handler that sets this
+        // caption and text on the way in. Entered without a pending penalty
+        // (no busted/wrecked report), the row keeps its caption and the stale
+        // dynamic slot, as the original shows it (fe-penalty golden).
         auto& items = data_.screens[0x21].items;
-        if (items.empty()) break;
+        if (items.empty() || (!report_.penalty_message && !report_.game_over)) break;
         if (career_.mode == GameMode::big_game) {
             if (report_.game_over)
                 items[0].caption = 0xc6;
@@ -1082,6 +1108,11 @@ void Frontend::apply_native_setting() {
         if (row.caption == ns::render_resolution) row.desc = ns::d_render_resolution;
         if (row.desc >= native_slot_base) describe(row);
     }
+}
+
+// 0x0040fd90: 0x0040e7b0 per row, then slots 160-168 point at the labels.
+void Frontend::refresh_key_labels() {
+    for (int i = 0; i < 9; ++i) strings_[size_t(160 + i)] = key_name(i);
 }
 
 std::string Frontend::key_name(int action) const {
@@ -1959,6 +1990,11 @@ void Frontend::activate(size_t index) {
     }
     const int next = run_handler(index);
     if (next == 0) return;
+    // The key labels (slots 160-168) are filled by the restroom Controls row's
+    // handler 0x0040fd90, not by entering 0x12: a bare entry shows whatever
+    // those slots last held (fe-controls golden: character heights). Native
+    // routes into 0x12 (pause menu, settings Back rows) refresh them too.
+    if (next == 0x12) refresh_key_labels();
     // Plan 18 Task 8: entering a settings screen from the pause menu arms the
     // return; its Back row (escape flag, no popup open) goes back to the pause
     // menu instead of the screen's original Back target.
@@ -2293,13 +2329,9 @@ void Frontend::draw_scale1(RgbImage& out) const {
         draw_text_box(out, t, Face::badloc, 72, title, flags, colour_orange);
     }
     // Description box (0x00420470): darkened, Futura, pale text with a black shadow.
+    // The showroom keeps the course select's stale description (blurb and
+    // Length line) and draws it whole, right-aligned (item flags 0x184).
     std::string desc = str(desc_slot_);
-    if (screen_ == 0x18) {
-        // The showroom draws the blurb here and the Length line as its own
-        // footer below; the embedded copy would double-draw.
-        const size_t blank = desc.find("\n\n");
-        if (blank != std::string::npos) desc.resize(blank);
-    }
     if (desc_slot_ && !desc.empty() && desc != "*") {
         const Face face = screen_ == 0x1a        ? Face::futura_regular
                           : (desc_flags_ & 0x80) ? Face::futura_demi
@@ -2336,25 +2368,30 @@ void Frontend::draw_scale1(RgbImage& out) const {
                                     : description_text_layout(box, desc_flags_, desc_format_);
         draw_text_box(out, t, face, height, desc, flags, colour_light);
     }
-    if (screen_ == 0x18 && !length_footer_.empty()) {
-        // Traced showroom Length footer: Demi, right-aligned, top y=301.
-        const int w = text_.width(Face::futura_demi, 24, length_footer_);
-        draw_text_box(out, {621 - w, 300, 621, 332}, Face::futura_demi, 24, length_footer_,
-                      dt::right | dt::singleline, colour_light);
+    // Caller-0x4208d0 footer: the player line (bit 0x800) wins over the bike
+    // price line (bit 0x100), as the original branches.
+    if (const std::string& foot = player_footer_.empty() ? price_footer_ : player_footer_; !foot.empty()) {
+        const FooterLayout f = footer_layout(foot);
+        fill_from(out, dark_, f.box.left, f.box.top, f.box.right - f.box.left, f.box.bottom - f.box.top);
+        draw_text_box(out, f.text, f.face, f.height, foot, f.format, colour_light);
     }
-    // Caller-0x4208d0 footers: player line (bh&8) and bike price line (bh&1),
-    // centered at y=380. Masked in acceptance but visible in real play.
-    if (!player_footer_.empty())
-        draw_text_box(out, {0, 380, 640, 420}, Face::futura_regular, 32, player_footer_,
-                      dt::center | dt::singleline, colour_light);
-    if (!price_footer_.empty())
-        draw_text_box(out, {0, 380, 640, 420}, Face::futura_regular, 32, price_footer_,
-                      dt::center | dt::singleline, colour_light);
     if (!price_text_.empty()) {
         TextRect box{0x10, 0x154, 0x10 + 0xf0 + 16, 0x154 + 30 + 16};
         fill_from(out, dark_, box.left, box.top, box.right - box.left, box.bottom - box.top);
         draw_text_box(out, {box.left + 8, box.top + 8, box.right - 8, box.bottom}, Face::futura_regular, 32,
                       price_text_, dt::center, colour_light);
+    }
+    // Standings shares its picture with the won/lost/penalty screens, and the
+    // original does not repaint the strip their wide row (0, 410, 640x70,
+    // dynamic slot, darkened) left: "%s finished in ... Place." stays under
+    // the rows (fe-standings golden, direct entry after won and penalty).
+    if (screen_ == 0x22 && items_.size() == 15) {
+        const std::string& foot = str(dynamic_slot);
+        if (!foot.empty() && foot != "*") {
+            fill_from(out, dark_, 0, 410, 640, 70);
+            draw_text_box(out, {0x19, 412, 640, 480}, Face::futura_regular, 32, foot,
+                          dt::wordbreak | dt::center, colour_light);
+        }
     }
     // Buttons (0x0041fc90 / 0x0041ff80).
     for (size_t i = 0; i < items_.size(); ++i) {
@@ -2368,7 +2405,7 @@ void Frontend::draw_scale1(RgbImage& out) const {
             fill_from(out, dark_, m.x, m.y, m.w, m.h);
         else if (m.caption == 0)
             continue;
-        if (caption.empty() || caption == "*") continue;
+        if (caption.empty()) continue;
         uint32_t colour;
         if (!m.enabled)
             colour = (m.flags & item_flag::light) ? colour_light : colour_grey;
@@ -2378,8 +2415,16 @@ void Frontend::draw_scale1(RgbImage& out) const {
                                                      : colour_light;
         else
             colour = m.caption == 0xb8 ? 0xffffff : colour_focus;
+        if (screen_ == 0x22 && text_.has(Face::courier_new_bold)) {
+            // 0x0041ff80: standings rows in New Courier Bold 18 (0x00423afd; GDI
+            // picks Courier New Bold), DrawTextEx 0x4850 with the 2-pixel shadow.
+            draw_text_box(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::courier_new_bold, 18,
+                          caption, dt::wordbreak, colour);
+            continue;
+        }
         if (screen_ == 0x22) {
-            // Standings in a fixed-pitch layout (original: New Courier Bold 18).
+            // No host Courier New Bold (Android, browser, Linux without
+            // msttcorefonts or Liberation): Futura Bold on a fixed pitch.
             const int cell = text_.width(Face::futura_bold, 20, "0");
             int x = m.x + 0x19;
             for (char c : caption) {
@@ -2400,25 +2445,11 @@ void Frontend::draw_scale1(RgbImage& out) const {
             draw_text_box(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, caption,
                           dt::wordbreak, colour);
             if (colour == colour_focus || colour == 0xffffff) {
-                // Wingdings arrow (0x0046b044) substitute: a right-pointing triangle.
-                for (int pass = 0; pass < 2; ++pass) {
-                    const int ox = m.x + 6 + (pass ? 0 : 2), oy = m.y + 6 + (pass ? 0 : 2);
-                    for (int y = 0; y < 13; ++y)
-                        for (int x = 0; x <= 6 - std::abs(y - 6); ++x)
-                            if (out.contains(ox + x, oy + y))
-                                out.at(ox + x, oy + y) = pass ? colour_yellow : 0;
-                }
+                // 0x0041ff80: TextOutA of Wingdings 18 (0x00423b25) byte 0xe8
+                // (0x0046b044), black at (+5,+6) then yellow at (+3,+4), unclipped.
+                text_.draw(out, Face::wingdings, 18, m.x + 5, m.y + 6, 0, "\xe8");
+                text_.draw(out, Face::wingdings, 18, m.x + 3, m.y + 4, colour_yellow, "\xe8");
             }
-        }
-    }
-    // Standings footer (dynamic slot: "%s finished in ... Place."): drawn in
-    // the last row's rect on every visit once set (direct entry included).
-    if (screen_ == 0x22 && items_.size() == 15) {
-        const std::string& foot = str(dynamic_slot);
-        if (!foot.empty() && foot != "*") {
-            const MenuItem& last = items_.back();
-            draw_text_box(out, {last.x + 0x19, last.y + 2, last.x + last.w, last.y + last.h},
-                          Face::futura_regular, 32, foot, dt::wordbreak | dt::center, colour_light);
         }
     }
     draw_net_overlay(out, 1);
@@ -2558,13 +2589,9 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
         textbox(t, Face::badloc, 72, title, flags, colour_orange);
     }
     // Description box (0x00420470): darkened, Futura, pale text with a black shadow.
+    // The showroom keeps the course select's stale description (blurb and
+    // Length line) and draws it whole, right-aligned (item flags 0x184).
     std::string desc = str(desc_slot_);
-    if (screen_ == 0x18) {
-        // The showroom draws the blurb here and the Length line as its own
-        // footer below; the embedded copy would double-draw.
-        const size_t blank = desc.find("\n\n");
-        if (blank != std::string::npos) desc.resize(blank);
-    }
     if (desc_slot_ && !desc.empty() && desc != "*") {
         const Face face = screen_ == 0x1a        ? Face::futura_regular
                           : (desc_flags_ & 0x80) ? Face::futura_demi
@@ -2598,22 +2625,25 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
                                     : description_text_layout(box, desc_flags_, desc_format_);
         textbox(t, face, height, desc, flags, colour_light);
     }
-    if (screen_ == 0x18 && !length_footer_.empty()) {
-        const int w = text_.width(Face::futura_demi, 24, length_footer_);
-        textbox({621 - w, 300, 621, 332}, Face::futura_demi, 24, length_footer_, dt::right | dt::singleline,
-                colour_light);
+    if (const std::string& foot = player_footer_.empty() ? price_footer_ : player_footer_; !foot.empty()) {
+        const FooterLayout f = footer_layout(foot);
+        fill(f.box.left, f.box.top, f.box.right - f.box.left, f.box.bottom - f.box.top);
+        textbox(f.text, f.face, f.height, foot, f.format, colour_light);
     }
-    if (!player_footer_.empty())
-        textbox({0, 380, 640, 420}, Face::futura_regular, 32, player_footer_, dt::center | dt::singleline,
-                colour_light);
-    if (!price_footer_.empty())
-        textbox({0, 380, 640, 420}, Face::futura_regular, 32, price_footer_, dt::center | dt::singleline,
-                colour_light);
     if (!price_text_.empty()) {
         TextRect box{0x10, 0x154, 0x10 + 0xf0 + 16, 0x154 + 30 + 16};
         fill(box.left, box.top, box.right - box.left, box.bottom - box.top);
         textbox({box.left + 8, box.top + 8, box.right - 8, box.bottom}, Face::futura_regular, 32, price_text_,
                 dt::center, colour_light);
+    }
+    // Standings: the stale won/lost row strip, as in draw_scale1.
+    if (screen_ == 0x22 && items_.size() == 15) {
+        const std::string& foot = str(dynamic_slot);
+        if (!foot.empty() && foot != "*") {
+            fill(0, 410, 640, 70);
+            textbox({0x19, 412, 640, 480}, Face::futura_regular, 32, foot, dt::wordbreak | dt::center,
+                    colour_light);
+        }
     }
     // Buttons (0x0041fc90 / 0x0041ff80).
     for (size_t i = 0; i < items_.size(); ++i) {
@@ -2627,7 +2657,7 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
             fill(m.x, m.y, m.w, m.h);
         else if (m.caption == 0)
             continue;
-        if (caption.empty() || caption == "*") continue;
+        if (caption.empty()) continue;
         uint32_t colour;
         if (!m.enabled)
             colour = (m.flags & item_flag::light) ? colour_light : colour_grey;
@@ -2637,8 +2667,13 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
                                                      : colour_light;
         else
             colour = m.caption == 0xb8 ? 0xffffff : colour_focus;
+        if (screen_ == 0x22 && text_.has(Face::courier_new_bold)) {
+            textbox({m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::courier_new_bold, 18, caption,
+                    dt::wordbreak, colour);
+            continue;
+        }
         if (screen_ == 0x22) {
-            // Standings in a fixed-pitch layout (original: New Courier Bold 18).
+            // Fixed-pitch fallback, as in draw_scale1.
             const int cell = text_.width(Face::futura_bold, 20 * scale, "0");
             int x = (m.x + 0x19) * scale;
             for (char c : caption) {
@@ -2661,25 +2696,11 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
             textbox({m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, caption,
                     dt::wordbreak, colour);
             if (colour == colour_focus || colour == 0xffffff) {
-                // Wingdings arrow (0x0046b044) substitute: a right-pointing triangle.
-                for (int pass = 0; pass < 2; ++pass) {
-                    const int ox = (m.x + 6 + (pass ? 0 : 2)) * scale,
-                              oy = (m.y + 6 + (pass ? 0 : 2)) * scale;
-                    for (int y = 0; y < 13 * scale; ++y)
-                        for (int x = 0; x <= 6 * scale - std::abs(y - 6 * scale); ++x)
-                            if (out.contains(ox + x, oy + y))
-                                out.at(ox + x, oy + y) = pass ? colour_yellow : 0;
-                }
+                // Focus arrow as in draw_scale1, at the scaled cell height.
+                text_.draw(out, Face::wingdings, 18 * scale, (m.x + 5) * scale, (m.y + 6) * scale, 0, "\xe8");
+                text_.draw(out, Face::wingdings, 18 * scale, (m.x + 3) * scale, (m.y + 4) * scale,
+                           colour_yellow, "\xe8");
             }
-        }
-    }
-    // Standings footer, mirroring draw_scale1 (dynamic slot in the last row's rect).
-    if (screen_ == 0x22 && items_.size() == 15) {
-        const std::string& foot = str(dynamic_slot);
-        if (!foot.empty() && foot != "*") {
-            const MenuItem& last = items_.back();
-            textbox({last.x + 0x19, last.y + 2, last.x + last.w, last.y + last.h}, Face::futura_regular, 32,
-                    foot, dt::wordbreak | dt::center, colour_light);
         }
     }
     draw_net_overlay(out, scale);

@@ -411,6 +411,14 @@ int main(int argc, char** argv) {
         std::cout << name << ": full frame " << diff << " pixels differ (ceiling " << max_diff << ")\n";
         check(diff <= max_diff, name + " full-frame ceiling");
     };
+    // The acceptance goldens come from Wine on macOS, whose GDI resolves
+    // Wingdings to the host's /System/Library/Fonts/Supplemental/Wingdings.ttf.
+    const bool host_wingdings =
+        !rr::system_font_paths(rr::Face::wingdings).empty() &&
+        std::ifstream(rr::system_font_paths(rr::Face::wingdings).front()).good() &&
+        rr::system_font_paths(rr::Face::wingdings).front().find("/System/Library/Fonts/") == 0;
+    // Elsewhere the focus arrow (at most 119 pixels) may differ from the goldens.
+    const int arrow_slack = host_wingdings ? 0 : 119;
     { // Plan 13 Task 6 Step 2, first slice: screen 9 vs the original
         // RR_ORACLE_MENU=9 capture (menu-09-<date>.bmp, git-ignored, skip 77).
         // Masked: title, description box and button row (text/chrome: GDI
@@ -428,6 +436,9 @@ int main(int argc, char** argv) {
                 return false;
             };
             masked_compare("menu-09", img, gold, masked, 0.65);
+            // Full frame: only Mano-A-Mano differs, greyed because this
+            // frontend has no network transport (rr-game enables the row).
+            full_compare("menu-09", menu_corpus + "/menu-09-20261026.bmp", img, 852 + arrow_slack);
         }
     }
     { // Screen 9 again: the Wine frontend-acceptance main-menu capture.
@@ -444,6 +455,8 @@ int main(int argc, char** argv) {
                 return false;
             };
             masked_compare("fe-main", img, gold, masked);
+            // Only Mano-A-Mano differs (greyed without a network transport).
+            full_compare("fe-main", dir + "fe-main.bmp", img, 852 + arrow_slack);
         }
     }
     // Plan 19 Task 5: draw at scale 2 — focus rectangles double exactly and
@@ -562,6 +575,10 @@ int main(int argc, char** argv) {
                          std::string(RR_SOURCE_DIR "/analysis/frontend/acceptance-20261026/34069bf326"
                                                    "2241b3bdf4efa59c500751/fe-career-start.bmp"),
                          img, fe.items());
+    full_compare("fe-street",
+                 std::string(RR_SOURCE_DIR "/analysis/frontend/acceptance-20261026/34069bf326"
+                                           "2241b3bdf4efa59c500751/fe-career-start.bmp"),
+                 img, arrow_slack);
     // Olley's -> Rat bikes -> first bike -> Buy.
     key("right");
     key("select");
@@ -989,7 +1006,16 @@ int main(int argc, char** argv) {
     // Press-a-key capture (plan 18 Task 7): select a 0x12 row, press W to bind,
     // Escape cancels with no change and disarms (focus moves on next Down).
     settings.custom_controls = false;
-    fe.enter(0x12);
+    // Labels come from the restroom Controls row (handler 0x0040fd90).
+    fe.enter(0x10);
+    {
+        int controls_row = -1;
+        for (size_t i = 0; i < fe.items().size(); ++i)
+            if (fe.items()[i].handler == 0x0040fd90) controls_row = int(i);
+        check(controls_row >= 0 && focus_item(controls_row), "restroom Controls row");
+        key("select");
+    }
+    check(fe.screen() == 0x12, "Controls row enters Configure Input");
     check(fe.caption_text(fe.items()[13]) == "Up", "default accelerate label");
     if (focus_item(0)) key("select"); // arm accelerate
     press_key(SDL_SCANCODE_W);
@@ -1160,10 +1186,11 @@ int main(int argc, char** argv) {
         key2("select");
         check(fe2.screen() == 0x0e, "acceptance replay reaches characters");
         snap2("acc-characters");
-        // Pictures, dark fills, text colours and smoothed glyphs are exact;
-        // the full frame differs only in the focus arrow (system Wingdings).
+        // Pictures, dark fills, text colours, smoothed glyphs and the focus
+        // arrow are exact. The arrow is the host's Wingdings, which the goldens
+        // took from macOS; elsewhere it may differ (at most its 119 pixels).
         masked_compare_items("fe-characters", acc + "fe-characters.bmp", img2, fe2.items(), 0.999, 0.002);
-        full_compare("fe-characters", acc + "fe-characters.bmp", img2, 119);
+        full_compare("fe-characters", acc + "fe-characters.bmp", img2, arrow_slack);
         key2("down");
         key2("down");
         key2("select");
@@ -1174,12 +1201,12 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x10, "acceptance replay reaches the restroom");
         snap2("acc-restroom");
         masked_compare_items("fe-restroom", acc + "fe-restroom.bmp", img2, fe2.items(), 0.999, 0.002);
-        full_compare("fe-restroom", acc + "fe-restroom.bmp", img2, 83); // focus arrow
+        full_compare("fe-restroom", acc + "fe-restroom.bmp", img2, arrow_slack);
         fe2.enter(0x11);
         check(fe2.screen() == 0x11, "acceptance replay reaches the jukebox");
         snap2("acc-jukebox");
         masked_compare_items("fe-jukebox", acc + "fe-jukebox.bmp", img2, fe2.items(), 0.999, 0.002);
-        full_compare("fe-jukebox", acc + "fe-jukebox.bmp", img2, 83); // focus arrow
+        full_compare("fe-jukebox", acc + "fe-jukebox.bmp", img2, arrow_slack);
         fe2.enter(0x12);
         check(fe2.screen() == 0x12, "acceptance replay reaches Configure Input");
         snap2("acc-controls");
@@ -1189,13 +1216,14 @@ int main(int argc, char** argv) {
         // restroom-row handler path, which real play always takes); both sit
         // inside masked item rects.
         masked_compare_items("fe-controls", acc + "fe-controls.bmp", img2, fe2.items(), 0.94, 0.05, 0.95);
+        full_compare("fe-controls", acc + "fe-controls.bmp", img2, arrow_slack);
         fe2.enter(0x13);
         check(fe2.screen() == 0x13, "acceptance replay reaches Graphics Options");
         snap2("acc-graphics");
-        // Exact apart from the focus arrow and the port-only Display row,
-        // which the original's Graphics Options does not have.
+        // Exact apart from the port-only Display row, which the original's
+        // Graphics Options does not have.
         masked_compare_items("fe-graphics", acc + "fe-graphics.bmp", img2, fe2.items(), 0.99, 0.01);
-        full_compare("fe-graphics", acc + "fe-graphics.bmp", img2, 787);
+        full_compare("fe-graphics", acc + "fe-graphics.bmp", img2, 704 + arrow_slack);
         // Plan 13 Task 6 Step 2 screens run (new Wine goldens, 20261027):
         // course/shop/result screens in script order so backgrounds chain
         // exactly like the oracle `enter` sequence. Result variants come
@@ -1210,23 +1238,27 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x0a, "acceptance replay reaches Thrash courses");
         snap2("acc-thrash");
         masked_compare_items("fe-thrash", acc2 + "fe-thrash.bmp", img2, fe2.items());
+        full_compare("fe-thrash", acc2 + "fe-thrash.bmp", img2, arrow_slack);
         fe2.enter(8);
         check(fe2.screen() == 8, "acceptance replay reaches race loading");
         snap2("acc-loading");
         masked_compare_items("fe-loading", acc2 + "fe-loading.bmp", img2, fe2.items());
-        full_compare("fe-loading", acc2 + "fe-loading.bmp", img2, 0);
+        full_compare("fe-loading", acc2 + "fe-loading.bmp", img2, arrow_slack);
         fe2.enter(0x14);
         check(fe2.screen() == 0x14, "acceptance replay reaches Olley's");
         snap2("acc-olleys");
         masked_compare_items("fe-olleys", acc2 + "fe-olleys.bmp", img2, fe2.items());
+        full_compare("fe-olleys", acc2 + "fe-olleys.bmp", img2, arrow_slack);
         fe2.enter(0x18);
         check(fe2.screen() == 0x18, "acceptance replay reaches the showroom");
         snap2("acc-showroom");
         masked_compare_items("fe-showroom", acc2 + "fe-showroom.bmp", img2, fe2.items());
+        full_compare("fe-showroom", acc2 + "fe-showroom.bmp", img2, arrow_slack);
         fe2.enter(0x19);
         check(fe2.screen() == 0x19, "acceptance replay reaches Der Panzer Klub");
         snap2("acc-panzer");
         masked_compare_items("fe-panzer", acc2 + "fe-panzer.bmp", img2, fe2.items());
+        full_compare("fe-panzer", acc2 + "fe-panzer.bmp", img2, arrow_slack);
         // Schmooze: the run-3 golden shows Pearl at attitude N (FNH[1]).
         // The choice line stays random (masked); the portrait is pinned.
         fe2.set_schmooze_for_test(4, 1);
@@ -1234,41 +1266,45 @@ int main(int argc, char** argv) {
         check(fe2.screen() == 0x1a, "acceptance replay reaches the schmooze screen");
         snap2("acc-schmooze");
         masked_compare_items("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, fe2.items());
-        full_compare("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, 0);
+        full_compare("fe-schmooze", acc4 + "fe-schmooze.bmp", img2, arrow_slack);
         fe2.enter(0x1b);
         check(fe2.screen() == 0x1b, "acceptance replay reaches the bulletin board");
         snap2("acc-bulletin");
         masked_compare_items("fe-bulletin", acc2 + "fe-bulletin.bmp", img2, fe2.items());
+        full_compare("fe-bulletin", acc2 + "fe-bulletin.bmp", img2, arrow_slack);
         fe2.set_rest_picture_for_test(4);
         fe2.enter(0x1c);
         check(fe2.screen() == 0x1c, "acceptance replay reaches the wrecked screen");
         snap2("acc-wrecked");
         masked_compare_items("fe-wrecked", acc3 + "fe-wrecked.bmp", img2, fe2.items());
-        full_compare("fe-wrecked", acc3 + "fe-wrecked.bmp", img2, 0);
+        full_compare("fe-wrecked", acc3 + "fe-wrecked.bmp", img2, arrow_slack);
         fe2.enter(0x1d);
         check(fe2.screen() == 0x1d, "acceptance replay reaches the busted screen");
         snap2("acc-busted");
         masked_compare_items("fe-busted", acc3 + "fe-busted.bmp", img2, fe2.items());
-        full_compare("fe-busted", acc3 + "fe-busted.bmp", img2, 0);
+        full_compare("fe-busted", acc3 + "fe-busted.bmp", img2, arrow_slack);
         fe2.enter(0x1e);
         check(fe2.screen() == 0x1e, "acceptance replay reaches the won screen");
         snap2("acc-won");
         masked_compare_items("fe-won", acc3 + "fe-won.bmp", img2, fe2.items());
+        full_compare("fe-won", acc3 + "fe-won.bmp", img2, arrow_slack);
         fe2.set_rest_picture_for_test(1);
         fe2.enter(0x1f);
         check(fe2.screen() == 0x1f, "acceptance replay reaches the lost screen");
         snap2("acc-lost");
         masked_compare_items("fe-lost", acc3 + "fe-lost.bmp", img2, fe2.items());
-        full_compare("fe-lost", acc3 + "fe-lost.bmp", img2, 0);
+        full_compare("fe-lost", acc3 + "fe-lost.bmp", img2, arrow_slack);
         fe2.enter(0x21);
         check(fe2.screen() == 0x21, "acceptance replay reaches the penalty screen");
         snap2("acc-penalty");
         masked_compare_items("fe-penalty", acc3 + "fe-penalty.bmp", img2, fe2.items());
+        full_compare("fe-penalty", acc3 + "fe-penalty.bmp", img2, arrow_slack);
         fe2.enter(0x22);
         check(fe2.screen() == 0x22, "acceptance replay reaches the standings screen");
         snap2("acc-standings");
         // Rows cover most of this screen; the mask is structural.
         masked_compare_items("fe-standings", acc3 + "fe-standings.bmp", img2, fe2.items(), 0.12, 0.05, 0.95);
+        full_compare("fe-standings", acc3 + "fe-standings.bmp", img2, arrow_slack);
     }
     return failures ? 1 : 0;
 }

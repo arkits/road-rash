@@ -48,7 +48,7 @@ modules:
       - sed -e 's|@EXEC@|rr-game|' -e 's|@ICON@|org.roadrash.nativeport|' ../linux/road-rash-native.desktop.in > org.roadrash.nativeport.desktop
       - install -Dm644 org.roadrash.nativeport.desktop /app/share/applications/org.roadrash.nativeport.desktop
       - install -Dm644 -t /app/share/licenses/org.roadrash.nativeport ../third_party/SDL-LICENSE.txt ../third_party/LICENSE ../third_party/JPEG-LICENSE.md ../third_party/JPEG-README.ijg
-        ../third_party/FreeType-FTL.txt
+        ../third_party/FreeType-FTL.txt ../third_party/Wine-Wingdings-LGPL.txt
         ../third_party/libdatachannel-LICENSE.txt ../third_party/libjuice-LICENSE.txt ../third_party/usrsctp-LICENSE.md
         ../third_party/plog-LICENSE.txt ../third_party/OpenSSL-LICENSE.txt
     sources:

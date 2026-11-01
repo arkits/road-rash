@@ -47,20 +47,40 @@ that produced the git-ignored acceptance goldens other sessions already pin.
   83 (all the Wingdings focus arrow), graphics 787 (arrow + port-only
   Display row), loading/schmooze/wrecked/busted/lost 0.
 
+## Done in the evening (system faces, footers)
+
+- `Face::wingdings` and `Face::courier_new_bold` from the host
+  (`system_font_paths`), Wine's LGPL `wingding.ttf` built in as the
+  Wingdings fallback (`third_party/wine-fonts/`, `cmake/wine_wingdings.cmake`,
+  `third_party/Wine-Wingdings-LGPL.txt` in every package and verifier).
+  Wine's VDMX sizing, gasp gray ranges and symbol cmap in `src/text.cpp`;
+  `glyphprobe … sys` dumps replay 667/667 in mono and smoothed mode.
+- Focus arrow and HUD gap arrow are the Wingdings glyphs; standings rows use
+  Courier New Bold 18.
+- y=380 footers through the `0x00420470` box; showroom description drawn
+  whole; won screen full name (`0x0041c060`); bare penalty entry keeps the
+  stale slot; standings shows the won/lost strip; "*" captions drawn;
+  controls labels filled by `0x0040fd90`.
+- Full frame: 18 acceptance screens exact; graphics 704 (Display row); main
+  menu 852 (Mano-À-Mano network gate).
+- Gates: ctest 134/134, clang-format on changed files, Android debug gate
+  (receipt `analysis/agent-gates/android-debug-…`, hardware not run), web
+  Release build.
+
 ## Open
 
-1. **Focus arrow.** The original draws it with Wingdings, a Windows system
-   font that is not on the disc. Exactness needs that font from the player's
-   system, or a recorded bitmap of the arrow at its sizes.
-2. **AWE/EMU8000 timbre.** `src/race_music.cpp` applies only attenuation,
+1. **AWE/EMU8000 timbre.** `src/race_music.cpp` applies only attenuation,
    pitch and a 5 ms release. The banks use vol/mod envelopes, initialFc/Q,
    mod/vib LFOs, pan, reverb/chorus sends and exclusive classes (igen census
    over GRUNGE1-5.SBK and RRDRUMS.SBK). Wine has no EMU8000, so it is no
    timbre oracle, and the factory-ROM presets need an owner-supplied ROM
    dump. Implementing the SF1 generator semantics is the next independent
    slice.
-3. Outside this task's screens: y=380 player/price footers (thrash,
-   bulletin, showroom, panzer) and New Courier standings rows.
+2. Controls key labels: arrow keys should draw Wingdings icons
+   (`0x0040e7b0` bytes 1..4, `0x00420280`); the port prints SDL key names.
+   No capture shows filled labels.
+3. Unprobed fallbacks: built-in Wine Wingdings, Liberation Mono Bold and the
+   Futura standings layout on hosts without Courier New Bold.
 
 ## Checks
 

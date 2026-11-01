@@ -11,6 +11,13 @@ FreeType License (`FreeType-FTL.txt`, from the archive's `docs/FTL.TXT`), which
 ships in every package. Portions of this software are copyright © 2024 The
 FreeType Project (www.freetype.org). All rights reserved.
 
+The original draws its focus and dashboard arrows in Wingdings and its standings
+in Courier New Bold, Windows system fonts. The game loads them from the host
+(`system_font_paths` in `src/text.cpp`). Without a host Wingdings it uses Wine's
+own replacement, `wine-fonts/wingding.ttf` from Wine 11.18 (unmodified, with its
+`wingding.sfd` source; LGPL-2.1-or-later, `Wine-Wingdings-LGPL.txt`, shipped in
+every package), compiled in by `cmake/wine_wingdings.cmake`.
+
 Menu pictures (`IMAGES/*.RRI`, JPEG) are decoded by libjpeg-turbo 3.1.4.1,
 fetched by `cmake/jpeg_scalar.cmake` from
 https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
@@ -35,7 +42,7 @@ build, Linux/Windows packages, and any host whose system SDL is older than
 3.4.18 is newer than 3.4.12, which added `SDL_HINT_ENABLE_STEAM_SCREEN_KEYBOARD`
 (plan 33a). Android stays on the 3.4.8 AAR above until its device work bumps
 it (plan 33 Task A7 records the split).
-The SDL, stb, libjpeg-turbo and FreeType licences are copied into the application's Resources.
+The SDL, stb, libjpeg-turbo, FreeType and Wine Wingdings licences are copied into the application's Resources.
 
 Online multiplayer (plan 34) networking, fetched by `cmake/net.cmake` when
 `RR_NET_TRANSPORT` is on (native desktop builds, rr-netd, net bots):

@@ -70,10 +70,10 @@ int main(int argc, char** argv) {
         std::cout << failures << " failures; skip glyph probes: no " << probe << "\n";
         return failures ? 1 : 77;
     }
-    const std::map<std::string, rr::Face> files{{"BADLOC.DLL", rr::Face::badloc},
-                                                {"FUTR.DLL", rr::Face::futura_regular},
-                                                {"FUTB.DLL", rr::Face::futura_bold},
-                                                {"FUTD.DLL", rr::Face::futura_demi}};
+    const std::map<std::string, rr::Face> files{
+        {"BADLOC.DLL", rr::Face::badloc},    {"FUTR.DLL", rr::Face::futura_regular},
+        {"FUTB.DLL", rr::Face::futura_bold}, {"FUTD.DLL", rr::Face::futura_demi},
+        {"WINGDINGS", rr::Face::wingdings},  {"NEWCOURIERBOLD", rr::Face::courier_new_bold}};
     const uint8_t ramp[17] = {0,    0x4d, 0x68, 0x7c, 0x8c, 0x9a, 0xa7, 0xb2, 0xbd,
                               0xc7, 0xd0, 0xd9, 0xe1, 0xe9, 0xf0, 0xf8, 0xff};
     auto expand5 = [](int v) { return (v >> 3) << 3 | v >> 5; };
@@ -166,6 +166,41 @@ int main(int argc, char** argv) {
         }
         std::cout << "16-bit text blend exact " << exact << "/" << total << "\n";
         check(total > 0 && exact == total, "16-bit anti-aliased blend");
+    }
+    // System faces (glyphprobe sys: the game's Wingdings 18/12 and New Courier
+    // Bold 18 LOGFONTs). Wine on macOS resolves them to the host's Wingdings and
+    // Courier New Bold; VDMX sizing and gasp gray ranges make every glyph exact.
+    const std::string wing = "/System/Library/Fonts/Supplemental/Wingdings.ttf",
+                      courier = "/System/Library/Fonts/Supplemental/Courier New Bold.ttf";
+    if (std::ifstream(wing) && std::ifstream(courier)) {
+        for (bool gray : {false, true}) {
+            std::ifstream in(probe + (gray ? "sysgray.txt" : "sysmono.txt"));
+            if (!in) {
+                std::cout << "skip system-face probe: no " << (gray ? "sysgray" : "sysmono") << ".txt\n";
+                continue;
+            }
+            const rr::TextRenderer r(assets, gray ? rr::TextSurface::rgb565 : rr::TextSurface::indexed8,
+                                     {{rr::Face::wingdings, wing}, {rr::Face::courier_new_bold, courier}});
+            int total = 0, exact = 0, advances = 0;
+            std::vector<std::string> misses;
+            replay(in, r, gray, total, exact, advances, misses);
+            std::cout << (gray ? "smoothed" : "mono") << " system-face glyphs exact " << exact << "/" << total
+                      << ", advances " << advances << "\n";
+            check(total == 667 && exact == total && advances == total, "system-face glyph bitmaps");
+        }
+    } else {
+        std::cout << "skip system-face probe: no macOS Wingdings/Courier New Bold\n";
+    }
+    // Built-in fallback (Wine's own Wingdings) carries the three arrows the game draws.
+    {
+        const rr::TextRenderer r(assets, rr::TextSurface::rgb565, {{rr::Face::wingdings, ""}});
+        for (uint8_t ch : {uint8_t(0xe8), uint8_t(0xe9), uint8_t(0xea)}) {
+            check(r.covers(rr::Face::wingdings, ch), "built-in Wingdings arrow");
+            rr::RgbImage img(64, 64, 0);
+            r.draw(img, rr::Face::wingdings, 18, 8, 8, 0xffff00, std::string(1, char(ch)));
+            check(std::count(img.pixels.begin(), img.pixels.end(), 0u) < int(img.pixels.size()) - 20,
+                  "built-in Wingdings arrow ink");
+        }
     }
     std::cout << failures << " failures\n";
     return failures ? 1 : 0;

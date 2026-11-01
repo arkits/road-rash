@@ -2,6 +2,9 @@
 #include "assets.hpp"
 #include "pe_strings.hpp"
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -12,6 +15,16 @@
 #include FT_TRUETYPE_TABLES_H
 
 namespace rr {
+// GDI size for a positive cell height: Wine's calc_ppem_for_height, or for a
+// face with VDMX (load_VDMX) the record whose yMax-yMin equals the height, else
+// the last one below it; that record also gives tmAscent/tmDescent. Heights
+// below the first record fall back to the ppem rule. Wine ppemprobe sweep
+// 8..48 (Wingdings, Courier New Bold, Arial, Times New Roman): every height
+// the VDMX covers matches.
+struct GdiSize {
+    int ppem, ascent, descent; // ascent < 0: from the win metrics at the FreeType scale
+};
+
 // Wine-GDI renders these faces with its bundled FreeType 2.13.3; the build pins
 // that release (cmake/freetype.cmake). Each face owns its library: the renderer
 // caches glyphs and never shares FreeType state between instances.
@@ -21,6 +34,18 @@ struct TextRenderer::FontData {
     FT_Face face = nullptr;
     int win_ascent = 0, win_descent = 0; // OS/2 usWinAscent/usWinDescent: GDI cell metrics
     int units_per_em = 0;                // head.unitsPerEm for the GDI ppem rule
+    bool symbol = false;                 // Microsoft symbol cmap (Wingdings): bytes map to U+F000+byte
+    struct Vdmx {
+        int ppem, y_max, y_min;
+    };
+    std::vector<Vdmx> vdmx; // VDMX group for the 1:1 aspect ratio, by ascending ppem (system faces)
+    std::vector<std::pair<int, int>> gasp; // (rangeMaxPPEM, behaviour); empty: grid-fit and gray
+    GdiSize size(int height) const;
+    bool gray(int ppem) const {
+        for (const auto& [max_ppem, flags] : gasp)
+            if (ppem <= max_ppem) return (flags & 2) != 0; // GASP_DOGRAY
+        return gasp.empty();
+    }
     ~FontData() {
         if (face) FT_Done_Face(face);
         if (library) FT_Done_FreeType(library);
@@ -37,6 +62,18 @@ int gdi_ppem(int height, int upm, int cell) {
     return p < 1 ? 1 : p;
 }
 
+GdiSize TextRenderer::FontData::size(int height) const {
+    for (size_t i = 0; i < vdmx.size(); ++i) {
+        const int cell = vdmx[i].y_max - vdmx[i].y_min;
+        if (cell == height) return {vdmx[i].ppem, vdmx[i].y_max, -vdmx[i].y_min};
+        if (cell > height) {
+            if (i == 0) break;
+            return {vdmx[i - 1].ppem, vdmx[i - 1].y_max, -vdmx[i - 1].y_min};
+        }
+    }
+    return {gdi_ppem(height, units_per_em, win_ascent + win_descent), -1, -1};
+}
+
 // Opens the face. use_os2 selects OS/2 win metrics (the game faces); without
 // it, or without an OS/2 table, the hhea ascender/descender stand in.
 std::unique_ptr<TextRenderer::FontData> TextRenderer::open_font(std::vector<uint8_t> bytes, bool use_os2,
@@ -51,6 +88,11 @@ std::unique_ptr<TextRenderer::FontData> TextRenderer::open_font(std::vector<uint
         FT_New_Memory_Face(f->library, f->bytes.data(), FT_Long(f->bytes.size()), 0, &f->face) ||
         !FT_IS_SCALABLE(f->face))
         throw std::runtime_error("Invalid TrueType font" + what);
+    // Symbol fonts carry only a (3,0) cmap; Wine selects it and looks a byte up
+    // as U+F000+byte, then as the byte itself (win32u get_glyph_index).
+    if ((!f->face->charmap || f->face->charmap->encoding != FT_ENCODING_UNICODE) &&
+        !FT_Select_Charmap(f->face, FT_ENCODING_MS_SYMBOL))
+        f->symbol = true;
     const auto* os2 = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(f->face, FT_SFNT_OS2));
     if (use_os2 && os2 && os2->version != 0xffff) {
         f->win_ascent = os2->usWinAscent;
@@ -62,10 +104,85 @@ std::unique_ptr<TextRenderer::FontData> TextRenderer::open_font(std::vector<uint
     f->units_per_em = f->face->units_per_EM;
     if (f->win_ascent + f->win_descent <= 0) throw std::runtime_error("Font has no vertical metrics");
     if (f->units_per_em <= 0) throw std::runtime_error("Font has no units-per-em");
+    // VDMX (Windows' installed faces have one; the disc faces do not): Wine's
+    // load_VDMX takes the first ratio record that is the 0:0:0 wildcard or
+    // covers a 1:1 device, then that group's (ppem, yMax, yMin) records.
+    // gasp: Wine anti-aliases a size only when its range sets GASP_DOGRAY
+    // (Wingdings: off for ppem 9..28); faces without the table always do.
+    FT_ULong length = 0;
+    const FT_ULong gasp_tag = FT_MAKE_TAG('g', 'a', 's', 'p');
+    if (!FT_Load_Sfnt_Table(f->face, gasp_tag, 0, nullptr, &length) && length >= 4) {
+        std::vector<uint8_t> t(length);
+        FT_Load_Sfnt_Table(f->face, gasp_tag, 0, t.data(), &length);
+        const size_t ranges = size_t(t[2] << 8 | t[3]);
+        for (size_t i = 0; i < ranges && 8 + i * 4 <= t.size(); ++i)
+            f->gasp.emplace_back(t[4 + i * 4] << 8 | t[5 + i * 4], t[6 + i * 4] << 8 | t[7 + i * 4]);
+    }
+    length = 0;
+    const FT_ULong tag = FT_MAKE_TAG('V', 'D', 'M', 'X');
+    if (!FT_Load_Sfnt_Table(f->face, tag, 0, nullptr, &length) && length >= 6) {
+        std::vector<uint8_t> t(length);
+        FT_Load_Sfnt_Table(f->face, tag, 0, t.data(), &length);
+        auto u16 = [&](size_t o) { return o + 2 <= t.size() ? int(t[o] << 8 | t[o + 1]) : -1; };
+        const int ratios = u16(4);
+        for (int i = 0; i < ratios; ++i) {
+            const size_t r = 6 + size_t(i) * 4;
+            if (r + 4 > t.size()) break;
+            const int x = t[r + 1], y0 = t[r + 2], y1 = t[r + 3];
+            if (!((x == 0 && y0 == 0 && y1 == 0) || (x == 1 && y0 <= 1 && y1 >= 1))) continue;
+            const int group = u16(6 + size_t(ratios) * 4 + size_t(i) * 2), recs = u16(size_t(group));
+            for (int j = 0; group >= 0 && j < recs; ++j) {
+                const size_t e = size_t(group) + 4 + size_t(j) * 6;
+                if (e + 6 > t.size()) break;
+                f->vdmx.push_back({u16(e), int16_t(u16(e + 2)), int16_t(u16(e + 4))});
+            }
+            break;
+        }
+    }
     return f;
 }
 
-TextRenderer::TextRenderer(const Assets& assets, TextSurface surface) : surface_(surface) {
+std::vector<uint8_t> builtin_wine_wingdings(); // generated from third_party/wine-fonts/wingding.ttf
+
+namespace {
+std::vector<uint8_t> read_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return {};
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+} // namespace
+
+std::vector<std::string> system_font_paths(Face face) {
+    // GDI resolves the game's requests to these files: Wingdings 0x0046b200, and
+    // "New Courier Bold" (no such face) to Courier New at weight 700, whose
+    // bold file Windows and macOS both install.
+    const char* file = face == Face::wingdings          ? "Wingdings.ttf"
+                       : face == Face::courier_new_bold ? "Courier New Bold.ttf"
+                                                        : nullptr;
+    if (!file) return {};
+    std::vector<std::string> paths;
+#ifdef _WIN32
+    const char* windir = std::getenv("WINDIR");
+    paths.push_back(std::string(windir ? windir : "C:\\Windows") + "\\Fonts\\" +
+                    (face == Face::wingdings ? "wingding.ttf" : "courbd.ttf"));
+#elif defined(__APPLE__)
+    paths.push_back(std::string("/System/Library/Fonts/Supplemental/") + file);
+    paths.push_back(std::string("/Library/Fonts/") + file);
+#else
+    // Linux: the msttcorefonts package (Courier New only; Wingdings is not in it).
+    for (const char* dir :
+         {"/usr/share/fonts/truetype/msttcorefonts/", "/usr/share/fonts/msttcore/", "/usr/share/fonts/TTF/"})
+        paths.push_back(std::string(dir) + (face == Face::wingdings ? "wingding.ttf" : "courbd.ttf"));
+    // Without it, fontconfig's Courier New substitute: Liberation Mono Bold (metric-compatible).
+    if (face == Face::courier_new_bold)
+        for (const char* dir : {"/usr/share/fonts/truetype/liberation/", "/usr/share/fonts/liberation-mono/",
+                                "/usr/share/fonts/liberation/", "/usr/share/fonts/TTF/"})
+            paths.push_back(std::string(dir) + "LiberationMono-Bold.ttf");
+#endif
+    return paths;
+}
+
+void TextRenderer::load_disc_faces(const Assets& assets) {
     // 0x0042f720 installs Badloc, Futura Bold, Futura Demi and Futura Regular from Text\.
     const std::pair<Face, const char*> files[] = {{Face::badloc, "TEXT/BADLOC.DLL"},
                                                   {Face::futura_bold, "TEXT/FUTB.DLL"},
@@ -73,6 +190,33 @@ TextRenderer::TextRenderer(const Assets& assets, TextSurface surface) : surface_
                                                   {Face::futura_regular, "TEXT/FUTR.DLL"}};
     for (const auto& [face, path] : files)
         fonts_[face] = open_font(assets.read(path), true, std::string(" ") + path);
+}
+
+TextRenderer::TextRenderer(const Assets& assets, TextSurface surface) : surface_(surface) {
+    load_disc_faces(assets);
+    for (Face face : {Face::wingdings, Face::courier_new_bold}) {
+        for (const std::string& path : system_font_paths(face)) {
+            std::vector<uint8_t> bytes = read_file(path);
+            if (bytes.empty()) continue;
+            try {
+                fonts_[face] = open_font(std::move(bytes), true, " " + path);
+                break;
+            } catch (const std::runtime_error&) {
+            }
+        }
+    }
+    // Without a host Wingdings, Wine draws its own (fonts/wingding.sfd, LGPL-2.1).
+    if (!fonts_.count(Face::wingdings))
+        fonts_[Face::wingdings] = open_font(builtin_wine_wingdings(), true, " (built-in Wine Wingdings)");
+}
+
+TextRenderer::TextRenderer(const Assets& assets, TextSurface surface,
+                           const std::map<Face, std::string>& system_fonts)
+    : surface_(surface) {
+    load_disc_faces(assets);
+    for (const auto& [face, path] : system_fonts)
+        fonts_[face] = path.empty() ? open_font(builtin_wine_wingdings(), true, " (built-in Wine Wingdings)")
+                                    : open_font(read_file(path), true, " " + path);
 }
 
 TextRenderer::TextRenderer(Face face, std::vector<uint8_t> ttf) {
@@ -85,8 +229,17 @@ bool TextRenderer::has(Face f) const {
     return fonts_.count(f) != 0;
 }
 
+namespace {
+FT_UInt glyph_index(FT_Face face, bool symbol, uint8_t ch) {
+    if (!symbol) return FT_Get_Char_Index(face, cp1252_codepoint(ch));
+    const FT_UInt index = FT_Get_Char_Index(face, 0xf000u + ch);
+    return index ? index : FT_Get_Char_Index(face, ch);
+}
+} // namespace
+
 bool TextRenderer::covers(Face f, uint8_t ch) const {
-    return FT_Get_Char_Index(font(f).face, cp1252_codepoint(ch)) != 0;
+    const FontData& d = font(f);
+    return glyph_index(d.face, d.symbol, ch) != 0;
 }
 
 const TextRenderer::FontData& TextRenderer::font(Face f) const {
@@ -107,11 +260,12 @@ const TextRenderer::Glyph& TextRenderer::glyph(Face face, int height, uint8_t ch
     // surfaces hint for the mono target and rasterise mono (8446/8448); 16-bit
     // ones hint for the normal target and quantise 8-bit coverage to 17 levels
     // by truncation, levels 0 and 1 drawing nothing (8448/8448).
-    const bool smooth = surface_ == TextSurface::rgb565;
-    const int ppem = gdi_ppem(height, f.units_per_em, f.win_ascent + f.win_descent);
+    const GdiSize size = f.size(height);
+    const int ppem = size.ppem;
+    const bool smooth = surface_ == TextSurface::rgb565 && f.gray(ppem);
     Glyph g;
     if (FT_Set_Pixel_Sizes(f.face, 0, FT_UInt(ppem))) return cache_.emplace(key, std::move(g)).first->second;
-    const FT_UInt index = FT_Get_Char_Index(f.face, cp1252_codepoint(ch)); // 0: .notdef
+    const FT_UInt index = glyph_index(f.face, f.symbol, ch); // 0: .notdef
     // Advance: design units scaled to 26.6, then rounded (8448/8448; ties near
     // .5 px go up, which the hinted advance does not reproduce).
     FT_Fixed units = 0;
@@ -125,7 +279,9 @@ const TextRenderer::Glyph& TextRenderer::glyph(Face face, int height, uint8_t ch
     const FT_Pos left = m.horiBearingX & -64, right = (m.horiBearingX + m.width + 63) & -64;
     const FT_Pos top = (m.horiBearingY + 63) & -64, bottom = (m.horiBearingY - m.height) & -64;
     const int w = int((right - left) >> 6), h = int((top - bottom) >> 6);
-    const int ascent = int((FT_MulFix(f.win_ascent, f.face->size->metrics.y_scale) + 32) >> 6);
+    const int ascent = size.ascent >= 0
+                           ? size.ascent
+                           : int((FT_MulFix(f.win_ascent, f.face->size->metrics.y_scale) + 32) >> 6);
     if (w > 0 && h > 0 && slot->format == FT_GLYPH_FORMAT_OUTLINE) {
         const int pitch = smooth ? w : (w + 7) / 8;
         std::vector<uint8_t> bits(size_t(pitch) * size_t(h));
@@ -166,7 +322,9 @@ int TextRenderer::line_height(Face face, int height) const {
     // GDI multiline pitch: tmAscent + tmDescent at the ppem scale (textprobe
     // TEXTMETRIC sweeps; e.g. 32px Futura Regular advances 33, not 32).
     const FontData& f = font(face);
-    const int ppem = gdi_ppem(height, f.units_per_em, f.win_ascent + f.win_descent);
+    const GdiSize size = f.size(height);
+    if (size.ascent >= 0) return size.ascent + size.descent;
+    const int ppem = size.ppem;
     return (f.win_ascent * ppem + f.units_per_em / 2) / f.units_per_em +
            (f.win_descent * ppem + f.units_per_em / 2) / f.units_per_em;
 }

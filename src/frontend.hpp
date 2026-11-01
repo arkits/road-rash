@@ -151,7 +151,8 @@ class Frontend {
     bool dialog_open() const { return !dialog_.text.empty(); }
     std::string caption_text(const MenuItem&) const;
     const std::string& current_save() const { return save_file_; }
-    std::string player_name() const; // 0x0041c140
+    std::string player_name() const;  // 0x0041c140
+    std::string results_name() const; // 0x0041c060: Big Game full name (won screen)
     bool editing_text() const { return editing_name_ || editing_code_ || editing_chat_ >= 0; }
     const std::string& string_slot(int slot) const { return str(slot); }
     // In-race toggles: F10 cycles MiniDash 0->1->2->0 (0x004431d0 pump); the menu `/`
@@ -210,6 +211,7 @@ class Frontend {
     void slider_home_end(bool home);              // Home/End: 0/100 on the focused slider row
     void apply_mixer_setting();                   // persist + emit apply_mixer
     std::string key_name(int action) const;       // plan 18 Task 7: 0x12 label text
+    void refresh_key_labels();                    // 0x0040fd90: label slots 160-168
     PadLabels pad_labels_;                        // plan 33b Task 4: Gamepad page names
     mutable std::array<std::string, 4> pad_rows_; // rows built from pad_labels_ in str()
     void apply_restroom_pattern();
@@ -281,9 +283,16 @@ class Frontend {
     int desc_slot_ = 0;
     uint32_t desc_format_ = 0, desc_flags_ = 0;
     bool desc_fill_ = false;    // 0x00420470 repaints the dark box only for flags & 8 items
-    std::string length_footer_; // course Length line for the showroom footer (stale = faithful)
-    std::string player_footer_; // 0x4208d0 bh&8 player line, centered at y=380 (masked in tests)
-    std::string price_footer_;  // 0x4208d0 bh&1 bike line, centered at y=380 (masked in tests)
+    std::string player_footer_; // 0x4208d0 bh&8 player line in a dark box at y=380
+    std::string price_footer_;  // 0x4208d0 bh&1 bike line in a dark box at y=380
+    uint32_t footer_flags_ = 0; // focused item flags; 0x004208d0 keeps & 0x20f00
+    struct FooterLayout {
+        TextRect box, text;
+        Face face;
+        int height;
+        unsigned format;
+    };
+    FooterLayout footer_layout(const std::string&) const;
     std::string price_text_;
     bool qualified_overlay_ = false;
     bool dark_screen_ = false; // standings: the darkened copy fills the screen

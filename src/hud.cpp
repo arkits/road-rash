@@ -207,21 +207,6 @@ NearestOpponent nearest_opponent(const Race& race) {
     if (behind * 2 < ahead) return {behind_rider, behind};
     return {ahead_rider, -ahead};
 }
-void Hud::draw_gap_arrow(RgbImage& out, int left, int top, bool up, uint32_t color, int scale) {
-    // Native stand-in for the 18-pixel Wingdings 0xe9/0xea glyphs: an
-    // 11-wide, 6-row head over a 5-wide, 6-row shaft, inside the cell.
-    // At scale s every source pixel becomes an s x s block.
-    if (scale < 1 || scale > 4) throw std::runtime_error("Gap arrow scale out of range 1..4");
-    for (int row = 0; row < 12; ++row) {
-        const int r = up ? row : 11 - row; // r: distance from the tip
-        const int half = r < 6 ? r : 2;
-        for (int x = 5 - half; x <= 5 + half; ++x)
-            for (int yy = 0; yy < scale; ++yy)
-                for (int xx = 0; xx < scale; ++xx)
-                    if (out.contains(left + 3 * scale + x * scale + xx, top + 3 * scale + row * scale + yy))
-                        out.at(left + 3 * scale + x * scale + xx, top + 3 * scale + row * scale + yy) = color;
-    }
-}
 HudState Hud::state(const Race& race, const std::string& player,
                     const std::vector<std::string>& rider_names) const {
     HudState s;
@@ -374,8 +359,9 @@ RgbImage Hud::compose(const HudState& state, const PhysicsTables& physics, DashM
         // (|gap|*1000 >> 4) / (metric ? 3279 : 5280), i.e. miles or km to
         // three places (one sample is 16 feet). Opponent ahead (gap <= 0):
         // COLORREF 0x10e7 and Wingdings 0xe9; behind: 0x1ca328 and 0xea.
-        // The arrow rect is entry 11 offset by (-12, +11/+9) in high
-        // resolution, drawn through 0x00447b20 (black, then white at -2,-2).
+        // The arrow is DrawTextA of the Wingdings 18 glyph (0x00442990) in
+        // entry 10's rect offset by (-12, +9 ahead / +11 behind) in high
+        // resolution, through 0x00447b20 (black, then white at -2,-2).
         const uint32_t magnitude =
             state.target_gap < 0 ? 0u - uint32_t(state.target_gap) : uint32_t(state.target_gap);
         const int32_t scaled = int32_t(magnitude * 1000u);
@@ -385,10 +371,14 @@ RgbImage Hud::compose(const HudState& state, const PhysicsTables& physics, DashM
         std::snprintf(gap, sizeof gap, "%d.%03d", value / 1000, value % 1000);
         const bool ahead = state.target_gap < 1;
         label(gap, 10, ahead ? 0xe71000 : 0x28a31c);
-        const int ax = int((layout[11] - 12) * lscale) * scale,
-                  ay = int((layout[12] + (ahead ? 9 : 11)) * lscale) * scale;
-        draw_gap_arrow(image, ax, ay, ahead, 0, scale);
-        draw_gap_arrow(image, ax - 2 * scale, ay - 2 * scale, ahead, 0xffffff, scale);
+        const int dy = ahead ? 9 : 11;
+        TextRect arrow{int((layout[11] - 12) * lscale) * scale, int((layout[12] + dy) * lscale) * scale,
+                       int((layout[13] - 12) * lscale) * scale, int((layout[14] + dy) * lscale) * scale};
+        const std::string glyph(1, ahead ? '\xe9' : '\xea');
+        text_.draw_box(&image, Face::wingdings, 18 * scale, arrow, 0, glyph, 0);
+        arrow = {arrow.left - 2 * scale, arrow.top - 2 * scale, arrow.right - 2 * scale,
+                 arrow.bottom - 2 * scale};
+        text_.draw_box(&image, Face::wingdings, 18 * scale, arrow, 0xffffff, glyph, 0);
     }
     return image;
 }

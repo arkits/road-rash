@@ -56,8 +56,8 @@
     {
       "area": "Frontend/settings",
       "implementation": "Menus, career, saves, jukebox, sound mix and controls implemented; online mano-a-mano (plan 34) live through `rr-netd` with room codes, invite links and six-platform CI cross-play",
-      "verification": "Seeded original-writer save byte identity; main-menu capture and 1x/2x/4x layout checks; menu pictures bit-exact vs 226 original decoded-image caches; dark fills and text colours RGB565-exact; menu text Wine-GDI exact (FreeType 2.13.3 smoothed glyphs 8448/8448, 16-bit blend 491520/491520, word wrap); characters/restroom/jukebox full frame differ only in the focus arrow",
-      "remaining": "Driven-career original-save round trip; Wingdings focus arrow (system font); plan 34 device cross-play and soak (Tasks 10-11); AWE/EMU8000 music timbre",
+      "verification": "Seeded original-writer save byte identity; main-menu capture and 1x/2x/4x layout checks; menu pictures bit-exact vs 226 original decoded-image caches; dark fills and text colours RGB565-exact; menu text Wine-GDI exact (FreeType 2.13.3 smoothed glyphs 8448/8448, 16-bit blend 491520/491520, word wrap); host Wingdings/Courier New Bold with Wine VDMX/gasp rules 667/667; 18 of 20 acceptance screens pixel-exact full frame (graphics: port-only Display row; main: network-gated Mano row)",
+      "remaining": "Driven-career original-save round trip; controls arrow-key label icons; plan 34 device cross-play and soak (Tasks 10-11); AWE/EMU8000 music timbre",
       "evidence": [
         "plans/18-settings-and-options.md",
         "plans/13-music-and-frontend-completion.md",

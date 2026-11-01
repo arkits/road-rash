@@ -26,7 +26,14 @@ struct TextRect {
 };
 
 // Faces the original installs from TEXT/*.DLL (0x0042f720): these files are TrueType fonts.
-enum class Face { badloc, futura_regular, futura_bold, futura_demi };
+// The last two are Windows system faces the game requests by name (0x00423b25 menu focus
+// arrow and 0x00442990 dashboard gap arrow: Wingdings; 0x00423afd standings: "New Courier
+// Bold", which GDI resolves to Courier New Bold). They load from the host's fonts when present
+// (system_font_paths); Wingdings falls back to Wine's own LGPL Wingdings, built in.
+enum class Face { badloc, futura_regular, futura_bold, futura_demi, wingdings, courier_new_bold };
+
+// Host font files tried in order for a system face (empty for the disc faces).
+std::vector<std::string> system_font_paths(Face);
 
 // Win32 DrawText flags used by the original menus.
 namespace dt {
@@ -52,6 +59,8 @@ class TextRenderer {
   public:
     explicit TextRenderer(const Assets&, TextSurface = TextSurface::indexed8);
     TextRenderer(Face, std::vector<uint8_t> ttf); // single face, for tests
+    // Disc faces from assets plus the system faces from these font files (tests).
+    TextRenderer(const Assets&, TextSurface, const std::map<Face, std::string>& system_fonts);
     ~TextRenderer();
     TextRenderer(const TextRenderer&) = delete;
     TextRenderer& operator=(const TextRenderer&) = delete;
@@ -71,6 +80,7 @@ class TextRenderer {
     struct FontData;
     static std::unique_ptr<FontData> open_font(std::vector<uint8_t> bytes, bool use_os2,
                                                const std::string& what);
+    void load_disc_faces(const Assets&);
     struct Glyph {
         int x0 = 0, y0 = 0, w = 0, h = 0, advance = 0;
         std::vector<uint8_t> ink; // smoothing intensity 0..16 (1-bit glyphs: 0 or 16)

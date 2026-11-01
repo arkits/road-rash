@@ -112,10 +112,6 @@ class Hud {
     // rider_names is indexed like Race::riders(); the target is the
     // nearest opponent (0x00446b80), not the last rider hit.
     HudState state(const Race&, const std::string& player, const std::vector<std::string>& rider_names) const;
-    // The ahead/behind indicator 0x00446c30 draws in Wingdings (0xe9 up,
-    // 0xea down); Wingdings is a Windows system font, not on the disc, so a
-    // native arrow of the same cell height stands in for the glyph.
-    static void draw_gap_arrow(RgbImage&, int left, int top, bool up, uint32_t color, int scale = 1);
     // Pen for the tach/speedo needles at the current resolution: width
     // HiRes?3:2, color 0x721108 (0x00446c30 pen cache slot HiRes).
     NeedlePen pen() const;

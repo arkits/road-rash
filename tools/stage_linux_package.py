@@ -29,6 +29,7 @@ LICENSES = {
     'JPEG-LICENSE.md': 'third_party/JPEG-LICENSE.md',
     'JPEG-README.ijg': 'third_party/JPEG-README.ijg',
     'FreeType-FTL.txt': 'third_party/FreeType-FTL.txt',
+    'Wine-Wingdings-LGPL.txt': 'third_party/Wine-Wingdings-LGPL.txt',
     'libdatachannel-LICENSE.txt': 'third_party/libdatachannel-LICENSE.txt',
     'libjuice-LICENSE.txt': 'third_party/libjuice-LICENSE.txt',
     'usrsctp-LICENSE.md': 'third_party/usrsctp-LICENSE.md',

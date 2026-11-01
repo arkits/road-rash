@@ -204,7 +204,9 @@ audio fidelity remains subject to this plan's acceptance. See
 Menu pictures are bit-exact against the original's decoded-image cache (226
 dumps), and the darkened fills and text colours are RGB565-exact. Menu text is
 Wine-GDI exact through pinned FreeType 2.13.3 (anti-aliased glyphs and the
-16-bit blend measured exhaustively; DrawText word wrap and clipping). Still
-open: the Wingdings focus arrow (system font), the y=380 footers, and
-AWE/EMU8000 timbre. See
+16-bit blend measured exhaustively; DrawText word wrap and clipping). The
+system faces (Wingdings arrows, Courier New Bold standings) and the y=380
+footers were added the same evening: 18 of 20 acceptance screens are
+pixel-exact full frame, and the other two differ only in port-only rows.
+Still open: controls arrow-key label icons and AWE/EMU8000 timbre. See
 [frontend-exact-20261031](../agent-handoffs/frontend-exact-20261031.md).

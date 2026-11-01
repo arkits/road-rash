@@ -33,7 +33,7 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Rider contact | Rider, car and pedestrian contact branches ported; pedestrian pairs never contact, as in `0x004368f0` (October 26) | `src/race.cpp` |
 | Combat | Original live AI attack selection, descriptor/frame hit gates, relationship reactions and animation queues; measured in the 2400-tick Napa field replay. Steal resolver gates/transfer measured in 31 original component cases (October 26); free-running steal capture remains open | `src/race.cpp` |
 | Language strings (`TEXT/*.DLL`) | All five languages, original table assembly and continuations | `src/pe_strings.cpp` |
-| Menu text | Disc TrueType fonts (Badloc, Futura) through pinned FreeType 2.13.3: Wine-GDI glyphs exact (smoothed menu text 8448/8448, 16-bit blend 491520/491520; 1-bit race text 8446/8448), DrawText word wrap, clipping and metrics; focus arrow (system Wingdings) open | `src/text.cpp`, `cmake/freetype.cmake` |
+| Menu text | Disc TrueType fonts (Badloc, Futura) through pinned FreeType 2.13.3: Wine-GDI glyphs exact (smoothed menu text 8448/8448, 16-bit blend 491520/491520; 1-bit race text 8446/8448), DrawText word wrap, clipping and metrics. System faces Wingdings (focus and gap arrows) and Courier New Bold (standings) from the host, with Wine's VDMX/gasp/symbol rules: 667/667 glyphs exact on macOS; Wine's LGPL Wingdings built in for hosts without one | `src/text.cpp`, `cmake/freetype.cmake`, `cmake/wine_wingdings.cmake` |
 | Front end (menus, Thrash/Big Game flow, shop, Schmooze, restroom, results, credits) | Ported from the EXE screen tables and handlers; jukebox, sound mix and controls implemented; mano-a-mano disabled (plan 34); layout sweep of all 223 items, full pixel equality open on GDI text hinting. Native Display/Sound/Pause/Enhancements screens, visual-style presets, single widescreen setting (October 13) | `src/frontend.cpp` |
 | Career rules and save files | Prize, fines, repairs, shop, level-up and the original 0xa0-byte save format; seeded original-writer file round-trips byte-exact (`career-save-corpus`), driven-career saves round-trip (`career-test --corpus`, October 26) | `src/career.cpp` |
 | Settings | Registry values as a preference file | `src/settings.cpp` |
@@ -52,6 +52,39 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Flat polygon raster | Normalization matches 2,048 original calls; full flat path matches 64 indexed fixtures; scene integration open | `src/raster.cpp`, `src/polygon.cpp` |
 
 ## Timeline
+
+### October 31, 2026 (evening): system faces, footers and full-frame menus
+
+- System faces. `Face::wingdings` and `Face::courier_new_bold` load from the
+  host (`system_font_paths`: macOS Supplemental, `%WINDIR%\Fonts`,
+  msttcorefonts, Liberation Mono Bold). Without a host Wingdings the game uses
+  Wine's own `wingding.ttf` (wine-11.18, LGPL-2.1, compiled in by
+  `cmake/wine_wingdings.cmake`, licence in every package). New glyph rules
+  from Wine: VDMX sizing (`load_VDMX`), gasp gray ranges and the symbol cmap.
+  `glyphprobe … sys` measured 667/667 glyphs exact in mono and smoothed mode.
+- The menu focus arrow is the original's TextOut of Wingdings 18 `0xe8`
+  (black at +5,+6, yellow at +3,+4). The dashboard gap arrow is DrawText of
+  Wingdings 18 `0xe9`/`0xea` in the offset entry-10 rectangle. The native
+  stand-ins are gone. Standings rows use Courier New Bold 18 (Futura
+  fixed-pitch layout only where the host has neither Courier New Bold nor
+  Liberation Mono Bold).
+- Footers: the y=380 player and price lines use the `0x00420470` box (measured
+  width, dark fill, left-aligned Futura Regular 32 from x+10). The showroom
+  draws its stale course description whole (no separate Length footer). The
+  won screen names the rider with `0x0041c060` ("Cydney Bass"). A bare
+  penalty entry keeps the stale slot. Standings shows the won/lost row strip
+  the original never repaints. Captions of "*" are drawn. Controls key labels
+  are filled by the Controls row handler (`0x0040fd90`), not on entry.
+- Full frame vs the acceptance goldens: characters, restroom, jukebox,
+  controls, thrash, loading, olleys, showroom, panzer, schmooze, bulletin,
+  wrecked, busted, won, lost, penalty, standings and street are pixel-exact
+  (0 pixels). Graphics differs only in the port-only Display row (704);
+  main menu only in Mano-À-Mano, greyed because the test frontend has no
+  network transport (852).
+- Remaining: controls key-label text for arrow keys (Wingdings icons via
+  `0x00420280`) is not ported and has no capture; the built-in Wine Wingdings
+  and the Courier fallbacks are unprobed; Courier standings rows are
+  glyph-exact but have no original capture with rows; AWE/EMU8000 timbre.
 
 ### October 31, 2026: exact menu text (FreeType 2.13.3, smoothed GDI glyphs)
 

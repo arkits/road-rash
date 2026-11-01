@@ -1,5 +1,32 @@
 # Verification log (all sessions September 28, 2026)
 
+## System faces, footers and full-frame menus (October 31, 2026, evening)
+
+- Ground truth: `glyphprobe.exe <dir> {mono|gray} sys` (Wine 11.18 Staging,
+  scratch prefix, which registers the macOS system fonts) dumps the game's
+  Wingdings 18/12 and New Courier Bold 18 LOGFONTs:
+  `analysis/frontend/glyphs-20261031/sysmono.txt`, `sysgray.txt`
+  (git-ignored). A scratch `ppemprobe` sweep (heights 8..48, seven faces)
+  established the VDMX rule; it is not committed.
+- `text-test`: "mono system-face glyphs exact 667/667, advances 667" and
+  "smoothed system-face glyphs exact 667/667, advances 667" with the macOS
+  `Wingdings.ttf` and `Courier New Bold.ttf`; skipped without them or the
+  dumps. The built-in Wine Wingdings is checked for the three arrow glyphs
+  (coverage and ink), not against a probe. Earlier results unchanged
+  (8446/8448, 8448/8448, 491520/491520).
+- `frontend-test` full-frame ceilings (macOS host): 0 pixels on characters,
+  restroom, jukebox, controls, thrash, loading, olleys, showroom, panzer,
+  schmooze, bulletin, wrecked, busted, won, lost, penalty, standings and
+  street; graphics 704 (port-only Display row); main menu and menu-09 852
+  (Mano-À-Mano greyed without a network transport). Hosts without the macOS
+  Wingdings get 119 pixels of slack for the arrow. The controls test now
+  reaches Configure Input through the restroom Controls row.
+- Build `build-agent-frontend-exact-20261031` (Debug): `ctest` 134/134 PASS;
+  clang-format check on the changed C++ files PASS.
+- Not run: Linux and Windows packages (licence lists updated and checked by
+  their verifiers only when those gates run), Android hardware, the
+  Courier/Wingdings fallbacks on a real Linux or Android host.
+
 ## Exact menu text: FreeType 2.13.3 and smoothed GDI glyphs (October 31, 2026)
 
 - Ground truth (Wine 11.18 Staging, scratch prefix with the default
