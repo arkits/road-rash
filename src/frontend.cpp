@@ -1119,9 +1119,63 @@ std::string Frontend::key_name(int action) const {
     // Plan 18 Task 7: label text for the 0x12 key-label rows. Custom keyboard
     // codes store low-byte-first (0x0040e760); the byte is the keyboard code.
     // Plan 33b Task 4: the name the current keyboard layout prints on that key.
+    // 0x0040e7b0 rows 0..8: "\x1a" (0x00466670), then "<Keyboard>" (string 280)
+    // + " " + key + " ", or "<Unassigned>" (string 384) + " " for code 0. Arrow
+    // codes 0x93..0x96 print bytes 1..4 (0x00466664/5c/60/58), which
+    // 0x00420280 draws as Wingdings arrows.
     if (action < 0 || action > 8) return "?";
-    if (settings_.custom_controls) return key_label(settings_.controls[size_t(action)] & 0xff);
-    return key_label(default_key_scancode(action));
+    const int sc =
+        settings_.custom_controls ? settings_.controls[size_t(action)] & 0xff : default_key_scancode(action);
+    std::string label = "\x1a";
+    if (sc <= 0 || sc >= SDL_SCANCODE_COUNT) return label + str(384) + " ";
+    label += str(280) + " ";
+    switch (sc) {
+    case SDL_SCANCODE_LEFT:
+        label += '\x01';
+        break;
+    case SDL_SCANCODE_RIGHT:
+        label += '\x02';
+        break;
+    case SDL_SCANCODE_UP:
+        label += '\x03';
+        break;
+    case SDL_SCANCODE_DOWN:
+        label += '\x04';
+        break;
+    default:
+        label += key_label(sc);
+        break;
+    }
+    return label + " ";
+}
+
+void Frontend::draw_arrow_label(RgbImage& img, TextRect r, int scale, const std::string& s,
+                                uint32_t colour) const {
+    // 0x00420280: each run before a byte 1..4 draws in Futura Bold 24 with the
+    // shadow and advances by its CALCRECT width; the byte - 0x1a draws in
+    // Wingdings 18 (0xe7 left, 0xe8 right, 0xe9 up, 0xea down) 4 pixels lower,
+    // shadowed, then the left edge advances 16. The tail draws as plain text.
+    const int o = 2 * scale;
+    auto shadowed = [&](Face face, int height, TextRect box, const std::string& t) {
+        TextRect shadow = box;
+        text_.draw_box(&img, face, height * scale, shadow, 0, t, dt::wordbreak);
+        TextRect top{box.left - o, box.top - o, box.right - o, box.bottom - o};
+        text_.draw_box(&img, face, height * scale, top, colour, t, dt::wordbreak);
+    };
+    size_t from = 0;
+    for (size_t at = s.find_first_of("\x01\x02\x03\x04"); at != std::string::npos;
+         at = s.find_first_of("\x01\x02\x03\x04", from)) {
+        const std::string run = s.substr(from, at - from);
+        shadowed(Face::futura_bold, 24, r, run);
+        TextRect m = r;
+        text_.draw_box(nullptr, Face::futura_bold, 24 * scale, m, 0, run, dt::wordbreak | dt::calcrect);
+        r.left += m.right - m.left;
+        shadowed(Face::wingdings, 18, {r.left, r.top + 4 * scale, r.right, r.bottom},
+                 std::string(1, char(s[at] - 0x1a)));
+        from = at + 1;
+        r.left += 16 * scale;
+    }
+    if (from < s.size()) shadowed(Face::futura_bold, 24, r, s.substr(from));
 }
 
 int Frontend::slider_value(int caption) const {
@@ -2442,8 +2496,15 @@ void Frontend::draw_scale1(RgbImage& out) const {
             draw_text_box(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_regular, 32, caption,
                           dt::wordbreak | dt::center, colour_light);
         } else {
-            draw_text_box(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, caption,
-                          dt::wordbreak, colour);
+            // 0x0041ff80: a 0x1a-prefixed key label drops the byte; one with an
+            // arrow byte draws through 0x00420280.
+            const bool key_label = caption[0] == '\x1a';
+            const std::string text = key_label ? caption.substr(1) : caption;
+            if (key_label && text.find_first_of("\x01\x02\x03\x04") != std::string::npos)
+                draw_arrow_label(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, 1, text, colour);
+            else
+                draw_text_box(out, {m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, text,
+                              dt::wordbreak, colour);
             if (colour == colour_focus || colour == 0xffffff) {
                 // 0x0041ff80: TextOutA of Wingdings 18 (0x00423b25) byte 0xe8
                 // (0x0046b044), black at (+5,+6) then yellow at (+3,+4), unclipped.
@@ -2693,8 +2754,15 @@ void Frontend::draw_scaled(RgbImage& out, int scale) const {
             textbox({m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_regular, 32, caption,
                     dt::wordbreak | dt::center, colour_light);
         } else {
-            textbox({m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, caption,
-                    dt::wordbreak, colour);
+            const bool key_label = caption[0] == '\x1a';
+            const std::string text = key_label ? caption.substr(1) : caption;
+            if (key_label && text.find_first_of("\x01\x02\x03\x04") != std::string::npos)
+                draw_arrow_label(
+                    out, {(m.x + 0x19) * scale, (m.y + 2) * scale, (m.x + m.w) * scale, (m.y + m.h) * scale},
+                    scale, text, colour);
+            else
+                textbox({m.x + 0x19, m.y + 2, m.x + m.w, m.y + m.h}, Face::futura_bold, 24, text,
+                        dt::wordbreak, colour);
             if (colour == colour_focus || colour == 0xffffff) {
                 // Focus arrow as in draw_scale1, at the scaled cell height.
                 text_.draw(out, Face::wingdings, 18 * scale, (m.x + 5) * scale, (m.y + 6) * scale, 0, "\xe8");

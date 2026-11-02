@@ -53,6 +53,23 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 1, 2026: controls key labels and Wingdings arrow keys
+
+- `src/frontend.cpp`/`.hpp`: `key_name` builds the original `0x0040e7b0`
+  slot text for rows 0..8: `"\x1a<Keyboard> "` + key + `" "`, or
+  `"\x1a<Unassigned> "` for an unbound row (strings 280 and 384). Arrow keys
+  print bytes 1..4 as the original's codes `0x93..0x96` do; other keys keep
+  the layout-aware SDL name (plan 33b Task 4).
+- New `draw_arrow_label` ports `0x00420280`: shadowed Futura Bold 24 runs,
+  each followed by the Wingdings 18 arrow (byte − 0x1a) 4 pixels lower and a
+  16-pixel advance. Both the 1x and scaled button paths strip the `0x1a`
+  prefix as `0x0041ff80` does.
+- Remaining: no original capture shows filled labels, so this is a port of
+  the decompiled code, not a measured match. The rendered Configure Input
+  screen shows "Nitro boost" on the row whose default key is Z, which the
+  port reads as punch; the row-to-action mapping needs checking against the
+  original (not changed here).
+
 ### November 1, 2026: reverb and chorus buses in the race-music renderer
 
 - `src/race_music.cpp`/`.hpp`: `Sf1Synth` now feeds two shared effects

@@ -181,6 +181,7 @@ class Frontend {
     // Test-only pins (plan 13 Task 6 Step 2): the RNG stream still advances
     // the same draws as without them.
     void set_rest_picture_for_test(int n) { rest_picture_override_ = n; }
+    void set_string_for_test(int slot, std::string s) { strings_.at(size_t(slot)) = std::move(s); }
     void set_schmooze_for_test(int rider, int attitude) {
         schmooze_rider_override_ = rider;
         schmooze_attitude_override_ = attitude;
@@ -246,6 +247,7 @@ class Frontend {
     std::string format_standing(size_t place, const Standing&) const;
     void draw_text_box(RgbImage&, const TextRect&, Face, int height, const std::string&, unsigned flags,
                        uint32_t colour) const;
+    void draw_arrow_label(RgbImage&, TextRect scaled, int scale, const std::string&, uint32_t colour) const;
 
     const Assets& assets_;
     const TextRenderer& text_;

@@ -1,5 +1,26 @@
 # Verification log (all sessions September 28, 2026)
 
+## Controls key labels and Wingdings arrow keys (November 1, 2026)
+
+- Scope: native frontend component tests and rendered frames. No original
+  capture shows filled labels, so nothing here is a measured match.
+- Build `build-agent-keylabels` (Debug): build PASS; `ctest` 134/134 PASS
+  (macOS, disc present).
+- `frontend-test`: new checks for the default Up/Left labels
+  (`"\x1a<Keyboard> \x03 "`, `"\x1a<Keyboard> \x01 "`), the unbound row
+  (`"\x1a<Unassigned> "`), the rebind label, and that the arrow label draws
+  a different frame than the same label without the arrow byte. The controls
+  acceptance golden stays at 0 pixels full frame (bare entry shows stale
+  slots).
+- `frontend-test --dump <dir>` writes `controls-arrow-labels.bmp` and
+  `-2x.bmp`; inspected by eye at 1x and 2x (arrows in place after
+  "<Keyboard>").
+- clang-format on changed files PASS; `python3 tools/portability_check.py`
+  0 problems; `python3 tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-11acb77fde3849e89204bcfc260d884d`,
+  hardware not run).
+- Not run: sanitizers, web build, Linux/Windows.
+
 ## Reverb and chorus buses in the race-music renderer (November 1, 2026)
 
 - Scope: native component and render tests of stand-in effects. No EMU8000

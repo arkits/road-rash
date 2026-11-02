@@ -208,8 +208,12 @@ Wine-GDI exact through pinned FreeType 2.13.3 (anti-aliased glyphs and the
 system faces (Wingdings arrows, Courier New Bold standings) and the y=380
 footers were added the same evening: 18 of 20 acceptance screens are
 pixel-exact full frame, and the other two differ only in port-only rows.
-Still open: controls arrow-key label icons and AWE/EMU8000 timbre. See
+Still open: AWE/EMU8000 timbre. See
 [frontend-exact-20261031](../agent-handoffs/frontend-exact-20261031.md).
+Controls key labels now follow `0x0040e7b0` ("<Keyboard>" + key, arrow keys
+as Wingdings icons drawn by `0x00420280`) since November 1
+([controls-key-labels-20261101](../agent-handoffs/controls-key-labels-20261101.md));
+no original capture shows filled labels, so the rendering is unmeasured.
 The SBK banks now play with their SF1 generator semantics (October 31,
 [sbk-timbre-20261031](../agent-handoffs/sbk-timbre-20261031.md)): attenuation
 level, samplePitch root at 44100 Hz, loop offsets and modes, global zones and

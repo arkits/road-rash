@@ -30,10 +30,12 @@ Measured against the original:
   Both use one RNG anchor and then run freely.
 - **Police:** pursuit, siren and arrest match tick for tick on parked,
   crashed and on-foot captures, and on City up to the arrest.
-- **Front end:** all 223 original menu items pass the layout sweep; every
-  captured screen passes masked pixel checks (98–100% exact on most, 75–85%
-  on screens with portrait or background art). Seeded original-writer saves
-  round-trip byte for byte, as do saves from a driven career.
+- **Front end:** all 223 original menu items pass the layout sweep. Menu
+  pictures are bit-exact against the original's decoded images, and menu text
+  is Wine-GDI exact. 18 of 20 captured screens match the original pixel for
+  pixel; the other two differ only in rows the port adds (Display) or gates
+  on the network (Mano-À-Mano). Seeded original-writer saves round-trip byte
+  for byte, as do saves from a driven career.
 - **Tests:** 134/134 CTests with the disc and zero skips on macOS and on
   Linux (GCC and Clang, x86-64 and ARM64); ASan/UBSan and TSan clean.
 - **Determinism:** the determinism matrix gives equal race results on
@@ -58,9 +60,11 @@ Still open (see `docs/CURRENT_STATUS.md` and `docs/PROGRESS.md`):
 - **Simulation parity** outside the captured runs: other courses and
   levels, City AI RNG past tick 954, human paths beyond the recorded run,
   and isolated fight, steal and traffic cases (plans 10, 16, 17).
-- **Front end:** exact GDI-hinted glyph bitmaps and the portrait and
-  background art on the characters, restroom, jukebox and graphics screens;
-  exact AWE/MIDI music timbre.
+- **Front end:** AWE32 music timbre. The SoundFont banks play with their
+  generator semantics and stand-in reverb and chorus, but nothing has been
+  measured against real AWE32 hardware, and the factory-ROM instruments
+  need an owner-supplied ROM dump. Filled controls key labels have no
+  original capture to compare against.
 - **Online:** device and cross-play acceptance on Android and real
   desktops, and the long soak tests (plan 34 Tasks 10–11).
 - **Hardware:** Android, desktop Linux, Steam Deck and Windows (plans 14,

@@ -1016,12 +1016,34 @@ int main(int argc, char** argv) {
         key("select");
     }
     check(fe.screen() == 0x12, "Controls row enters Configure Input");
-    check(fe.caption_text(fe.items()[13]) == "Up", "default accelerate label");
+    // 0x0040e7b0: "\x1a<Keyboard> " + key + " "; the Up arrow is byte 3 (Wingdings 0xe9).
+    check(fe.caption_text(fe.items()[13]) == "\x1a<Keyboard> \x03 ", "default accelerate label");
+    check(fe.caption_text(fe.items()[15]) == "\x1a<Keyboard> \x01 ", "default left label");
+    check(fe.caption_text(fe.items()[20]) == "\x1a<Unassigned> ", "unbound row label");
+    {
+        // 0x00420280 draws the arrow, not the byte: the frame differs from the
+        // same label with the arrow byte removed.
+        RgbImage with_arrow, without;
+        fe.draw(with_arrow, 1);
+        if (!dump.empty()) {
+            write_bmp(dump + "/controls-arrow-labels.bmp", with_arrow);
+            RgbImage scaled;
+            fe.draw(scaled, 2);
+            write_bmp(dump + "/controls-arrow-labels-2x.bmp", scaled);
+        }
+        const std::string label = fe.caption_text(fe.items()[13]);
+        fe.set_string_for_test(160, "\x1a<Keyboard>  ");
+        fe.draw(without, 1);
+        fe.set_string_for_test(160, label);
+        check(with_arrow.pixels != without.pixels, "arrow label draws a Wingdings glyph");
+    }
     if (focus_item(0)) key("select"); // arm accelerate
     press_key(SDL_SCANCODE_W);
     // 0x0040e760 stores keyboard codes low-byte-first (key,0).
     check(settings.controls[0] == uint16_t(SDL_SCANCODE_W) && settings.custom_controls, "W binds accelerate");
-    check(fe.caption_text(fe.items()[13]) == SDL_GetScancodeName(SDL_SCANCODE_W), "label follows the rebind");
+    check(fe.caption_text(fe.items()[13]) ==
+              std::string("\x1a<Keyboard> ") + SDL_GetScancodeName(SDL_SCANCODE_W) + " ",
+          "label follows the rebind");
     if (focus_item(1)) key("select"); // arm brake
     press_key(SDL_SCANCODE_ESCAPE);
     check(settings.controls[1] == default_keyboard_controls()[1], "Escape cancels with no change");
