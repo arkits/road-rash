@@ -404,6 +404,15 @@ Moved here from plan 13 Task 3.
 - [x] **Step 3: Port** screen `0x12` exactly. Add two native pages reached from it, built like Task 5's screen: **Gamepad** (shows the fixed SDL gamepad mapping, with a "Swap punch and kick" toggle and stick dead zone 10–40 %) and, on touch devices, **Touch** (overlay opacity from `touch_opacity`, left-handed layout toggle). Native pages are documented as native additions.
 - [x] **Step 4:** Commit: `frontend: Configure Input with original bindings; native gamepad and touch pages`.
 
+Correction (November 1, 2026): the October port mapped rows 3–6 and 9 to the
+wrong actions and read the table's codes as SDL scancodes, so the original
+defaults, the first rebind and saved bindings left keys unbound, and the
+Keyboard/Joystick defaults rows did nothing. Rows now set bit `1 << row`, codes
+are the original keyboard codes (US VK table `0x00465fe8`), Turn/Lean capture
+two keys (`0x0040fc70`), conflicts clear pair partners, the defaults rows run
+`0x0040fdf0`, and labels follow `0x0040e7b0` including joystick text. See
+[controls-key-labels-20261101](../agent-handoffs/controls-key-labels-20261101.md).
+
 ---
 
 ### Task 8: In-race pause menu

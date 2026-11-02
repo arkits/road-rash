@@ -1,5 +1,29 @@
 # Verification log (all sessions September 28, 2026)
 
+## Configure Input rows, key codes and Turn/Lean pairs (November 1, 2026)
+
+- Scope: native component tests against EXE tables and decompiled flow. No
+  original capture of a rebind or of race input from a custom table.
+- Evidence: EXE bytes `0x00476c00` (row bits), `0x00465fe8` (US VK table),
+  `0x00466618`/`0x00466630` (defaults); decompiled `0040fc70.c`,
+  `0040fbf0.c`, `0040fdf0.c`, `0040fd90.c`, `0040e7b0.c`, `0044fa80.c`.
+- Build `build-agent-keylabels` (Debug): build PASS; `ctest` 134/134 PASS
+  (macOS, disc present).
+- `input-test`: every original default key drives its row's bit (Up/KP8
+  accelerate, Home lean down, PgUp lean up, n nitro, Insert punch, Enter
+  kick, Space backhand, d nothing); code table round trip over all codes.
+- `settings-test`: legacy SDL capture `001a` loads as `7700`; pair clear on
+  conflict; `apply_pair_rebind`.
+- `frontend-test`: default labels per row, Turn waits for a second distinct
+  key and ignores F1, Left fills Right for Lean, Keyboard/Joystick defaults
+  rows load their tables and relabel; the controls golden stays 0 pixels.
+- clang-format on changed files PASS; `python3 tools/portability_check.py`
+  0 problems; `python3 tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-2a48ae2c3c2a4483906d25cc98318aaf`,
+  hardware not run).
+- Not run: sanitizers, web build, Linux/Windows, a live race with a custom
+  table by hand.
+
 ## Controls key labels and Wingdings arrow keys (November 1, 2026)
 
 - Scope: native frontend component tests and rendered frames. No original

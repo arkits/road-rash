@@ -91,6 +91,10 @@ std::array<uint16_t, 11> default_joystick_controls();
 // Conflict rule of 0x0040fbf0: every other row holding the same 2-byte code is
 // cleared (unbound), then the new code is stored at `action`. Throws on action >= 11.
 void apply_rebind(std::array<uint16_t, 11>& table, size_t action, uint16_t code);
+// 0x0040fc70 Turn/Lean capture: rows `row` (2 or 3) and `row` + 7 take both
+// codes, then the conflict rule runs for each. Clearing a row of a pair clears
+// both halves.
+void apply_pair_rebind(std::array<uint16_t, 11>& table, size_t row, uint16_t first, uint16_t second);
 // Bounds-checked read of both default tables from the EXE; throws std::runtime_error.
 void read_control_tables(const std::vector<uint8_t>& exe, std::array<uint16_t, 11>& keyboard,
                          std::array<uint16_t, 11>& joystick);

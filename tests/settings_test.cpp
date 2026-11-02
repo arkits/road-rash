@@ -112,6 +112,20 @@ int main() {
         check(f.controls[0] == 0 && f.controls[5] == 0, "known codes pass through");
     }
     {
+        // Native capture before November 1, 2026 stored the SDL scancode in the
+        // low byte; it loads as the original code. Rows 2/9 and 3/10 clear as pairs.
+        std::string legacy = "controls=";
+        for (int i = 0; i < 11; ++i) legacy += i == 0 ? "001a" : "0000";
+        check(rr::parse_settings(legacy).controls[0] == 0x7700, "legacy W capture becomes 'w'");
+        auto t = rr::default_keyboard_controls();
+        rr::apply_rebind(t, 0, 0x9300); // accelerate takes Left: Turn loses both halves
+        check(t[0] == 0x9300 && t[2] == 0 && t[9] == 0, "pair cleared with its left half");
+        t = rr::default_keyboard_controls();
+        rr::apply_pair_rebind(t, 3, 0x9400, 0x9600); // Lean on Up/Down
+        check(t[3] == 0x9400 && t[10] == 0x9600 && t[0] == 0 && t[1] == 0, "pair rebind clears both codes");
+        check(t[2] == 0x9300 && t[9] == 0x9500, "other pair untouched");
+    }
+    {
         // Plan 18 Task 7: gamepad/touch page fields round-trip with clamping.
         rr::Settings p;
         p.swap_punch_kick = true;

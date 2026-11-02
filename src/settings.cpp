@@ -1,6 +1,7 @@
 #include "atomic_file.hpp"
 #include "settings.hpp"
 #include "exe_tables.hpp"
+#include "input.hpp"
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
@@ -134,9 +135,14 @@ Settings parse_settings(const std::string& text) {
                         if (j == b) return true;
                     return false;
                 };
+                // Before November 1, 2026 native capture stored the SDL scancode in
+                // the low byte (4-char form); convert those to the original code.
                 const auto kb = default_keyboard_controls();
-                for (size_t i = 0; i < 11; ++i)
-                    if (t[i] != 0 && (t[i] >> 8) == 0 && !known_joy(uint8_t(t[i]))) t[i] = kb[i];
+                for (size_t i = 0; i < 11; ++i) {
+                    if (t[i] == 0 || (t[i] >> 8) != 0 || known_joy(uint8_t(t[i]))) continue;
+                    const uint8_t code = v.size() == 44 ? original_key_code(t[i]) : 0;
+                    t[i] = code ? uint16_t(code << 8) : kb[i];
+                }
                 s.controls = t;
                 s.custom_controls = true;
             }
@@ -284,14 +290,38 @@ std::array<uint16_t, 11> default_joystick_controls() {
     return {0x0025, 0x0027, 0x0028, 0x9300, 0x6e00, 0x0001, 0x0002, 0x2000, 0x9400, 0x0026, 0x9500};
 }
 
+namespace {
+// 0x0040fbf0: zero every other row holding row `row`'s code (unbound, NOT
+// swapped). Turn and Lean are pairs (rows 2/9 and 3/10): clearing one half
+// clears the other. After such a pair clear the original's scan pointer jumps
+// by 7 rows while its row counter does not (reading past the table); the port
+// scans each row once instead.
+void clear_conflicts(std::array<uint16_t, 11>& table, size_t row) {
+    const uint16_t code = table[row];
+    for (size_t i = 0; i < table.size(); ++i) {
+        if (i == row || table[i] != code) continue;
+        table[i] = 0;
+        if (i == 2 || i == 3) table[i + 7] = 0;
+        if (i == 9 || i == 10) table[i - 7] = 0;
+    }
+}
+} // namespace
+
 void apply_rebind(std::array<uint16_t, 11>& table, size_t action, uint16_t code) {
-    // 0x0040fbf0 scans all 11 rows; any other row holding the same 2-byte code
-    // is zeroed (unbound, NOT swapped), then the new code is stored. Rows 9-10
-    // and 2-3 get extra label-refresh side effects only; bindings behave the same.
+    // 0x0040e760: store the new code, then the 0x0040fbf0 conflict rule.
     if (action >= table.size()) throw std::runtime_error("Rebind action out of range");
-    for (size_t i = 0; i < table.size(); ++i)
-        if (i != action && table[i] == code) table[i] = 0;
     table[action] = code;
+    clear_conflicts(table, action);
+}
+
+void apply_pair_rebind(std::array<uint16_t, 11>& table, size_t row, uint16_t first, uint16_t second) {
+    // 0x0040fc70: Turn/Lean store both halves (rows row and row + 7), then run
+    // the conflict rule for each.
+    if (row != 2 && row != 3) throw std::runtime_error("Pair rebind row must be 2 or 3");
+    table[row] = first;
+    table[row + 7] = second;
+    clear_conflicts(table, row);
+    clear_conflicts(table, row + 7);
 }
 
 void read_control_tables(const std::vector<uint8_t>& exe, std::array<uint16_t, 11>& keyboard,

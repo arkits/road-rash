@@ -49,38 +49,98 @@ uint32_t controls_from(const PlayerInput& in, int dead_zone) {
 }
 
 namespace {
-// Native control bit per action row 0..10 (rows 7/8/10 have no native bit).
+// Control bit per action row 0..10 (0x00476c00: bit 1 << row). Row 8 (dismount,
+// 0x100) has no reader in the original or the port.
 constexpr uint32_t kActionBits[11] = {
-    control_accelerate,
-    control_brake,
-    control_left,
-    control_right,
-    control_punch,
-    control_kick,
-    control_backhand,
-    0,
-    0,
-    control_nitro,
-    0,
+    control_accelerate, control_brake,    control_left,
+    control_lean_down,  control_nitro,    control_punch,
+    control_kick,       control_backhand, 0,
+    control_right,      control_lean_up,
 };
-// Default keyboard scancodes per action (current game feel; row 8 dead, 7/9/10 unbound).
+// Native default keyboard scancodes per action (current game feel; lean, nitro and
+// dismount unbound).
 constexpr int kDefaultKeys[11][2] = {
     {SDL_SCANCODE_UP, SDL_SCANCODE_W},
     {SDL_SCANCODE_DOWN, SDL_SCANCODE_S},
     {SDL_SCANCODE_LEFT, SDL_SCANCODE_A},
-    {SDL_SCANCODE_RIGHT, SDL_SCANCODE_D},
+    {-1, -1},
+    {-1, -1},
     {SDL_SCANCODE_Z, SDL_SCANCODE_LCTRL},
     {SDL_SCANCODE_X, SDL_SCANCODE_LALT},
     {SDL_SCANCODE_C, -1},
     {-1, -1},
-    {-1, -1},
-    {-1, -1},
+    {SDL_SCANCODE_RIGHT, SDL_SCANCODE_D},
     {-1, -1},
 };
 bool pressed(const bool* down, int sc) {
     return sc > 0 && sc < SDL_SCANCODE_COUNT && down[sc];
 }
+// The US VK table 0x00465fe8 inverted: original code -> the scancodes of its VKs.
+struct OriginalKey {
+    uint8_t code;
+    int scancodes[2];
+};
+constexpr OriginalKey kOriginalKeys[] = {
+    {0x08, {SDL_SCANCODE_BACKSPACE, 0}},
+    {0x09, {SDL_SCANCODE_TAB, 0}},
+    {0x0d, {SDL_SCANCODE_RETURN, SDL_SCANCODE_KP_ENTER}},
+    {0x1b, {SDL_SCANCODE_ESCAPE, 0}},
+    {0x20, {SDL_SCANCODE_SPACE, 0}},
+    {0x27, {SDL_SCANCODE_APOSTROPHE, 0}},
+    {0x2a, {SDL_SCANCODE_KP_MULTIPLY, 0}},
+    {0x2b, {SDL_SCANCODE_KP_PLUS, 0}},
+    {0x2c, {SDL_SCANCODE_COMMA, 0}},
+    {0x2d, {SDL_SCANCODE_MINUS, SDL_SCANCODE_KP_MINUS}},
+    {0x2e, {SDL_SCANCODE_PERIOD, 0}},
+    {0x2f, {SDL_SCANCODE_SLASH, SDL_SCANCODE_KP_DIVIDE}},
+    {0x30, {SDL_SCANCODE_0, 0}},
+    {0x31, {SDL_SCANCODE_1, 0}},
+    {0x32, {SDL_SCANCODE_2, 0}},
+    {0x33, {SDL_SCANCODE_3, 0}},
+    {0x34, {SDL_SCANCODE_4, 0}},
+    {0x35, {SDL_SCANCODE_5, 0}},
+    {0x36, {SDL_SCANCODE_6, 0}},
+    {0x37, {SDL_SCANCODE_7, 0}},
+    {0x38, {SDL_SCANCODE_8, 0}},
+    {0x39, {SDL_SCANCODE_9, 0}},
+    {0x3b, {SDL_SCANCODE_SEMICOLON, 0}},
+    {0x3d, {SDL_SCANCODE_EQUALS, 0}},
+    {0x5b, {SDL_SCANCODE_LEFTBRACKET, 0}},
+    {0x5c, {SDL_SCANCODE_BACKSLASH, 0}},
+    {0x5d, {SDL_SCANCODE_RIGHTBRACKET, 0}},
+    {0x60, {SDL_SCANCODE_GRAVE, 0}},
+    {0x80, {SDL_SCANCODE_CLEAR, SDL_SCANCODE_KP_5}},
+    {0x81, {SDL_SCANCODE_PAGEUP, SDL_SCANCODE_KP_9}},
+    {0x82, {SDL_SCANCODE_PAGEDOWN, SDL_SCANCODE_KP_3}},
+    {0x83, {SDL_SCANCODE_END, SDL_SCANCODE_KP_1}},
+    {0x84, {SDL_SCANCODE_HOME, SDL_SCANCODE_KP_7}},
+    {0x85, {SDL_SCANCODE_INSERT, SDL_SCANCODE_KP_0}},
+    {0x86, {SDL_SCANCODE_DELETE, SDL_SCANCODE_KP_PERIOD}},
+    {0x90, {SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT}},
+    {0x91, {SDL_SCANCODE_LCTRL, SDL_SCANCODE_RCTRL}},
+    {0x92, {SDL_SCANCODE_LALT, SDL_SCANCODE_RALT}},
+    {0x93, {SDL_SCANCODE_LEFT, SDL_SCANCODE_KP_4}},
+    {0x94, {SDL_SCANCODE_UP, SDL_SCANCODE_KP_8}},
+    {0x95, {SDL_SCANCODE_RIGHT, SDL_SCANCODE_KP_6}},
+    {0x96, {SDL_SCANCODE_DOWN, SDL_SCANCODE_KP_2}},
+};
 } // namespace
+
+std::array<int, 2> original_key_scancodes(uint8_t code) {
+    if (code >= 0x61 && code <= 0x7a) return {SDL_SCANCODE_A + (code - 0x61), 0}; // VK 'A'..'Z'
+    for (const auto& k : kOriginalKeys)
+        if (k.code == code) return {k.scancodes[0], k.scancodes[1]};
+    return {0, 0};
+}
+
+uint8_t original_key_code(int scancode) {
+    if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z)
+        return uint8_t(0x61 + scancode - SDL_SCANCODE_A);
+    if (scancode <= 0) return 0;
+    for (const auto& k : kOriginalKeys)
+        if (k.scancodes[0] == scancode || k.scancodes[1] == scancode) return k.code;
+    return 0;
+}
 
 uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, const bool* down) {
     uint32_t bits = 0;
@@ -90,8 +150,11 @@ uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, 
             if (pressed(down, kDefaultKeys[i][0]) || pressed(down, kDefaultKeys[i][1]))
                 bits |= kActionBits[i];
         } else {
-            // Custom keyboard codes store low-byte-first (0x0040e760).
-            if (pressed(down, codes[size_t(i)] & 0xff)) bits |= kActionBits[i];
+            // 0x0044fa80: the pressed key's code against each row's keyboard byte.
+            const uint8_t key = uint8_t(codes[size_t(i)] >> 8);
+            if (key == 0) continue;
+            for (int sc : original_key_scancodes(key))
+                if (pressed(down, sc)) bits |= kActionBits[i];
         }
     }
     return bits;

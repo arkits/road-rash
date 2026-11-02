@@ -1018,8 +1018,12 @@ int main(int argc, char** argv) {
     check(fe.screen() == 0x12, "Controls row enters Configure Input");
     // 0x0040e7b0: "\x1a<Keyboard> " + key + " "; the Up arrow is byte 3 (Wingdings 0xe9).
     check(fe.caption_text(fe.items()[13]) == "\x1a<Keyboard> \x03 ", "default accelerate label");
-    check(fe.caption_text(fe.items()[15]) == "\x1a<Keyboard> \x01 ", "default left label");
-    check(fe.caption_text(fe.items()[20]) == "\x1a<Unassigned> ", "unbound row label");
+    // Turn shows both halves (rows 2 and 9); rows with no native default key.
+    check(fe.caption_text(fe.items()[15]) == "\x1a<Keyboard> \x01 / \x02 ", "default turn label");
+    check(fe.caption_text(fe.items()[16]) == "\x1a<Unassigned> ", "lean unbound by default");
+    check(fe.caption_text(fe.items()[17]) == "\x1a<Unassigned> ", "nitro unbound by default");
+    check(fe.caption_text(fe.items()[18]) == "\x1a<Keyboard> Z ", "swing label");
+    check(fe.caption_text(fe.items()[20]) == "\x1a<Keyboard> C ", "backhand label");
     {
         // 0x00420280 draws the arrow, not the byte: the frame differs from the
         // same label with the arrow byte removed.
@@ -1040,10 +1044,38 @@ int main(int argc, char** argv) {
     if (focus_item(0)) key("select"); // arm accelerate
     press_key(SDL_SCANCODE_W);
     // 0x0040e760 stores keyboard codes low-byte-first (key,0).
-    check(settings.controls[0] == uint16_t(SDL_SCANCODE_W) && settings.custom_controls, "W binds accelerate");
+    check(settings.controls[0] == 0x7700 && settings.custom_controls, "W binds accelerate as 'w'");
+    check(settings.controls[5] == 0x7a00 && settings.controls[9] == 0x9500,
+          "first rebind keeps the other native defaults");
     check(fe.caption_text(fe.items()[13]) ==
               std::string("\x1a<Keyboard> ") + SDL_GetScancodeName(SDL_SCANCODE_W) + " ",
           "label follows the rebind");
+    // 0x0040fc70: Turn takes two distinct keys (rows 2 and 9); F1 has no code.
+    if (focus_item(2)) key("select");
+    press_key(SDL_SCANCODE_F1);
+    press_key(SDL_SCANCODE_J);
+    press_key(SDL_SCANCODE_J);
+    check(settings.controls[2] == 0x9300, "Turn waits for a second distinct key");
+    press_key(SDL_SCANCODE_L);
+    check(settings.controls[2] == 0x6a00 && settings.controls[9] == 0x6c00, "Turn binds j / l");
+    check(fe.caption_text(fe.items()[15]) == "\x1a<Keyboard> J / L ", "Turn label shows both keys");
+    if (focus_item(3)) key("select"); // Lean: Left first fills Right
+    press_key(SDL_SCANCODE_LEFT);
+    check(settings.controls[3] == 0x9300 && settings.controls[10] == 0x9500, "Left arms Right for Lean");
+    // Keyboard defaults (0x0040fdf0) load the original table and relabel.
+    for (size_t i = 0; i < fe.items().size(); ++i)
+        if (fe.items()[i].caption == 0x17e && focus_item(int(i))) key("select");
+    check(settings.controls == default_keyboard_controls(), "Keyboard defaults row loads 0x00466618");
+    check(fe.caption_text(fe.items()[16]) == "\x1a<Keyboard> " +
+                                                 std::string(SDL_GetScancodeName(SDL_SCANCODE_HOME)) + " / " +
+                                                 SDL_GetScancodeName(SDL_SCANCODE_PAGEUP) + " ",
+          "Lean label after defaults");
+    for (size_t i = 0; i < fe.items().size(); ++i)
+        if (fe.items()[i].caption == 0x17f && focus_item(int(i))) key("select");
+    check(fe.caption_text(fe.items()[13]) == "\x1a" + fe.string_for_test(281) + " \x03 ",
+          "joystick stick-up label (0x25 prints byte 3)");
+    for (size_t i = 0; i < fe.items().size(); ++i)
+        if (fe.items()[i].caption == 0x17e && focus_item(int(i))) key("select");
     if (focus_item(1)) key("select"); // arm brake
     press_key(SDL_SCANCODE_ESCAPE);
     check(settings.controls[1] == default_keyboard_controls()[1], "Escape cancels with no change");

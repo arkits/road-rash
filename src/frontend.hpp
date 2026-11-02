@@ -182,6 +182,7 @@ class Frontend {
     // the same draws as without them.
     void set_rest_picture_for_test(int n) { rest_picture_override_ = n; }
     void set_string_for_test(int slot, std::string s) { strings_.at(size_t(slot)) = std::move(s); }
+    const std::string& string_for_test(int slot) const { return str(slot); }
     void set_schmooze_for_test(int rider, int attitude) {
         schmooze_rider_override_ = rider;
         schmooze_attitude_override_ = attitude;
@@ -215,6 +216,13 @@ class Frontend {
     void refresh_key_labels();                    // 0x0040fd90: label slots 160-168
     PadLabels pad_labels_;                        // plan 33b Task 4: Gamepad page names
     mutable std::array<std::string, 4> pad_rows_; // rows built from pad_labels_ in str()
+
+    // 0x0040e7b0 text of one table code; `device` adds "<Keyboard>"/"Joystick".
+    std::string control_text(uint16_t code, bool device) const;
+    // Table code of a row; native defaults encoded as their primary keys' codes.
+    uint16_t control_code(int row) const;
+    // 0x0040e760 / 0x0040fc70 press-a-key; true while the capture stays armed.
+    bool capture_key(int scancode);
     void apply_restroom_pattern();
     void set_background(const std::string& name);
     std::string background_for(int previous, int screen, int title);
@@ -258,6 +266,7 @@ class Frontend {
     Settings& settings_;
     std::string save_dir_, save_file_;
     int capture_action_ = -1;   // plan 18 Task 7: press-a-key arming (-1 idle)
+    uint8_t capture_first_ = 0; // 0x0040fc70: Turn/Lean first key code (0 none yet)
     bool pause_open_ = false;   // plan 18 Task 8: in-race pause menu showing
     bool pause_return_ = false; // plan 18 Task 8: sub-screen Back returns to native_pause
     std::deque<FrontendEvent> events_;

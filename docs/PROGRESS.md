@@ -65,10 +65,39 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
   16-pixel advance. Both the 1x and scaled button paths strip the `0x1a`
   prefix as `0x0041ff80` does.
 - Remaining: no original capture shows filled labels, so this is a port of
-  the decompiled code, not a measured match. The rendered Configure Input
-  screen shows "Nitro boost" on the row whose default key is Z, which the
-  port reads as punch; the row-to-action mapping needs checking against the
-  original (not changed here).
+  the decompiled code, not a measured match.
+
+### November 1, 2026: Configure Input rows, key codes and Turn/Lean pairs
+
+- The row-to-action mapping was wrong. Row i sets control bit `1 << i`
+  (`0x00476c00`): accelerate, brake, left, lean down, nitro, punch, kick,
+  backhand, dismount, right, lean up. The port had rows 3–6 and 9 as right,
+  punch, kick, backhand and nitro, so "Nitro boost" punched and "Swing"
+  kicked. `src/input.cpp` `kActionBits`/`kDefaultKeys` fixed; the native
+  default keys (WASD/arrows, Z/X/C) are unchanged in effect.
+- The custom table held the original keyboard code in the high byte, but the
+  port read the low byte as an SDL scancode. "Keyboard defaults", the first
+  rebind (which loaded the original table) and any saved binding (the
+  loader replaced it with that table) left every key unbound in the race.
+  New `original_key_scancodes`/`original_key_code` map codes through the US
+  VK table `0x00465fe8` (keypad twins included). Capture stores codes;
+  keys the original cannot bind (F1, for example) are ignored as
+  `0x0040fb50` ignores them. Settings written by the old capture (SDL
+  scancode in the low byte) load as their original codes.
+- Turn and Lean take two keys (`0x0040fc70`): Left arrow fills Right itself;
+  otherwise a second, different key goes to row 9/10. `apply_rebind` clears a
+  conflicting row's pair partner (`0x0040fbf0`); new `apply_pair_rebind`.
+- The Keyboard defaults and Joystick defaults rows now run `0x0040fdf0`
+  (before, the handler was not dispatched). The first rebind from native
+  defaults seeds the table with the keys the labels showed.
+- Labels follow `0x0040e7b0` fully: Turn/Lean show both halves
+  ("<Keyboard> ← / →"), joystick codes print Joystick Button n, Hat and
+  stick arrows, and Pedal text.
+- Remaining: the joystick codes in a custom table drive nothing natively (the
+  SDL gamepad layer is the port's joystick path); the original's joystick
+  paired-capture rules are not ported. A legacy SDL capture of 8, 9, 0 or
+  Return (scancodes `0x25`–`0x28`) is read as a joystick code. Dismount
+  (row 8, bit `0x100`) has no reader in the original or the port.
 
 ### November 1, 2026: reverb and chorus buses in the race-music renderer
 

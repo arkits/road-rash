@@ -1115,38 +1115,99 @@ void Frontend::refresh_key_labels() {
     for (int i = 0; i < 9; ++i) strings_[size_t(160 + i)] = key_name(i);
 }
 
-std::string Frontend::key_name(int action) const {
-    // Plan 18 Task 7: label text for the 0x12 key-label rows. Custom keyboard
-    // codes store low-byte-first (0x0040e760); the byte is the keyboard code.
-    // Plan 33b Task 4: the name the current keyboard layout prints on that key.
-    // 0x0040e7b0 rows 0..8: "\x1a" (0x00466670), then "<Keyboard>" (string 280)
-    // + " " + key + " ", or "<Unassigned>" (string 384) + " " for code 0. Arrow
-    // codes 0x93..0x96 print bytes 1..4 (0x00466664/5c/60/58), which
-    // 0x00420280 draws as Wingdings arrows.
-    if (action < 0 || action > 8) return "?";
-    const int sc =
-        settings_.custom_controls ? settings_.controls[size_t(action)] & 0xff : default_key_scancode(action);
-    std::string label = "\x1a";
-    if (sc <= 0 || sc >= SDL_SCANCODE_COUNT) return label + str(384) + " ";
-    label += str(280) + " ";
-    switch (sc) {
-    case SDL_SCANCODE_LEFT:
-        label += '\x01';
-        break;
-    case SDL_SCANCODE_RIGHT:
-        label += '\x02';
-        break;
-    case SDL_SCANCODE_UP:
-        label += '\x03';
-        break;
-    case SDL_SCANCODE_DOWN:
-        label += '\x04';
-        break;
-    default:
-        label += key_label(sc);
-        break;
+uint16_t Frontend::control_code(int row) const {
+    if (settings_.custom_controls) return settings_.controls[size_t(row)];
+    // Native defaults (not a table) shown as the codes their primary keys produce.
+    return uint16_t(original_key_code(default_key_scancode(row)) << 8);
+}
+
+std::string Frontend::control_text(uint16_t code, bool device) const {
+    // 0x0040e7b0, one row: the keyboard byte (high) wins over the joystick byte.
+    // Rows 0..8 lead with the device word ("<Keyboard>" 280, "Joystick" 281).
+    // Arrow codes print bytes 1..4 (0x00466664/5c/60/58) that 0x00420280 draws as
+    // Wingdings arrows. Other keys print what the current layout shows on that
+    // key (plan 33b Task 4) instead of the original's names.
+    const uint8_t key = uint8_t(code >> 8), joy = uint8_t(code & 0xff);
+    if (key) {
+        std::string s = device ? str(280) + " " : std::string();
+        switch (key) {
+        case 0x93:
+            return s + "\x01 ";
+        case 0x94:
+            return s + "\x03 ";
+        case 0x95:
+            return s + "\x02 ";
+        case 0x96:
+            return s + "\x04 ";
+        default:
+            return s + key_label(original_key_scancodes(key)[0]) + " ";
+        }
     }
-    return label + " ";
+    if (joy == 0) return str(384) + " "; // "<Unassigned>"
+    if (joy <= 0x28) {
+        std::string s = device ? str(281) + " " : std::string();
+        // "%d" (0x00466654) after "Button" (284).
+        if (joy < 0x21) return s + str(284) + " " + std::to_string(joy) + " ";
+        if (joy < 0x25) s += str(283) + " "; // "Hat"; 0x25..0x28 are the stick
+        static constexpr char arrows[4] = {'\x03', '\x02', '\x04', '\x01'};
+        return s + arrows[(joy - 0x21) & 3] + " ";
+    }
+    // 0x29/0x2a "Left"/"Right" (292/293), then "Pedal" (282) for any code above 0x28.
+    std::string s = joy == 0x29 ? str(292) + " " : joy == 0x2a ? str(293) + " " : std::string();
+    return s + str(282) + " ";
+}
+
+std::string Frontend::key_name(int action) const {
+    // Plan 18 Task 7: label text for the 0x12 key-label rows. 0x0040fd90 runs
+    // 0x0040e7b0 on rows 0..10 in order: rows 0..8 start their slot with "\x1a"
+    // (0x00466670) and their code's text; a bound row 9/10 appends "/ " and its
+    // text to the Turn/Lean slot (rows 2/3).
+    if (action < 0 || action > 8) return "?";
+    std::string label = "\x1a" + control_text(control_code(action), true);
+    if (action == 2 || action == 3) {
+        const uint16_t pair = control_code(action + 7);
+        if (pair) label += "/ " + control_text(pair, false);
+    }
+    return label;
+}
+
+bool Frontend::capture_key(int scancode) {
+    // Plan 18 Task 7 press-a-key. Escape cancels with no change (0x0040e760).
+    // Keys the original's VK table does not map produce no code and are ignored,
+    // as 0x0040fb50 keeps waiting. Turn and Lean (rows 2/3, 0x0040fc70) take two
+    // distinct keys for rows 2/3 and 9/10; Left arrow first fills Right itself.
+    // Returns true while the capture stays armed.
+    if (scancode == SDL_SCANCODE_ESCAPE) {
+        capture_first_ = 0;
+        return false;
+    }
+    const uint8_t code = original_key_code(scancode);
+    if (code == 0) return true;
+    const int row = capture_action_;
+    uint16_t second = 0;
+    if (row == 2 || row == 3) {
+        if (capture_first_ == 0 && code != 0x93) {
+            capture_first_ = code;
+            return true;
+        }
+        if (capture_first_ == code) return true;
+        second = capture_first_ == 0 ? uint16_t(0x9500) : uint16_t(code << 8);
+    }
+    if (!settings_.custom_controls) {
+        // The first rebind turns the native defaults into a table, so every
+        // row keeps the key its label showed.
+        for (int i = 0; i < 11; ++i) settings_.controls[size_t(i)] = control_code(i);
+        settings_.custom_controls = true;
+    }
+    if (row == 2 || row == 3) {
+        const uint8_t first = capture_first_ ? capture_first_ : code;
+        apply_pair_rebind(settings_.controls, size_t(row), uint16_t(first << 8), second);
+    } else {
+        apply_rebind(settings_.controls, size_t(row), uint16_t(code << 8));
+    }
+    capture_first_ = 0;
+    refresh_key_labels(); // 0x0040fbf0 relabels every cleared row
+    return false;
 }
 
 void Frontend::draw_arrow_label(RgbImage& img, TextRect r, int scale, const std::string& s,
@@ -1755,7 +1816,17 @@ int Frontend::run_handler(size_t index) {
     case 0x0040e580:
         // Plan 18 Task 7: the 9 rebind rows (captions 256-264) cover actions 0-8;
         // nitro/camera rows have no UI. Arm press-a-key capture for the action.
-        if (m.caption >= 256 && m.caption <= 264) capture_action_ = m.caption - 256;
+        if (m.caption >= 256 && m.caption <= 264) {
+            capture_action_ = m.caption - 256;
+            capture_first_ = 0;
+        }
+        return 0;
+    case 0x0040fdf0:
+        // Keyboard / Joystick defaults (captions 0x17e / 0x17f), then relabel.
+        if (m.caption == 0x17e || m.caption == 0x17f) {
+            reset_keys(m.caption == 0x17f);
+            refresh_key_labels();
+        }
         return 0;
     case native_action::toggle_mute:
         settings_.mute = !settings_.mute;
@@ -2022,7 +2093,7 @@ bool Frontend::toggle_opponent_list() {
 void Frontend::rebind_key(size_t action, uint16_t code) {
     // 0x0040fbf0 conflict rule via apply_rebind: same-code rows are cleared.
     if (!settings_.custom_controls) {
-        settings_.controls = default_keyboard_controls();
+        for (int i = 0; i < 11; ++i) settings_.controls[size_t(i)] = control_code(i);
         settings_.custom_controls = true;
     }
     apply_rebind(settings_.controls, action, code);
@@ -2185,17 +2256,7 @@ void Frontend::update(const MenuInput& raw_in, uint64_t now_ms) {
     }
     if (in.opponent_key && !editing_name_) toggle_opponent_list();
     if (capture_action_ >= 0 && in.capture_scancode != 0) {
-        // Plan 18 Task 7 press-a-key (`0x0040e760`): Escape cancels with no change;
-        // any other key stores low-byte-first (key,0) via the 0x0040fbf0 conflict rule.
-        if (in.capture_scancode != SDL_SCANCODE_ESCAPE && in.capture_scancode < 256) {
-            if (!settings_.custom_controls) {
-                settings_.controls = default_keyboard_controls();
-                settings_.custom_controls = true;
-            }
-            apply_rebind(settings_.controls, size_t(capture_action_), uint16_t(in.capture_scancode));
-            strings_[size_t(160 + capture_action_)] = key_name(capture_action_); // 0x0040e7b0 relabel
-        }
-        capture_action_ = -1; // 0x0040e6d0 disarm
+        if (!capture_key(in.capture_scancode)) capture_action_ = -1; // 0x0040e6d0 disarm
         return;
     }
     if (focus_ < 0) return;

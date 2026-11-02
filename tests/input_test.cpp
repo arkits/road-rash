@@ -177,9 +177,9 @@ int main() {
         down[SDL_SCANCODE_C] = true;
         check(rr::bound_control_bits(defs, false, down) == rr::control_backhand, "C backhands by default");
         // Rebind accelerate (action 0) to W: W yields accelerate, Up yields nothing.
-        // Custom keyboard codes store low-byte-first (0x0040e760).
+        // Custom tables hold the original keyboard code in the high byte ('w').
         std::array<uint16_t, 11> codes{};
-        codes[0] = uint16_t(SDL_SCANCODE_W);
+        codes[0] = 0x7700;
         down[SDL_SCANCODE_C] = false;
         down[SDL_SCANCODE_W] = true;
         check(rr::bound_control_bits(codes, true, down) == rr::control_accelerate,
@@ -187,6 +187,32 @@ int main() {
         down[SDL_SCANCODE_W] = false;
         down[SDL_SCANCODE_UP] = true;
         check(rr::bound_control_bits(codes, true, down) == 0, "old key silent after rebind");
+    }
+    // 0x00476c00: row i sets bit 1 << i; the original keyboard defaults
+    // (0x00466618) drive the race through the US VK table 0x00465fe8.
+    {
+        const auto defs = rr::default_keyboard_controls();
+        const auto bits_for = [&](SDL_Scancode sc) {
+            bool down[SDL_SCANCODE_COUNT] = {};
+            down[sc] = true;
+            return rr::bound_control_bits(defs, true, down);
+        };
+        check(bits_for(SDL_SCANCODE_UP) == rr::control_accelerate, "default table: Up accelerates");
+        check(bits_for(SDL_SCANCODE_KP_8) == rr::control_accelerate, "keypad 8 is Up's twin");
+        check(bits_for(SDL_SCANCODE_DOWN) == rr::control_brake, "default table: Down brakes");
+        check(bits_for(SDL_SCANCODE_LEFT) == rr::control_left, "row 2 steers left");
+        check(bits_for(SDL_SCANCODE_RIGHT) == rr::control_right, "row 9 steers right");
+        check(bits_for(SDL_SCANCODE_HOME) == rr::control_lean_down, "row 3 (Home) leans down");
+        check(bits_for(SDL_SCANCODE_PAGEUP) == rr::control_lean_up, "row 10 (PgUp) leans up");
+        check(bits_for(SDL_SCANCODE_N) == rr::control_nitro, "row 4 (n) is nitro");
+        check(bits_for(SDL_SCANCODE_INSERT) == rr::control_punch, "row 5 (Insert) swings");
+        check(bits_for(SDL_SCANCODE_RETURN) == rr::control_kick, "row 6 (Enter) kicks");
+        check(bits_for(SDL_SCANCODE_SPACE) == rr::control_backhand, "row 7 (Space) backhands");
+        check(bits_for(SDL_SCANCODE_D) == 0, "row 8 (dismount) has no reader");
+        check(rr::original_key_code(SDL_SCANCODE_F1) == 0, "F1 has no original code");
+        for (int code = 1; code < 256; ++code)
+            for (int sc : rr::original_key_scancodes(uint8_t(code)))
+                if (sc) check(rr::original_key_code(sc) == code, "code table round trips");
     }
     // Plan 18 Task 7 Steps 2/4: left-handed mirrors the touch zones.
     check(rr::touch_input(1.f / 6, 0.5f, 1.f, 1.f, false).left, "left third steers left by default");
@@ -224,23 +250,24 @@ int main() {
         };
         // No video subsystem here, so SDL's lookup is the default US map.
         const rr::KeyFromScancode us = SDL_GetKeyFromScancode;
-        check(rr::default_key_scancode(4) == SDL_SCANCODE_Z, "punch defaults to the Z position");
+        check(rr::default_key_scancode(5) == SDL_SCANCODE_Z, "punch defaults to the Z position");
         check(rr::key_label(SDL_SCANCODE_Z, us) == "Z", "US punch label");
         check(rr::key_label(SDL_SCANCODE_Z, azerty) == "W", "AZERTY prints W on the punch key");
         check(rr::key_label(SDL_SCANCODE_Z, qwertz) == "Y", "QWERTZ prints Y on the punch key");
         check(rr::key_label(SDL_SCANCODE_X, dvorak) == "Q", "Dvorak prints Q on the kick key");
         check(rr::key_label(SDL_SCANCODE_UP, azerty) == "Up", "arrows keep their names");
-        check(rr::key_label(rr::default_key_scancode(7), us) == "?", "unbound row");
+        check(rr::key_label(rr::default_key_scancode(8), us) == "?", "unbound row");
         // The bound bit comes from the physical key whatever the layout prints.
         bool down[SDL_SCANCODE_COUNT] = {};
         down[SDL_SCANCODE_Z] = true;
         check(rr::bound_control_bits({}, false, down) == rr::control_punch, "default punch by position");
         std::array<uint16_t, 11> codes{};
-        codes[4] = uint16_t(SDL_SCANCODE_Q); // bound on AZERTY's A key
+        codes[5] = uint16_t(rr::original_key_code(SDL_SCANCODE_Q) << 8); // bound on AZERTY's A key
         down[SDL_SCANCODE_Z] = false;
         down[SDL_SCANCODE_Q] = true;
         check(rr::bound_control_bits(codes, true, down) == rr::control_punch, "custom punch by position");
-        check(rr::key_label(codes[4] & 0xff, azerty) == "A", "custom label in the current layout");
+        check(rr::key_label(rr::original_key_scancodes(uint8_t(codes[5] >> 8))[0], azerty) == "A",
+              "custom label in the current layout");
     }
     // Plan 33b Task 4 Step 2: button names per pad family.
     {

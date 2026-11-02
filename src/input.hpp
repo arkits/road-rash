@@ -38,18 +38,29 @@ class MenuStickInput {
 // Dead-zone override in SDL axis units (plan 18 Task 7 stick setting);
 // the default keeps current feel for existing callers.
 uint32_t controls_from(const PlayerInput&, int dead_zone = steer_dead_zone);
-// Rebindable keyboard map (plan 18 Task 7): native control bit per action row
-// 0..10 (row 8 is dead in the original too, rows 7/10 have no native bit).
-// Custom tables store the SDL scancode in the high byte (native capture format);
-// the traced defaults keep their internal-id bytes and are honored through the
-// default scancode sets below (current game feel, unchanged).
+// Rebindable keyboard map (plan 18 Task 7): row i of the 0x00465fb8 table sets
+// control bit 1 << i (0x00476c00): accelerate, brake, left, lean down, nitro,
+// punch, kick, backhand, dismount (no reader; no native bit), right, lean up.
+// Rows 9/10 pair with 2/3 (Turn, Lean). A code holds the original keyboard code
+// in its high byte and the joystick code in its low byte (0x0040e760); the
+// keyboard path reads only the high byte. Without a custom table the native
+// default scancode sets below apply (current game feel).
 uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, const bool* down);
+// Original keyboard codes: 0x0040e5f0 picks the VK -> code table (US 0x00465fe8)
+// that 0x0040fb50/0x0044fa80 read. ASCII for letters, digits and punctuation,
+// 0x80-0x86 Clear/PgUp/PgDn/End/Home/Ins/Del (each with its keypad twin), 0x90-0x92
+// Shift/Ctrl/Alt, 0x93-0x96 Left/Up/Right/Down (keypad 4/8/6/2 too). Natively the
+// race keys are positions, so the US table maps codes to scancodes on any layout.
+// The scancodes that produce `code` (0 entries unused).
+std::array<int, 2> original_key_scancodes(uint8_t code);
+// The code a scancode produces, 0 when the original has none (the key is ignored).
+uint8_t original_key_code(int scancode);
 // Plan 33b Task 4: race keys are physical positions (scancodes), so AZERTY,
 // QWERTZ and Dvorak keep the same layout; the label is what the current
 // layout prints on that key. `lookup` is SDL_GetKeyFromScancode except in tests.
 using KeyFromScancode = SDL_Keycode (*)(SDL_Scancode, SDL_Keymod, bool);
 std::string key_label(int scancode, KeyFromScancode lookup = SDL_GetKeyFromScancode);
-// Primary default key of action row 0..10 (-1: unbound).
+// Primary native default key of action row 0..10 (-1: unbound).
 int default_key_scancode(int action);
 // Plan 33b Task 4: button names on the connected pad (Xbox A/B/X/Y,
 // PlayStation Cross/Circle/Square/Triangle, Nintendo by printed label),
