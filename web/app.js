@@ -315,6 +315,9 @@ async function startGame(quick, room) {
     $('fullscreen').disabled = !fullscreenRequest(); $('reload').hidden = false;
     $('state').textContent = 'Playing';
     $('canvas').focus();
+    updateTouch();
+    // Phones get the whole screen, turned sideways, within the launch gesture.
+    if (coarsePointer && !document.fullscreenElement && !document.webkitFullscreenElement) enterFullscreen(true);
     const allocated = [];
     try {
         // Create/resume audio within the launch gesture, before asynchronous reads.
@@ -352,6 +355,7 @@ async function startGame(quick, room) {
     } finally {
         running = false;
         $('fullscreen').disabled = true;
+        updateTouch();
         telemetry.gameStopped(); allocated.forEach(ptr => { if (ptr) engine._free(ptr); });
     }
 }
@@ -807,13 +811,85 @@ function fullscreenRequest() {
     const viewport = document.querySelector('.viewport');
     return viewport.requestFullscreen || viewport.webkitRequestFullscreen;
 }
-$('fullscreen').onclick = async () => {
+// Browsers allow an orientation lock only in fullscreen (Chrome on Android);
+// Safari has no lock, so the rotate hint asks instead.
+async function enterFullscreen(quiet) {
     const request = fullscreenRequest();
     if (!request) { $('fullscreen').disabled = true; return; }
-    try { await request.call(document.querySelector('.viewport')); telemetry.track('fullscreen'); }
-    // A denied fullscreen gesture must leave the running game visible.
-    catch (error) { status('Fullscreen unavailable. You can keep playing in this window.'); }
+    try {
+        await request.call(document.querySelector('.viewport'));
+        telemetry.track('fullscreen');
+        await screen.orientation?.lock?.('landscape').catch(() => {});
+    } catch (error) {
+        // A denied fullscreen gesture must leave the running game visible.
+        if (!quiet) status('Fullscreen unavailable. You can keep playing in this window.');
+    }
+    updateRotateHint();
+}
+$('fullscreen').onclick = () => enterFullscreen(false);
+// On-screen controls. Each finger presses the button under it, sliding between
+// buttons (left to right, gas to brake) without lifting. Presses reach SDL as
+// window key events with the default bindings' codes.
+const coarsePointer = matchMedia('(hover: none) and (pointer: coarse)').matches;
+let touchControls = coarsePointer, rotateDismissed = false;
+try { const saved = localStorage.getItem('rr-touch'); if (saved !== null) touchControls = saved === '1'; } catch {}
+const fingers = new Map(), held = new Map();
+function sendKey(button, down) {
+    const count = (held.get(button) || 0) + (down ? 1 : -1);
+    if (count > 0) held.set(button, count); else held.delete(button);
+    if (down ? count !== 1 : count > 0) return;
+    button.classList.toggle('held', down);
+    const {code, key} = button.dataset;
+    window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', {code, key, bubbles: true, cancelable: true}));
+}
+function moveFinger(event) {
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('#touch [data-code]') || null;
+    const previous = fingers.get(event.pointerId) || null;
+    if (target === previous) return;
+    if (previous) sendKey(previous, false);
+    if (target) { sendKey(target, true); fingers.set(event.pointerId, target); navigator.vibrate?.(8); }
+    else fingers.delete(event.pointerId);
+}
+function liftFinger(event) {
+    const previous = fingers.get(event.pointerId);
+    if (previous) sendKey(previous, false);
+    fingers.delete(event.pointerId);
+}
+function releaseTouchKeys() {
+    for (const button of fingers.values()) sendKey(button, false);
+    fingers.clear();
+}
+const touchPad = $('touch');
+touchPad.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    // Keep tracking the finger after it leaves the button it started on.
+    moveFinger(event);
+    try { touchPad.setPointerCapture(event.pointerId); } catch {}
+});
+touchPad.addEventListener('pointermove', event => { if (fingers.has(event.pointerId)) moveFinger(event); });
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) touchPad.addEventListener(type, liftFinger);
+touchPad.addEventListener('contextmenu', event => event.preventDefault());
+window.addEventListener('blur', releaseTouchKeys);
+function updateTouch() {
+    const show = running && touchControls;
+    if (!show) releaseTouchKeys();
+    touchPad.hidden = !show;
+    document.body.classList.toggle('touch', show);
+    $('touch-toggle').hidden = !(running && (coarsePointer || navigator.maxTouchPoints > 0));
+    $('touch-toggle').setAttribute('aria-pressed', String(touchControls));
+    updateRotateHint();
+}
+function updateRotateHint() {
+    $('rotate-hint').hidden = !(running && touchControls && !rotateDismissed && matchMedia('(orientation: portrait)').matches);
+}
+$('touch-toggle').onclick = () => {
+    touchControls = !touchControls;
+    try { localStorage.setItem('rr-touch', touchControls ? '1' : '0'); } catch {}
+    telemetry.track('touch_controls', {enabled: touchControls});
+    updateTouch();
 };
+$('rotate-hint').onclick = () => { rotateDismissed = true; updateRotateHint(); };
+matchMedia('(orientation: portrait)').addEventListener('change', updateRotateHint);
 // SDL receives these events too; prevent browser scrolling while the game owns focus.
 document.addEventListener('visibilitychange', () => {
     if (running) call('rr_web_visibility', null, ['number'], [document.hidden ? 1 : 0]);
@@ -847,7 +923,7 @@ window.addEventListener('keydown', event => {
                         // Factory failures are retried below and reported only if all
                         // attempts fail. A live engine abort is immediately actionable.
                         if (!running) return;
-                        running = false; telemetry.gameStopped();
+                        running = false; telemetry.gameStopped(); updateTouch();
                         telemetry.error(new Error(String(reason)), 'engine_abort');
                         showGameMessage('Engine error: ' + reason + '. Use Exit to launcher to restart.');
                     }

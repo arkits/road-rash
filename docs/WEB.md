@@ -133,6 +133,42 @@ the production Nginx locations. Without `rr-netd` the panel shows "Server
 offline" and an explanation; `tests/web_browser_smoke.cjs` checks that state,
 then a routed `/net/health` list, the invite banner and code validation.
 
+### Phone and tablet controls — November 1, 2026
+
+The web build runs with `kMobileDisplay` off, so the native phone button
+overlay (`draw_phone_controls`) never draws in a browser. The page now draws
+its own controls in HTML (`#touch` in `web/index.html`) over the play area:
+◀ ▶ bottom left with Punch / Kick / Backhand above them, Brake and Gas bottom
+right, and Back / Pause / OK top right (bottom right, above Gas, in portrait).
+Each button sends a window `keydown`/`keyup` with the `code` of the game's
+default binding (`kDefaultKeys` in `src/input.cpp`: arrows, Z, X, C, P,
+Escape, Enter). SDL's Emscripten handler reads `code`, so the game sees the
+same scancodes as a keyboard; no native code changed. Fingers are tracked per
+pointer id with pointer capture, so a thumb can slide from ◀ to ▶ or from Gas to
+Brake without lifting; a key is released only when no finger holds its button.
+Leaving the window releases everything.
+
+The controls are on by default when the page matches
+`(hover: none) and (pointer: coarse)`. A **Touch** toolbar button (shown while
+playing on any touch-capable device) toggles them and saves the choice in
+`localStorage` `rr-touch`. On such phones, Start Game, Quick Race and the online
+buttons also request fullscreen inside the launch gesture and then call
+`screen.orientation.lock('landscape')`. Chrome on Android honours the lock in
+fullscreen. Safari on iPhone has neither element fullscreen nor an orientation
+lock, so in portrait the page shows a "turn your device sideways" card (tap to
+keep playing upright); upright play puts the frame at the top and the controls
+below it. The Full screen button also attempts the lock.
+
+Checked in the Claude desktop browser pane with hosted assets
+(`tools/web_dev_server.mjs`, bundle `build-agent-web-touch-20261101`): an
+emulated 375x812 phone shows the controls and rotate card on Quick Race;
+OK on the overlay resumed the pause menu; holding Gas sent `keydown ArrowUp`
+and the odometer advanced; sliding to Brake swapped `ArrowUp` up for
+`ArrowDown` down. At 844x390 the clusters sit in the letterbox bars.
+`tests/web_browser_smoke.cjs` passed on the same bundle (desktop path). Not yet
+observed on a physical phone, so the Android orientation lock and iOS Safari
+behaviour are unverified.
+
 ### Build, serve, test and deploy
 
 ```sh

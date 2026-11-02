@@ -883,3 +883,97 @@ a { color: inherit; }
   .quick-race { padding: 12px 14px; }
   .quick-race h3 { font-size: 24px; padding-bottom: 8px; }
 }
+.viewport { --touch: clamp(52px, 16vmin, 92px); }
+/* On-screen controls (phones and tablets). Buttons sit over the letterbox
+   bars where the screen is wide enough, translucent where they overlap. */
+.touch-pad {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-cluster {
+  position: absolute;
+  display: flex;
+  gap: clamp(6px, 2vmin, 14px);
+  pointer-events: auto;
+}
+.touch-steer {
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(12px, env(safe-area-inset-bottom));
+}
+.touch-fight {
+  left: max(12px, env(safe-area-inset-left));
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--touch) + clamp(10px, 3vmin, 20px));
+}
+.touch-drive {
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+}
+.touch-system {
+  top: max(8px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+}
+.touch-pad button {
+  display: grid;
+  place-content: center;
+  min-width: calc(var(--touch) * .72);
+  height: calc(var(--touch) * .62);
+  padding: 0 10px;
+  border: 1px solid rgba(216, 219, 207, .35);
+  background: rgba(24, 22, 20, .45);
+  color: rgba(216, 219, 207, .9);
+  font-size: clamp(11px, 3.2vmin, 16px);
+  line-height: 1;
+  text-transform: uppercase;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: none;
+}
+.touch-pad .touch-system button { height: calc(var(--touch) * .48); font-size: clamp(10px, 2.8vmin, 14px); }
+.touch-pad .touch-big { width: var(--touch); height: var(--touch); font-size: clamp(14px, 4.4vmin, 22px); }
+.touch-pad .touch-big small { display: block; margin-top: 2px; font-size: .7em; opacity: .7; }
+.touch-pad .touch-gas, .touch-pad .touch-ok { border-color: rgba(255, 96, 30, .7); color: var(--orange); }
+.touch-pad button:hover { background: rgba(24, 22, 20, .45); color: rgba(216, 219, 207, .9); border-color: rgba(216, 219, 207, .35); }
+.touch-pad button.held {
+  background: rgba(255, 96, 30, .55);
+  border-color: var(--orange);
+  color: #120a05;
+}
+/* Portrait: the frame sits at the top and the controls below it. */
+@media (orientation: portrait) {
+  body.playing.touch .viewport { place-items: start center; }
+  body.playing.touch #canvas { height: min(calc(100cqh - var(--touch) * 2 - 48px), 75cqw) !important; }
+  .touch-system {
+    top: auto;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--touch) + clamp(10px, 3vmin, 20px));
+  }
+}
+.rotate-hint {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: rgba(11, 10, 9, .82);
+  color: var(--text);
+  font-family: var(--bold);
+  font-size: 18px;
+  text-align: center;
+}
+.rotate-hint p { margin: 0; }
+.rotate-hint p::after { content: "Tap to keep playing upright."; display: block; margin-top: 6px; color: var(--muted); font: 13px/1.4 "RoadRashFutura", sans-serif; }
+.rotate-icon {
+  width: 44px;
+  height: 72px;
+  border: 3px solid var(--orange);
+  border-radius: 8px;
+  animation: rotate-hint 1.8s ease-in-out infinite;
+}
+@keyframes rotate-hint { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) { .rotate-icon { animation: none; transform: rotate(-90deg); } }

@@ -47,8 +47,10 @@
           <dt>Enter</dt><dd>Select / resume / skip movie</dd>
         </dl>
         <p>Click the game to focus. Gamepads are supported. Returning to the tab pauses the race.</p>
+        <p>On phones and tablets, on-screen buttons appear while you play; Touch shows or hides them. Starting a game goes full screen and turns sideways where the browser allows it.</p>
       </div>
     </details>
+    <button id="touch-toggle" aria-pressed="false" hidden>Touch</button>
     <button id="fullscreen" disabled>Full screen</button>
     <button id="reload" class="accent" hidden>Exit to launcher</button>
   </nav>
@@ -56,6 +58,31 @@
 <main aria-label="Road Rash game">
   <div class="viewport">
     <canvas id="canvas" tabindex="0" aria-label="Road Rash game canvas" hidden></canvas>
+    <!-- On-screen controls send the game's default keys (src/input.cpp kDefaultKeys). -->
+    <div id="touch" class="touch-pad" aria-hidden="true" hidden>
+      <div class="touch-cluster touch-steer">
+        <button type="button" data-code="ArrowLeft" data-key="ArrowLeft" class="touch-big">◀</button>
+        <button type="button" data-code="ArrowRight" data-key="ArrowRight" class="touch-big">▶</button>
+      </div>
+      <div class="touch-cluster touch-fight">
+        <button type="button" data-code="KeyZ" data-key="z">Punch</button>
+        <button type="button" data-code="KeyX" data-key="x">Kick</button>
+        <button type="button" data-code="KeyC" data-key="c">Back&shy;hand</button>
+      </div>
+      <div class="touch-cluster touch-drive">
+        <button type="button" data-code="ArrowDown" data-key="ArrowDown" class="touch-big">Brake<small>▼</small></button>
+        <button type="button" data-code="ArrowUp" data-key="ArrowUp" class="touch-big touch-gas">Gas<small>▲</small></button>
+      </div>
+      <div class="touch-cluster touch-system">
+        <button type="button" data-code="Escape" data-key="Escape">Back</button>
+        <button type="button" data-code="KeyP" data-key="p">Pause</button>
+        <button type="button" data-code="Enter" data-key="Enter" class="touch-ok">OK</button>
+      </div>
+    </div>
+    <div id="rotate-hint" class="rotate-hint" role="status" hidden>
+      <span class="rotate-icon" aria-hidden="true"></span>
+      <p>Turn your device sideways to ride.</p>
+    </div>
     <section id="setup" aria-label="Game launcher">
       <h2 class="launcher-title"><span>Road</span> <span>Rash</span></h2>
       <p id="setup-description">Connecting to the game server…</p>
