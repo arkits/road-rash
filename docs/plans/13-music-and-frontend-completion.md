@@ -215,5 +215,7 @@ The SBK banks now play with their SF1 generator semantics (October 31,
 level, samplePitch root at 44100 Hz, loop offsets and modes, global zones and
 the SF1 merge, both envelopes, filter, LFOs, pan, exclusive classes and the
 SF2 default controller modulators. This timbre is spec-derived and unmeasured
-(no EMU8000 oracle). Still open for the timbre: reverb/chorus effects, the
-factory-ROM presets (owner-supplied ROM dump), and any measured comparison.
+(no EMU8000 oracle). Reverb/chorus buses followed on November 1 (driver
+default modes Hall 2/Chorus 3, stand-in algorithms, CC91/93 + zone sends).
+Still open for the timbre: the factory-ROM presets (owner-supplied ROM dump)
+and any measured comparison (needs an EMU8000 capture).

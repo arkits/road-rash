@@ -347,10 +347,16 @@ struct Stereo {
     std::vector<float> l, r;
 };
 // Note-on at 0 (velocity 127), note-off after `on` frames, total `frames`.
+// `dry` first zeroes CC91/CC93 so the voice rules are checked without the
+// effects buses (the channel's power-on reverb depth is 40).
 Stereo play(const rr::Sf1Bank& bank, uint8_t key, size_t on, size_t frames, bool drum = false,
-            const std::vector<std::array<uint8_t, 3>>& setup = {}) {
+            const std::vector<std::array<uint8_t, 3>>& setup = {}, bool dry = true) {
     rr::Sf1Synth synth(drum ? nullptr : &bank, drum ? &bank : nullptr, nullptr);
     const uint8_t ch = drum ? 9 : 0;
+    if (dry) {
+        synth.event(uint8_t(0xB0 | ch), 91, 0);
+        synth.event(uint8_t(0xB0 | ch), 93, 0);
+    }
     for (const auto& e : setup) synth.event(uint8_t(e[0] | ch), e[1], e[2]);
     synth.event(uint8_t(0x90 | ch), key, 127);
     Stereo s;
@@ -673,6 +679,49 @@ int main(int argc, char** argv) {
                                    {{0xB0, 101, 0}, {0xB0, 100, 0}, {0xB0, 6, 12}, {0xE0, 0x7f, 0x7f}});
             const double base = freq(play(*bank, 60, kSec, kSec).l, 2205, 22050);
             check(near(freq(bend.l, 2205, 22050) / base, 2.0, 0.02), "pitch bend uses the RPN 0 range");
+        }
+        // Effects buses: CC91/CC93 (+20% at 127) plus the zone sends 15/16
+        // feed a shared reverb and chorus. Algorithms are stand-ins; these
+        // checks pin the send rules and tail behaviour, not a timbre.
+        {
+            const size_t on = kSec / 2, total = 3 * kSec;
+            const auto bank = one_zone_bank({{37, 127}, {54, 1}});
+            const Stereo dry = play(*bank, 60, on, total);
+            check(rms(dry.l, on + 2205, total) == 0.0 && rms(dry.r, on + 2205, total) == 0.0,
+                  "no sends: the tail is exact silence");
+            auto tail = [&](const Stereo& s, size_t a, size_t b) { return rms(s.l, a, b) + rms(s.r, a, b); };
+            const Stereo wet = play(*bank, 60, on, total, false, {{0xB0, 91, 127}});
+            const double early = tail(wet, on + 4410, on + 8820), late = tail(wet, on + 33075, on + 37485);
+            check(early > 1e-4 && late > 0.0 && early / late > 10.0, "CC91 reverb tail rings and decays");
+            const Stereo half = play(*bank, 60, on, total, false, {{0xB0, 91, 64}});
+            check(near(tail(half, on + 4410, on + 8820) / early, 64.0 / 127.0, 0.01),
+                  "reverb send is linear in CC91");
+            const auto zone_send = one_zone_bank({{37, 127}, {54, 1}, {16, 51}}); // 51/256 -> 199 per mille
+            check(near(tail(play(*zone_send, 60, on, total), on + 4410, on + 8820) / early, 199.0 / 200.0,
+                       0.01),
+                  "zone reverb send 16 adds like CC91");
+            const Stereo deflt = play(*bank, 60, on, total, false, {}, false);
+            const Stereo forty = play(*bank, 60, on, total, false, {{0xB0, 91, 40}, {0xB0, 93, 0}}, false);
+            check(tail(deflt, on + 4410, on + 8820) > 0.0 && deflt.l == forty.l && deflt.r == forty.r,
+                  "power-on reverb depth is 40");
+            const Stereo cho = play(*bank, 60, on, total, false, {{0xB0, 93, 127}});
+            double diff = 0;
+            for (size_t i = 2205; i < on; ++i) diff += std::fabs(cho.l[i] - dry.l[i]);
+            const double held = rms(cho.l, 2205, on);
+            check(diff > 0.0 && tail(cho, on + 4410, total) < 1e-6 * held,
+                  "chorus alters the held note and leaves no long tail");
+            rr::Sf1Synth synth(bank.get(), nullptr, nullptr);
+            std::vector<float> l(total, 0.0f), r(total, 0.0f);
+            synth.event(0xB0, 91, 127);
+            synth.event(0x90, 60, 127);
+            synth.render(l.data(), r.data(), on);
+            synth.event(0x80, 60, 0);
+            synth.render(l.data(), r.data(), kSec);
+            check(synth.active_voices() == 0 && synth.busy(), "reverb tail keeps the synth busy");
+            synth.reset();
+            std::fill(l.begin(), l.end(), 0.0f);
+            synth.render(l.data(), r.data(), kSec);
+            check(!synth.busy() && rms(l, 0, kSec) == 0.0, "reset clears the effect tails");
         }
     }
     // Factory presets (research: music.md "The disc banks are not a complete

@@ -1,5 +1,31 @@
 # Verification log (all sessions September 28, 2026)
 
+## Reverb and chorus buses in the race-music renderer (November 1, 2026)
+
+- Scope: native component and render tests of stand-in effects. No EMU8000
+  oracle exists, so nothing here is a measured match.
+- Build `build-sbk-timbre` (Debug): build PASS; `ctest` 134/134 PASS. First
+  failing run (before the test change): `music` failed six dry voice-rule
+  checks (loop gate, release level/silence, unset release, hard pan),
+  because the power-on reverb depth 40 now adds a tail. The engine was
+  right; those checks now zero CC91/93 first, and the new effect checks
+  cover the default depth itself.
+- `music-test ../cdrom/ROADRASH`: 57 synthetic SF1 checks pass (7 new for
+  the effects) plus the corpus checks (eleven songs parse, the AWE songs and
+  Napa render, the factory-note audit, the live Napa stream over thirty
+  seconds, stop silences).
+- Scratch corpus dump (not committed): SBKGRNG1..5 mono peaks
+  19575/21236/17096/15235/19402, zero clipped samples. CC91/93 census of the
+  disc songs (scratch Python): every SBKGRNG/GRUNGE song sets both per
+  channel (reverb 10–100, chorus 0–70); KLOWN sets neither.
+- `make format-check` on the changed files PASS;
+  `python3 tools/portability_check.py` 0 problems.
+- `python3 tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-ded4d33de53143f3861486ddb32a1c75`,
+  hardware not run). Nothing was played on a device or by ear.
+- Not run: sanitizers, fuzzers (parser unchanged), emscripten,
+  Linux/Windows.
+
 ## SBK generator semantics in the race-music renderer (October 31, 2026, night)
 
 - Scope: native component and render tests of a spec-derived synthesizer.

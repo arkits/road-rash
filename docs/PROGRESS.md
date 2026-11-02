@@ -47,11 +47,41 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 | Disc import | ISO/folder reader, SHA-256 verification of 341 files, first-run picker/progress UI | `src/importer.cpp`, `src/import_ui.cpp` |
 | Android data packaging | Normal APK excludes game data; guarded developer assets are opt-in | `android/app/build.gradle` |
 | Audio decoding/mixing | All 72 effects and 14 RRA tracks decode; queued stereo mixer, resampling, pause and device reopening | `src/wav.cpp`, `src/mixer.cpp` |
-| Race sounds and soundtrack | Original effect slots, event codes at ported trigger points, engines with Doppler/pan/rpm, volume curve; RRA soundtrack cycling in menus; race MIDI (`RaceMusicPlayer`, SBK generator semantics through `Sf1Synth`, October 31), sirens (slots 30/31) and car engines (slots 4/6) play; exact AWE/MIDI timbre unmeasured (no EMU8000 oracle), effects sends and factory ROM open | `src/sound.cpp` |
+| Race sounds and soundtrack | Original effect slots, event codes at ported trigger points, engines with Doppler/pan/rpm, volume curve; RRA soundtrack cycling in menus; race MIDI (`RaceMusicPlayer`, SBK generator semantics through `Sf1Synth`, October 31; reverb/chorus buses November 1), sirens (slots 30/31) and car engines (slots 4/6) play; exact AWE/MIDI timbre unmeasured (no EMU8000 oracle; effects algorithms are stand-ins), factory ROM open | `src/sound.cpp` |
 | Video | AVI scan, Cinepak and IMA: all 59 videos match FFmpeg RGB/audio; native playback via `--video`; frontend selection and hardware A/V sync open | `src/avi.cpp`, `src/cinepak.cpp`, `src/video_player.cpp` |
 | Flat polygon raster | Normalization matches 2,048 original calls; full flat path matches 64 indexed fixtures; scene integration open | `src/raster.cpp`, `src/polygon.cpp` |
 
 ## Timeline
+
+### November 1, 2026: reverb and chorus buses in the race-music renderer
+
+- `src/race_music.cpp`/`.hpp`: `Sf1Synth` now feeds two shared effects
+  buses. Each voice's send is the zone send (gens 15/16) plus the SF2
+  default modulators CC91/CC93 (+20% at 127), recomputed at every control
+  point. Channels power on with reverb depth 40 and chorus 0 (the GS
+  defaults; only KLOWN sends no CC91/93, so only KLOWN depends on this).
+  Reset-all-controllers keeps both depths (RP-015).
+- Effect modes: the game sends AWEMAN32 no effect-mode message
+  (`0x00434500`/`0x00433cf0` only open, load, free and close), so the
+  driver defaults apply: reverb "Hall 2" and chorus "Chorus 3". The
+  EMU8000 runs those as undocumented microcode. The port uses stand-ins
+  sized to the mode names: a Freeverb-tuned Schroeder/Moorer hall (8 damped
+  combs + 4 allpasses per side, scaled to the output rate, ~2.3 s RT60)
+  and a single-tap chorus (23 ms, ±3 ms triangle at 0.4 Hz, 10% feedback,
+  opposite phase per side).
+- The offline render now runs until the reverb tail falls below −96 dB
+  (`Sf1Synth::busy`). The live player's loop and stop paths are unchanged;
+  `reset()` clears the tails.
+- Tests: 7 new synthetic checks (exact dry tail with zero sends, the
+  reverb tail rings and decays, the send is linear in CC91, zone send 16
+  adds like CC91, power-on depth 40, chorus alters the held note without a
+  long tail, busy/reset). The dry voice-rule checks zero CC91/93 first. The
+  corpus renders still pass; SBKGRNG1..5 mono peaks 15–21k, unclipped.
+- Remaining: the effect algorithms, the mode defaults on AWEMAN32 (taken
+  from the AWE driver, not observed on Win95) and the wet levels are
+  unmeasured. Factory-ROM presets still need an owner-supplied ROM dump;
+  an EMU8000 capture (real AWE32 or an emulator with that ROM) is the only
+  route to a measured timbre.
 
 ### October 31, 2026 (night): SBK generator semantics in the race-music renderer
 
@@ -96,8 +126,8 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
   stages, filter cut and env sweep, vibrato, tremolo, pan, exclusive class,
   CC7 and the bend range. The corpus renders still pass.
 - Remaining: the timbre is spec-derived, not measured (Wine has no
-  EMU8000). Reverb/chorus sends (gens 15/16, CC91/93) are parsed but not
-  rendered (no effects engine). The factory-ROM presets still use the
+  EMU8000). Reverb/chorus sends (gens 15/16, CC91/93) were parsed but not
+  rendered (superseded November 1: effects buses added). The factory-ROM presets still use the
   synthesized stand-ins (an owner-supplied ROM dump is needed). The SF2.01
   velocity-to-Fc default modulator is left out, as SF2.04 does. TiMidity
   quirks (drum keynote retune, root −60 correction, mod-env sustain tune

@@ -613,6 +613,7 @@ struct Sf1Synth::Voice {
     double time = 0.0, mod_phase = 0.0, vib_phase = 0.0;
     double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
     float gl = 0, gr = 0, dgl = 0, dgr = 0;
+    float reverb = 0, chorus = 0; // send fractions
     size_t control_left = 0;
 
     double vol_amp() const {
@@ -694,8 +695,122 @@ struct Sf1Synth::Voice {
     }
 };
 
+// Shared effects buses. The game sends AWEMAN32 no effect-mode message
+// (0x00434500/0x00433cf0 only open, load, free and close), so the driver's
+// default modes apply: reverb "Hall 2" and chorus "Chorus 3" (the AWE driver
+// defaults; reading reference only). The EMU8000 runs these as undocumented
+// DSP microcode, so the algorithms here are plain stand-ins sized to those
+// mode names: a Schroeder/Moorer hall (8 damped combs + 4 allpasses per side,
+// ~2.3 s RT60) and a single-tap chorus (23 ms delay, +-3 ms triangle sweep at
+// 0.4 Hz, 10% feedback). Unmeasured; see REVERSE_ENGINEERING.md.
+struct Sf1Synth::Effects {
+    struct Comb {
+        std::vector<float> buf;
+        size_t i = 0;
+        float store = 0.0f;
+        float run(float in, float feedback, float damp) {
+            const float out = buf[i];
+            store = out * (1.0f - damp) + store * damp;
+            buf[i] = in + store * feedback;
+            if (++i == buf.size()) i = 0;
+            return out;
+        }
+    };
+    struct Allpass {
+        std::vector<float> buf;
+        size_t i = 0;
+        float run(float in) {
+            const float b = buf[i];
+            buf[i] = in + b * 0.5f;
+            if (++i == buf.size()) i = 0;
+            return b - in;
+        }
+    };
+    struct Chorus {
+        std::vector<float> buf;
+        size_t w = 0;
+    };
+    static constexpr float kReverbFeedback = 0.91f, kReverbDamp = 0.35f, kReverbInput = 0.015f;
+    static constexpr double kChorusDelay = 0.023, kChorusDepth = 0.003, kChorusHz = 0.4;
+    static constexpr float kChorusFeedback = 0.1f;
+    Comb comb[2][8];
+    Allpass allpass[2][4];
+    Chorus chorus[2];
+    double rate, chorus_phase = 0.0;
+    size_t quiet_frames = 0; // frames since the last nonzero send input
+    float level = 0.0f;      // peak wet output of the last render call
+
+    explicit Effects(double r) : rate(r) {
+        // Freeverb's public-domain 44.1 kHz tunings, scaled to the output rate.
+        constexpr int kComb[8] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
+        constexpr int kAllpass[4] = {556, 441, 341, 225};
+        constexpr int kSpread = 23;
+        const double scale = rate / 44100.0;
+        for (int side = 0; side < 2; ++side) {
+            for (int k = 0; k < 8; ++k)
+                comb[side][k].buf.assign(size_t(std::max(1L, lrint((kComb[k] + side * kSpread) * scale))),
+                                         0.0f);
+            for (int k = 0; k < 4; ++k)
+                allpass[side][k].buf.assign(
+                    size_t(std::max(1L, lrint((kAllpass[k] + side * kSpread) * scale))), 0.0f);
+            chorus[side].buf.assign(size_t((kChorusDelay + kChorusDepth) * rate) + 4, 0.0f);
+        }
+        quiet_frames = size_t(rate * 60);
+    }
+    void clear() {
+        for (auto& side : comb)
+            for (Comb& c : side) std::fill(c.buf.begin(), c.buf.end(), 0.0f), c.store = 0.0f;
+        for (auto& side : allpass)
+            for (Allpass& a : side) std::fill(a.buf.begin(), a.buf.end(), 0.0f);
+        for (Chorus& c : chorus) std::fill(c.buf.begin(), c.buf.end(), 0.0f);
+        chorus_phase = 0.0;
+        quiet_frames = size_t(rate * 60);
+        level = 0.0f;
+    }
+    // A tail is live while sends arrived within the last 0.2 s (longer than
+    // any comb or chorus delay) or the wet output is above -96 dB.
+    bool busy() const { return quiet_frames < size_t(rate * 0.2) || level > 1.5e-5f; }
+    void process(const std::vector<float>* send, float* left, float* right, size_t frames) {
+        float peak = 0.0f;
+        for (size_t i = 0; i < frames; ++i) {
+            const float rl = send[0][i], rr = send[1][i], cl = send[2][i], cr = send[3][i];
+            quiet_frames = (rl != 0.0f || rr != 0.0f || cl != 0.0f || cr != 0.0f) ? 0 : quiet_frames + 1;
+            float out[2] = {0.0f, 0.0f};
+            const float rin = (rl + rr) * kReverbInput;
+            for (int side = 0; side < 2; ++side) {
+                float acc = 0.0f;
+                for (Comb& c : comb[side]) acc += c.run(rin, kReverbFeedback, kReverbDamp);
+                for (Allpass& a : allpass[side]) acc = a.run(acc);
+                out[side] = acc;
+            }
+            // Chorus: the two sides sweep in opposite LFO phase.
+            const float cin[2] = {cl, cr};
+            for (int side = 0; side < 2; ++side) {
+                Chorus& c = chorus[side];
+                const double delay =
+                    (kChorusDelay + kChorusDepth * triangle(chorus_phase + 0.5 * side)) * rate;
+                double rpos = double(c.w) - delay;
+                const double n = double(c.buf.size());
+                while (rpos < 0.0) rpos += n;
+                const size_t r0 = size_t(rpos) % c.buf.size(), r1 = (r0 + 1) % c.buf.size();
+                const float frac = float(rpos - std::floor(rpos));
+                const float tap = c.buf[r0] * (1.0f - frac) + c.buf[r1] * frac;
+                c.buf[c.w] = cin[side] + tap * kChorusFeedback;
+                if (++c.w == c.buf.size()) c.w = 0;
+                out[side] += tap;
+            }
+            chorus_phase += kChorusHz / rate;
+            if (chorus_phase >= 1.0) chorus_phase -= 1.0;
+            left[i] += out[0];
+            right[i] += out[1];
+            peak = std::max({peak, out[0], -out[0], out[1], -out[1]});
+        }
+        level = peak;
+    }
+};
+
 Sf1Synth::Sf1Synth(const Sf1Bank* melodic, const Sf1Bank* drums, const Sf1Bank* factory, double rate)
-    : melodic_(melodic), drums_(drums), factory_(factory), rate_(rate) {
+    : melodic_(melodic), drums_(drums), factory_(factory), rate_(rate), fx_(std::make_unique<Effects>(rate)) {
     voices_.reserve(kMaxVoices);
 }
 
@@ -704,10 +819,15 @@ Sf1Synth::~Sf1Synth() = default;
 void Sf1Synth::reset() {
     voices_.clear();
     for (Channel& c : channels_) c = Channel{};
+    fx_->clear();
 }
 
 size_t Sf1Synth::active_voices() const {
     return voices_.size();
+}
+
+bool Sf1Synth::busy() const {
+    return !voices_.empty() || fx_->busy();
 }
 
 void Sf1Synth::event(uint8_t status, uint8_t data0, uint8_t data1) {
@@ -749,6 +869,12 @@ void Sf1Synth::controller(uint8_t ch, uint8_t cc, uint8_t value) {
     case 11:
         c.expression = value;
         break;
+    case 91:
+        c.reverb = value;
+        break;
+    case 93:
+        c.chorus = value;
+        break;
     case 98:
     case 99: // NRPN select deselects the RPN
         c.rpn_msb = c.rpn_lsb = 127;
@@ -774,7 +900,7 @@ void Sf1Synth::controller(uint8_t ch, uint8_t cc, uint8_t value) {
         for (Voice& v : voices_)
             if (v.channel == ch) v.release();
         break;
-    default: // bank select, reverb/chorus depth: no effect without effects
+    default: // bank select: channel 10 is the kit
         break;
     }
 }
@@ -847,6 +973,7 @@ void Sf1Synth::start_voice(const Sf1Zone& z, const std::vector<int16_t>& samples
 
 void Sf1Synth::render(float* left, float* right, size_t frames) {
     const double dt = double(kControlFrames) / rate_;
+    for (std::vector<float>& b : send_) b.assign(frames, 0.0f);
     for (Voice& v : voices_) {
         const Sf1Zone& z = *v.zone;
         size_t i = 0;
@@ -871,6 +998,10 @@ void Sf1Synth::render(float* left, float* right, size_t frames) {
                 const double theta = (pan + 500.0) / 1000.0 * kPi / 2.0;
                 v.dgl = (float(amp * cos_series(theta)) - v.gl) / float(kControlFrames);
                 v.dgr = (float(amp * sin_series(theta)) - v.gr) / float(kControlFrames);
+                // SF2 default modulators CC91/CC93: +200 (20%) at full scale,
+                // added to the zone's reverb/chorus send.
+                v.reverb = float(std::clamp(z.reverb_send + 200.0 * c.reverb / 127.0, 0.0, 1000.0) / 1000.0);
+                v.chorus = float(std::clamp(z.chorus_send + 200.0 * c.chorus / 127.0, 0.0, 1000.0) / 1000.0);
                 if (z.filter_on) {
                     const double fc_cents =
                         z.filter_fc + v.mod_level * z.mod_env_to_fc + mod_lfo * z.mod_lfo_to_fc;
@@ -911,8 +1042,13 @@ void Sf1Synth::render(float* left, float* right, size_t frames) {
                 }
                 v.gl += v.dgl;
                 v.gr += v.dgr;
-                left[i + k] += float(s) * v.gl;
-                right[i + k] += float(s) * v.gr;
+                const float l = float(s) * v.gl, r = float(s) * v.gr;
+                left[i + k] += l;
+                right[i + k] += r;
+                send_[0][i + k] += l * v.reverb;
+                send_[1][i + k] += r * v.reverb;
+                send_[2][i + k] += l * v.chorus;
+                send_[3][i + k] += r * v.chorus;
                 v.pos += v.step;
             }
             i += n;
@@ -921,6 +1057,7 @@ void Sf1Synth::render(float* left, float* right, size_t frames) {
     }
     voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [](const Voice& v) { return v.done; }),
                   voices_.end());
+    fx_->process(send_, left, right, frames);
 }
 
 namespace {
@@ -960,7 +1097,7 @@ void render_song(const MidsSong& song, const Sf1Bank& melodic, const Sf1Bank& dr
         if (at > left.size()) run(at - left.size());
         synth.event(e.status, e.data0, e.data1);
     }
-    for (size_t tail = 0; synth.active_voices() && tail < kMaxTail && left.size() < kMaxFrames; tail += 1024)
+    for (size_t tail = 0; synth.busy() && tail < kMaxTail && left.size() < kMaxFrames; tail += 1024)
         run(1024);
     if (!synth.started_any()) return; // nothing sounded (unmapped notes only)
     mono.resize(left.size());

@@ -72,7 +72,7 @@ that produced the git-ignored acceptance goldens other sessions already pin.
 1. **AWE/EMU8000 timbre.** *Update (October 31, night):* the SF1 generator
    semantics below are now implemented. See
    [sbk-timbre-20261031](sbk-timbre-20261031.md). The result is spec-derived
-   and unmeasured; reverb/chorus and the factory ROM remain open. Original
+   and unmeasured. Reverb/chorus stand-in buses followed November 1; the factory ROM remains open. Original
    note: `src/race_music.cpp` applies only attenuation,
    pitch and a 5 ms release. The banks use vol/mod envelopes, initialFc/Q,
    mod/vib LFOs, pan, reverb/chorus sends and exclusive classes (igen census

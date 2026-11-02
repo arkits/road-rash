@@ -52,8 +52,7 @@ Baseline: `003ec9b`. Build directory: `build-sbk-timbre` (Debug).
 
 ## Remaining
 
-- Reverb/chorus (zone sends 15/16, CC91/93): parsed, not rendered. An
-  EMU8000 effects model would be guesswork without a capture.
+- Reverb/chorus: done November 1 as stand-in buses (see below).
 - Factory-ROM presets (SBKGRNG1 program 18, KLOWN): still the synthesized
   stand-ins; needs an owner-supplied ROM dump.
 - No measured comparison is possible without real AWE32 hardware or an
@@ -62,3 +61,19 @@ Baseline: `003ec9b`. Build directory: `build-sbk-timbre` (Debug).
 ## Live processes / resources
 
 None held after the gates. The Android gate used the shared Gradle daemon.
+
+## Follow-up: reverb and chorus (November 1, 2026)
+
+Baseline `aa9cb6d`. Changed `src/race_music.cpp`/`.hpp` and
+`tests/music_test.cpp`; docs as in PROGRESS.md "November 1, 2026".
+
+- The game sends no AWEMAN32 effect-mode message, so the driver defaults
+  (Hall 2, Chorus 3) apply. The algorithms are stand-ins: a Freeverb-tuned
+  hall (~2.3 s RT60) and a 23 ms single-tap chorus. Freeverb's tunings are
+  public domain; nothing was vendored.
+- Send = zone gen 15/16 + 200·CC/127 per mille. Power-on CC91 40, CC93 0.
+- Gates: ctest 134/134, format-check, portability 0, Android debug PASS
+  (`analysis/agent-gates/android-debug-ded4d33de53143f3861486ddb32a1c75`,
+  hardware not run).
+- Still open: the factory ROM (owner dump) and any measured comparison.
+- No processes or resources held.

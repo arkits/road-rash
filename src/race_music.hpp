@@ -71,7 +71,7 @@ struct Sf1Zone {
     uint8_t sample_modes = 0;                   // 54: 1 loop, 3 loop until release, else one-shot
     uint32_t sample_rate = 44100;               // SBK headers carry no rate (TiMidity: 44100)
     int16_t pan = 0;                            // -500 (left) .. 500 (right), 0.1% units
-    int16_t chorus_send = 0, reverb_send = 0;   // 0.1% units; no effects engine
+    int16_t chorus_send = 0, reverb_send = 0;   // effects sends (15/16), 0.1% units
     Sf1Envelope vol_env, mod_env;
     float mod_lfo_delay = 0.001f, mod_lfo_hz = 8.176f;
     float vib_lfo_delay = 0.001f, vib_lfo_hz = 8.176f;
@@ -118,8 +118,10 @@ size_t count_factory_notes(const MidsSong& song, const Sf1Bank& melodic, const S
 // live player: SF2 volume/modulation envelopes, mod/vib LFOs, resonant
 // low-pass filter, pan, exclusive classes, sample loops, and the SF2 default
 // modulators (velocity, CC7/CC11 volume, CC10 pan, pitch bend with RPN 0
-// range, CC1 vibrato). No EMU8000 timbre oracle exists (Wine has none), so
-// none of this is a measured match. Reverb/chorus sends are parsed only.
+// range, CC1 vibrato, CC91/CC93 effects sends). Two shared effects buses
+// follow the AWE driver's default modes (reverb "Hall 2", chorus "Chorus 3")
+// with spec-level stand-in algorithms. No EMU8000 timbre oracle exists (Wine
+// has none), so none of this is a measured match.
 class Sf1Synth {
   public:
     static constexpr size_t kMaxVoices = 32; // EMU8000 oscillator count
@@ -132,12 +134,16 @@ class Sf1Synth {
     // Adds `frames` of output into the two channel buffers (not cleared).
     void render(float* left, float* right, size_t frames);
     size_t active_voices() const;
+    // Voices sounding or effect tails still above -96 dB.
+    bool busy() const;
     bool started_any() const { return started_any_; }
 
   private:
     struct Voice;
+    struct Effects;
     struct Channel {
         uint8_t program = 0, volume = 100, expression = 127, pan = 64, mod = 0;
+        uint8_t reverb = 40, chorus = 0; // CC91/CC93 (GS power-on depths)
         uint16_t bend = 8192;
         int bend_range = 200; // cents (RPN 0)
         uint8_t rpn_msb = 127, rpn_lsb = 127;
@@ -150,6 +156,8 @@ class Sf1Synth {
     double rate_;
     Channel channels_[16];
     std::vector<Voice> voices_;
+    std::unique_ptr<Effects> fx_;
+    std::vector<float> send_[4]; // reverb L/R, chorus L/R inputs for one render call
     uint64_t serial_ = 0;
     bool started_any_ = false;
 };
