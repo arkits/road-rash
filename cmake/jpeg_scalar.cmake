@@ -24,9 +24,18 @@ foreach(var CMAKE_TOOLCHAIN_FILE CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TA
     endif()
 endforeach()
 if(MSVC)
-    set(RR_JPEG_LIBRARY "${RR_JPEG_BINARY}/$<CONFIG>/jpeg-static.lib")
+    set(RR_JPEG_NAME jpeg-static.lib)
 else()
-    set(RR_JPEG_LIBRARY "${RR_JPEG_BINARY}/libjpeg.a")
+    set(RR_JPEG_NAME libjpeg.a)
+endif()
+# The sub-build inherits the generator; multi-config ones (the Windows presets'
+# Ninja Multi-Config) put the library in a per-config directory.
+# IMPORTED_LOCATION takes no generator expressions, so list each config.
+get_property(RR_JPEG_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(RR_JPEG_MULTI_CONFIG)
+    set(RR_JPEG_LIBRARY "${RR_JPEG_BINARY}/$<CONFIG>/${RR_JPEG_NAME}")
+else()
+    set(RR_JPEG_LIBRARY "${RR_JPEG_BINARY}/${RR_JPEG_NAME}")
 endif()
 file(MAKE_DIRECTORY "${RR_JPEG_SOURCE}/src" "${RR_JPEG_BINARY}")
 ExternalProject_Add(rr-jpeg-build
@@ -39,6 +48,15 @@ ExternalProject_Add(rr-jpeg-build
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${RR_JPEG_LIBRARY}")
 add_library(rr-jpeg STATIC IMPORTED GLOBAL)
-set_target_properties(rr-jpeg PROPERTIES IMPORTED_NO_SYSTEM TRUE IMPORTED_LOCATION "${RR_JPEG_LIBRARY}"
+set_target_properties(rr-jpeg PROPERTIES IMPORTED_NO_SYSTEM TRUE
     INTERFACE_INCLUDE_DIRECTORIES "${RR_JPEG_SOURCE}/src;${RR_JPEG_BINARY}")
+if(RR_JPEG_MULTI_CONFIG)
+    foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
+        string(TOUPPER "${config}" config_upper)
+        set_target_properties(rr-jpeg PROPERTIES
+            IMPORTED_LOCATION_${config_upper} "${RR_JPEG_BINARY}/${config}/${RR_JPEG_NAME}")
+    endforeach()
+else()
+    set_target_properties(rr-jpeg PROPERTIES IMPORTED_LOCATION "${RR_JPEG_LIBRARY}")
+endif()
 add_dependencies(rr-jpeg rr-jpeg-build)

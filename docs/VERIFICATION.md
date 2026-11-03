@@ -1,5 +1,51 @@
 # Verification log (all sessions September 28, 2026)
 
+## CI: multi-config pinned libraries and touch-control fixture (November 2, 2026)
+
+GitHub Actions had failed since `278dd5e`: every Windows job (Windows, Determinism
+matrix, Cross-play) stopped at `ninja: error: FindFirstFileExA(jpeg-scalar/build/$<CONFIG>)`,
+and Deploy browser game failed `tests/web_recovery.cjs` with `matchMedia is not
+defined` after `a7e1f57` added the on-screen touch controls.
+
+- `cmake/jpeg_scalar.cmake`: `IMPORTED_LOCATION` takes no generator expressions.
+  Multi-config generators (the Windows presets' Ninja Multi-Config) now get one
+  `IMPORTED_LOCATION_<CONFIG>` per configuration; single-config builds keep the
+  flat path.
+- `cmake/freetype.cmake`: the Release subdirectory is chosen by
+  `GENERATOR_IS_MULTI_CONFIG`, not `MSVC`. The old rule linked a missing
+  `freetype/build/libfreetype.a` under any non-MSVC multi-config generator.
+- `tests/web_recovery.cjs`: the VM sandbox provides `matchMedia` and
+  `document.body.classList.toggle`.
+
+Checks on macOS ARM64: `node tests/web_recovery.cjs` passes all six groups.
+`cmake -G Xcode` (multi-config) builds `rr-determinism` in Release, links
+`jpeg-scalar/build/Release/libjpeg.a` and `freetype/build/Release/libfreetype.a`,
+and `--synthetic` runs. The single-config Debug build and `ctest` pass.
+No Windows host was available locally; the Windows jobs on the pushed commit are the check
+for MSVC and clang-cl.
+
+## Joystick codes in the Configure Input table (November 2, 2026)
+
+- Scope: native component tests against decompiled flow and EXE tables. No
+  original capture with a joystick; no physical pad exercised by hand.
+- Evidence: decompiled `0044f800.c`, `0044f880.c`, `0044fa00.c`,
+  `0044fa50.c`, `0044fa80.c`, `0040f6d0.c`, `0040f7a0.c`, `0040fc70.c`,
+  `0040e760.c`, `0044f7c0.c`, `0040ad30.c`, `0040ad10.c`, `00434660.c`;
+  EXE bytes `0x00476c00` (row bit + edge flag, 8-byte stride) and
+  `0x00476ca0` (hat angles 0/9000/18000/27000).
+- `input-test`: capture codes for stick, pedal, hat, single and multiple
+  buttons; race bits and analog values from the joystick defaults table;
+  brake row's wide edge; keys reset analog in VK order.
+- `race-test`: full analog deflection equals the digital bike state; half
+  stick steers less; a throttle cut lowers speed.
+- `settings-test`: legacy `0028` loads as Return; joystick defaults survive
+  a round trip with the marker.
+- `frontend-test`: held arming button ignored; button 3 binds swing with its
+  label; stick left fills stick right; Lean takes two joystick codes and
+  ignores keys; keyboard first half ignores the pad; armed capture is modal
+  and Android Back cancels.
+- Build `build-agent-keylabels` (Debug): see the gate line below.
+
 ## Configure Input rows, key codes and Turn/Lean pairs (November 1, 2026)
 
 - Scope: native component tests against EXE tables and decompiled flow. No

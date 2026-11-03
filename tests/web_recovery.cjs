@@ -32,9 +32,10 @@ async function fixture(options = {}) {
     const sandbox = {console:{log(){},warn(){}}, File, Uint8Array, DataView, Set, Map, Error, DOMException,
         crypto:webcrypto, performance, setTimeout:fn=>setTimeout(fn,0), setInterval:()=>0, clearInterval(){},
         URL, URLSearchParams, AbortController, history:{replaceState(){}},
+        matchMedia:()=>({matches:false,addEventListener(){}}),
         FontFace:class {async load(){return this;}},
         document:{getElementById:element,querySelector:element,querySelectorAll:()=>[],
-            fonts:{add(){}},body:{classList:{add(){}}},addEventListener:(name,fn)=>{events[name]=fn;}},
+            fonts:{add(){}},body:{classList:{add(){},toggle(){}}},addEventListener:(name,fn)=>{events[name]=fn;}},
         navigator:{storage:{getDirectory:async()=>{
             storageTries++;
             if(options.opfsBlocked || (options.transient && storageTries===1)) throw Object.assign(new Error('blocked'),{name:options.transient?'UnknownError':'SecurityError'});

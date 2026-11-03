@@ -26,10 +26,18 @@ foreach(var CMAKE_TOOLCHAIN_FILE CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TA
     endif()
 endforeach()
 # Always Release: FreeType's Debug build adds a "d" postfix and enables its tracing.
+# The sub-build inherits the generator; multi-config ones (the Windows presets'
+# Ninja Multi-Config) put the library in Release/.
 if(MSVC)
-    set(RR_FREETYPE_LIBRARY "${RR_FREETYPE_BINARY}/Release/freetype.lib")
+    set(RR_FREETYPE_NAME freetype.lib)
 else()
-    set(RR_FREETYPE_LIBRARY "${RR_FREETYPE_BINARY}/libfreetype.a")
+    set(RR_FREETYPE_NAME libfreetype.a)
+endif()
+get_property(RR_FREETYPE_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(RR_FREETYPE_MULTI_CONFIG)
+    set(RR_FREETYPE_LIBRARY "${RR_FREETYPE_BINARY}/Release/${RR_FREETYPE_NAME}")
+else()
+    set(RR_FREETYPE_LIBRARY "${RR_FREETYPE_BINARY}/${RR_FREETYPE_NAME}")
 endif()
 file(MAKE_DIRECTORY "${RR_FREETYPE_SOURCE}/include" "${RR_FREETYPE_BINARY}/include")
 ExternalProject_Add(rr-freetype-build
