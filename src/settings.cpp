@@ -70,6 +70,8 @@ Settings parse_settings(const std::string& text) {
     Settings s = default_settings();
     std::istringstream in(text);
     std::string line;
+    size_t controls_chars = 0;   // 44 or 22 once a controls table was read
+    bool original_codes = false; // controls_codes=original: no legacy migration
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const size_t eq = line.find('=');
@@ -97,10 +99,8 @@ Settings parse_settings(const std::string& text) {
             if (parse_int(v, 0, 2, x)) s.mini_dash = x;
         } else if (k == "controls") {
             // 44 hex chars (full u16 per action, high byte first); legacy 22-char
-            // files carry the low byte only. Malformed input ignored. Unknown codes
-            // fall back to that action's keyboard default only: high byte 0 with a
-            // low byte outside the joystick set means nothing pressable (plan 18
-            // Task 7). Zero stays unbound.
+            // files carry the low byte only. Malformed input ignored; zero stays
+            // unbound. Files without controls_codes=original are migrated below.
             auto hex = [](char c) {
                 return c >= '0' && c <= '9'   ? c - '0'
                        : c >= 'a' && c <= 'f' ? c - 'a' + 10
@@ -129,23 +129,12 @@ Settings parse_settings(const std::string& text) {
                 }
             }
             if (ok) {
-                static constexpr uint8_t kJoy[] = {0x00, 0x01, 0x02, 0x25, 0x26, 0x27, 0x28};
-                const auto known_joy = [&](uint8_t b) {
-                    for (uint8_t j : kJoy)
-                        if (j == b) return true;
-                    return false;
-                };
-                // Before November 1, 2026 native capture stored the SDL scancode in
-                // the low byte (4-char form); convert those to the original code.
-                const auto kb = default_keyboard_controls();
-                for (size_t i = 0; i < 11; ++i) {
-                    if (t[i] == 0 || (t[i] >> 8) != 0 || known_joy(uint8_t(t[i]))) continue;
-                    const uint8_t code = v.size() == 44 ? original_key_code(t[i]) : 0;
-                    t[i] = code ? uint16_t(code << 8) : kb[i];
-                }
                 s.controls = t;
                 s.custom_controls = true;
+                controls_chars = v.size();
             }
+        } else if (k == "controls_codes") {
+            original_codes = v == "original";
         } else if (k == "music_group") {
             if (parse_int(v, 0, 31, x)) s.music_group = x;
         } else if (k == "music_track") {
@@ -239,6 +228,20 @@ Settings parse_settings(const std::string& text) {
             if (v.size() == 6) s.net_room = v;
         }
     }
+    if (controls_chars && !original_codes) {
+        // Before November 1, 2026 native capture stored the SDL scancode in the
+        // low byte; such files never hold joystick codes (capture was keyboard
+        // only) or the controls_codes marker. Convert each low-byte entry to its
+        // original keyboard code; one without a code (or any 22-char entry)
+        // falls back to that action's keyboard default.
+        const auto kb = default_keyboard_controls();
+        for (size_t i = 0; i < 11; ++i) {
+            uint16_t& c = s.controls[i];
+            if (c == 0 || (c >> 8) != 0) continue;
+            const uint8_t code = controls_chars == 44 ? original_key_code(c) : 0;
+            c = code ? uint16_t(code << 8) : kb[i];
+        }
+    }
     return s;
 }
 
@@ -255,6 +258,9 @@ std::string format_settings(const Settings& s) {
         for (uint16_t c : s.controls)
             o << "0123456789abcdef"[(c >> 12) & 15] << "0123456789abcdef"[(c >> 8) & 15]
               << "0123456789abcdef"[(c >> 4) & 15] << "0123456789abcdef"[c & 15];
+        // Marks the original code space (keyboard code in the high byte, joystick
+        // code in the low byte), so low bytes are never read as scancodes.
+        o << "\ncontrols_codes=original";
     }
     o << "\nmusic_track=" << s.music_track << "\nmaster_volume=" << s.master_volume
       << "\nmusic_volume=" << s.music_volume << "\neffects_volume=" << s.effects_volume

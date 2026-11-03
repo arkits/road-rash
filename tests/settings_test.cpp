@@ -117,6 +117,16 @@ int main() {
         std::string legacy = "controls=";
         for (int i = 0; i < 11; ++i) legacy += i == 0 ? "001a" : "0000";
         check(rr::parse_settings(legacy).controls[0] == 0x7700, "legacy W capture becomes 'w'");
+        // Scancodes 0x25-0x28 (8, 9, 0, Return) overlap joystick codes; without
+        // the controls_codes marker they are keys.
+        std::string ret = "controls=";
+        for (int i = 0; i < 11; ++i) ret += i == 1 ? "0028" : "0000";
+        check(rr::parse_settings(ret).controls[1] == 0x0d00, "legacy Return capture stays a key");
+        rr::Settings joy;
+        joy.controls = rr::default_joystick_controls();
+        joy.custom_controls = true;
+        check(rr::parse_settings(rr::format_settings(joy)).controls == joy.controls,
+              "joystick codes survive with the marker");
         auto t = rr::default_keyboard_controls();
         rr::apply_rebind(t, 0, 0x9300); // accelerate takes Left: Turn loses both halves
         check(t[0] == 0x9300 && t[2] == 0 && t[9] == 0, "pair cleared with its left half");

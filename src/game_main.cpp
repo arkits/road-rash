@@ -877,7 +877,10 @@ int run_game(const rr::Assets& assets, SDL_Window* window, SDL_Renderer* rendere
         }
         apply_screen_saver(false, menu_input);
         in.gamepad = pad_last;
-        if (!lifecycle.state.paused()) fe.update(in, SDL_GetTicks());
+        if (!lifecycle.state.paused()) {
+            fe.update(in, SDL_GetTicks());
+            if (pad) fe.poll_capture_joystick(rr::joystick_capture_code(rr::joystick_state(pad.get())));
+        }
         music.update();
         mixer.pause(lifecycle.state.paused() || audio_lifecycle.state.paused());
         if (lifecycle.state.background()) {

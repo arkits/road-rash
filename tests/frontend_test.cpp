@@ -1081,6 +1081,42 @@ int main(int argc, char** argv) {
     check(settings.controls[1] == default_keyboard_controls()[1], "Escape cancels with no change");
     key("down");
     check(fe.focus() == 2, "Escape disarms the capture");
+    // Joystick capture (0x0040f6d0 polls): the button held when arming is not
+    // captured; a new code is. Stick left on Turn fills stick right (0x28 -> 0x26).
+    if (focus_item(5)) key("select"); // arm swing
+    fe.poll_capture_joystick(1);      // still held from arming
+    fe.poll_capture_joystick(1);
+    check(settings.controls[5] == default_keyboard_controls()[5], "held arming button not captured");
+    fe.poll_capture_joystick(0);
+    fe.poll_capture_joystick(3);
+    check(settings.controls[5] == 0x0003, "joystick button 3 binds swing");
+    check(fe.caption_text(fe.items()[18]) ==
+              "\x1a" + fe.string_for_test(281) + " " + fe.string_for_test(284) + " 3 ",
+          "joystick button label");
+    if (focus_item(2)) key("select"); // Turn
+    fe.poll_capture_joystick(0);
+    fe.poll_capture_joystick(0x28);
+    check(settings.controls[2] == 0x0028 && settings.controls[9] == 0x0026, "stick left fills stick right");
+    if (focus_item(3)) key("select"); // Lean: joystick first, then keys are ignored
+    fe.poll_capture_joystick(0);
+    fe.poll_capture_joystick(4);
+    press_key(SDL_SCANCODE_K);
+    fe.poll_capture_joystick(4);
+    check(settings.controls[3] == default_keyboard_controls()[3], "Lean waits for a second joystick code");
+    fe.poll_capture_joystick(0x21);
+    check(settings.controls[3] == 0x0004 && settings.controls[10] == 0x0021, "Lean binds button 4 / hat up");
+    if (focus_item(3)) key("select"); // keyboard first: the pad is ignored
+    fe.poll_capture_joystick(0);
+    press_key(SDL_SCANCODE_K);
+    fe.poll_capture_joystick(2);
+    press_key(SDL_SCANCODE_I);
+    check(settings.controls[3] == 0x6b00 && settings.controls[10] == 0x6900,
+          "keyboard first half takes keys");
+    if (focus_item(0)) key("select");
+    key("down"); // armed capture is modal
+    press_key(SDL_SCANCODE_AC_BACK);
+    check(fe.focus() == 0 && settings.controls[0] == default_keyboard_controls()[0],
+          "Back cancels and navigation waits while armed");
     // In-race toggles: F10 cycles MiniDash 0->1->2->0; menu `/` toggles the opponent list (0x423777 sete).
     settings.mini_dash = 0;
     check(fe.cycle_mini_dash() == 1 && fe.cycle_mini_dash() == 2 && fe.cycle_mini_dash() == 0,

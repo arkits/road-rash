@@ -46,6 +46,45 @@ uint32_t controls_from(const PlayerInput&, int dead_zone = steer_dead_zone);
 // keyboard path reads only the high byte. Without a custom table the native
 // default scancode sets below apply (current game feel).
 uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, const bool* down);
+// Analog drive values the joystick path writes (0x0044fa00): DAT_004b7e78
+// throttle cut (+0x260 * deflection / 0x7fff; 0x0040ad10 throttles to
+// +0x260 minus it) and DAT_004b7e7c steer (deflection / 800; 0x0040ad30 steers
+// to it - 0x20 for left, to it for right). Both persist between polls; a bound
+// key or button resets them to full (0x0044fa50). Read only while the table
+// holds a joystick code (DAT_00476c98, 0x0044f7c0).
+struct JoystickAnalog {
+    int32_t throttle = 0, steer = 0;
+};
+// Custom-table rows also run 0x0044fa50 for each pressed key when `analog` is
+// given, in Windows VK order (the last write wins); `top_throttle` is the
+// player bike's +0x260 at poll time.
+uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, const bool* down, JoystickAnalog& analog,
+                            int32_t top_throttle);
+// JOYINFOEX fields the original reads (joyGetPosEx device 0): axes 0..0xffff
+// with 0x7fff centre, button bit n-1 for button n, POV in hundredths of a degree
+// (0xffff centred).
+struct JoystickState {
+    uint32_t x = 0x7fff, y = 0x7fff, r = 0x7fff;
+    uint32_t buttons = 0;
+    uint32_t pov = 0xffff;
+};
+// Native mapping of an SDL gamepad onto that state: left stick X/Y, the
+// triggers as the rudder R axis (left pedal pushes R up, right pedal down),
+// buttons 1-10 in XInput/winmm order (south, east, west, north, left and
+// right shoulder, back, start, left and right stick) then guide, misc,
+// paddles and touchpad, and the d-pad as the POV hat. Null pad: idle.
+JoystickState joystick_state(SDL_Gamepad*);
+// 0x0040f6d0 / 0x0040f7a0: the code a capture poll reads (0 none): stick X
+// left 0x28 / right 0x26, Y up 0x25 / down 0x27 past 15000/45000, then R
+// 0x2a / 0x29, the hat 0x21-0x24 at exactly 0/9000/18000/27000, then a single
+// pressed button 1..0x20 (two or more buttons read 0).
+uint8_t joystick_capture_code(const JoystickState&);
+// 0x0044f7c0: true when any row holds a joystick code (DAT_00476c98).
+bool joystick_bound(const std::array<uint16_t, 11>& codes);
+// 0x0044f880 for rows 0..10 in order: the control bits of the rows whose
+// joystick code is active, writing `analog` as the original does.
+uint32_t joystick_control_bits(const std::array<uint16_t, 11>& codes, const JoystickState&,
+                               JoystickAnalog& analog, int32_t top_throttle);
 // Original keyboard codes: 0x0040e5f0 picks the VK -> code table (US 0x00465fe8)
 // that 0x0040fb50/0x0044fa80 read. ASCII for letters, digits and punctuation,
 // 0x80-0x86 Clear/PgUp/PgDn/End/Home/Ins/Del (each with its keypad twin), 0x90-0x92

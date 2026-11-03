@@ -41,6 +41,18 @@ Changed `src/input.cpp`/`.hpp`, `src/settings.cpp`/`.hpp`,
   joystick half of `0x0040fc70` is not ported; legacy captures of SDL
   scancodes `0x25`–`0x28` read as joystick codes.
 
+## Follow-up (November 2): joystick codes
+
+Changed `src/input.cpp`/`.hpp`, `src/race.cpp`/`.hpp`,
+`src/race_screen.cpp`/`.hpp`, `src/frontend.cpp`/`.hpp`, `src/settings.cpp`,
+`src/game_main.cpp`, `tests/input_test.cpp`, `tests/race_test.cpp`,
+`tests/settings_test.cpp`, `tests/frontend_test.cpp`; docs as in PROGRESS
+"joystick codes in the Configure Input table". The three remaining items
+above are resolved. Still open: no original joystick capture (mapping and
+analog feel unmeasured), table rows 11–18 not ported, no physical pad tried.
+`cmake/jpeg_scalar.cmake` and `tests/web_recovery.cjs` were modified by
+another session and left alone.
+
 ## Live processes / resources
 
 None held. Build directory `build-agent-keylabels` is this session's.

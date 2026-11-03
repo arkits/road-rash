@@ -1174,24 +1174,51 @@ std::string Frontend::key_name(int action) const {
 bool Frontend::capture_key(int scancode) {
     // Plan 18 Task 7 press-a-key. Escape cancels with no change (0x0040e760).
     // Keys the original's VK table does not map produce no code and are ignored,
-    // as 0x0040fb50 keeps waiting. Turn and Lean (rows 2/3, 0x0040fc70) take two
-    // distinct keys for rows 2/3 and 9/10; Left arrow first fills Right itself.
-    // Returns true while the capture stays armed.
-    if (scancode == SDL_SCANCODE_ESCAPE) {
+    // as 0x0040fb50 keeps waiting. Returns true while the capture stays armed.
+    // Android Back cancels too (native: a touch-only device has no Escape).
+    if (scancode == SDL_SCANCODE_ESCAPE || scancode == SDL_SCANCODE_AC_BACK) {
         capture_first_ = 0;
         return false;
     }
     const uint8_t code = original_key_code(scancode);
     if (code == 0) return true;
+    // 0x0040fc70: after a joystick first half only joystick codes count.
+    if (capture_first_ & 0xff) return true;
+    return capture_code(uint16_t(code << 8));
+}
+
+bool Frontend::capture_joystick(uint8_t code) {
+    // 0x0040e760 polls the joystick (0x0040f6d0) whenever no key is down. The
+    // port takes a code only when the poll changes to it, so the pad button
+    // that armed the row (0x0040fc60 waits for nothing) is not captured.
+    const int prev = capture_joy_prev_;
+    capture_joy_prev_ = code;
+    if (prev < 0 || code == 0 || code == prev) return true;
+    if (capture_first_ & 0xff00) return true; // keyboard first half: keys only
+    return capture_code(code);
+}
+
+bool Frontend::capture_code(uint16_t code) {
+    // Turn and Lean (rows 2/3, 0x0040fc70) take two distinct codes for rows
+    // 2/3 and 9/10 from the device of the first; Left arrow fills Right, and
+    // joystick hat left 0x24, stick left 0x28 and left pedal 0x29 fill
+    // 0x22, 0x26 and 0x2a.
     const int row = capture_action_;
     uint16_t second = 0;
     if (row == 2 || row == 3) {
-        if (capture_first_ == 0 && code != 0x93) {
-            capture_first_ = code;
-            return true;
+        if (capture_first_ == 0) {
+            static constexpr uint16_t kAuto[][2] = {
+                {0x9300, 0x9500}, {0x24, 0x22}, {0x28, 0x26}, {0x29, 0x2a}};
+            for (const auto& p : kAuto)
+                if (p[0] == code) second = p[1];
+            if (second == 0) {
+                capture_first_ = code;
+                return true;
+            }
+        } else {
+            if (capture_first_ == code) return true;
+            second = code;
         }
-        if (capture_first_ == code) return true;
-        second = capture_first_ == 0 ? uint16_t(0x9500) : uint16_t(code << 8);
     }
     if (!settings_.custom_controls) {
         // The first rebind turns the native defaults into a table, so every
@@ -1199,12 +1226,10 @@ bool Frontend::capture_key(int scancode) {
         for (int i = 0; i < 11; ++i) settings_.controls[size_t(i)] = control_code(i);
         settings_.custom_controls = true;
     }
-    if (row == 2 || row == 3) {
-        const uint8_t first = capture_first_ ? capture_first_ : code;
-        apply_pair_rebind(settings_.controls, size_t(row), uint16_t(first << 8), second);
-    } else {
-        apply_rebind(settings_.controls, size_t(row), uint16_t(code << 8));
-    }
+    if (row == 2 || row == 3)
+        apply_pair_rebind(settings_.controls, size_t(row), capture_first_ ? capture_first_ : code, second);
+    else
+        apply_rebind(settings_.controls, size_t(row), code);
     capture_first_ = 0;
     refresh_key_labels(); // 0x0040fbf0 relabels every cleared row
     return false;
@@ -1819,6 +1844,7 @@ int Frontend::run_handler(size_t index) {
         if (m.caption >= 256 && m.caption <= 264) {
             capture_action_ = m.caption - 256;
             capture_first_ = 0;
+            capture_joy_prev_ = -1;
         }
         return 0;
     case 0x0040fdf0:
@@ -2255,8 +2281,11 @@ void Frontend::update(const MenuInput& raw_in, uint64_t now_ms) {
         }
     }
     if (in.opponent_key && !editing_name_) toggle_opponent_list();
-    if (capture_action_ >= 0 && in.capture_scancode != 0) {
-        if (!capture_key(in.capture_scancode)) capture_action_ = -1; // 0x0040e6d0 disarm
+    if (capture_action_ >= 0) {
+        // The original capture loop is modal: nothing else reacts while armed.
+        // Joystick codes arrive through poll_capture_joystick.
+        if (in.capture_scancode != 0 && !capture_key(in.capture_scancode))
+            capture_action_ = -1; // 0x0040e6d0 disarm
         return;
     }
     if (focus_ < 0) return;

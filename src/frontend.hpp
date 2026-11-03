@@ -119,6 +119,12 @@ class Frontend {
     void start(); // intro video, then the Credits screen
     void update(const MenuInput&, uint64_t now_ms);
     bool poll(FrontendEvent&); // next host action
+    const Settings& settings() const { return settings_; }
+    // Once per frame with the open pad's 0x0040f6d0 code (joystick_capture_code);
+    // only an armed Configure Input row reads it.
+    void poll_capture_joystick(uint8_t code) {
+        if (capture_action_ >= 0 && !capture_joystick(code)) capture_action_ = -1;
+    }
     // Plan 33b Task 4: button names of the connected pad (default: none connected).
     void set_pad_labels(PadLabels labels) { pad_labels_ = std::move(labels); }
     void draw(RgbImage&, int scale = 1) const; // 640s x 480s; scale = 1 keeps today's output exactly
@@ -223,6 +229,10 @@ class Frontend {
     uint16_t control_code(int row) const;
     // 0x0040e760 / 0x0040fc70 press-a-key; true while the capture stays armed.
     bool capture_key(int scancode);
+    // The same capture for a 0x0040f6d0 joystick code (0: idle this poll).
+    bool capture_joystick(uint8_t code);
+    // Store a captured table code (keyboard: code << 8, joystick: code).
+    bool capture_code(uint16_t code);
     void apply_restroom_pattern();
     void set_background(const std::string& name);
     std::string background_for(int previous, int screen, int title);
@@ -265,10 +275,11 @@ class Frontend {
     Career& career_;
     Settings& settings_;
     std::string save_dir_, save_file_;
-    int capture_action_ = -1;   // plan 18 Task 7: press-a-key arming (-1 idle)
-    uint8_t capture_first_ = 0; // 0x0040fc70: Turn/Lean first key code (0 none yet)
-    bool pause_open_ = false;   // plan 18 Task 8: in-race pause menu showing
-    bool pause_return_ = false; // plan 18 Task 8: sub-screen Back returns to native_pause
+    int capture_action_ = -1;    // plan 18 Task 7: press-a-key arming (-1 idle)
+    uint16_t capture_first_ = 0; // 0x0040fc70: Turn/Lean first table code (0 none yet)
+    int capture_joy_prev_ = -1;  // last joystick poll while armed (-1: none yet)
+    bool pause_open_ = false;    // plan 18 Task 8: in-race pause menu showing
+    bool pause_return_ = false;  // plan 18 Task 8: sub-screen Back returns to native_pause
     std::deque<FrontendEvent> events_;
 
     int screen_ = 0, previous_ = 0, focus_ = -1;

@@ -474,6 +474,15 @@ class Race {
     void set_human_nitro(int seat, const NitroConfig&);
     // Rider colour remaps from the player's bike index (0x00446190).
     void set_player_bike(int bike);
+    // Joystick analog drive for the first human (0x00434660 with DAT_00476c98
+    // set): accelerate throttles to +0x260 - `throttle` (0x0040ad10, DAT_004b7e78)
+    // and steering targets `steer` - 0x20 left / `steer` right (0x0040ad30,
+    // DAT_004b7e7c). Off: the digital path. Online play stays digital.
+    void set_joystick_analog(bool active, int32_t throttle, int32_t steer) {
+        joy_active_ = active;
+        joy_throttle_ = throttle;
+        joy_steer_ = steer;
+    }
     // Plan 34: mano-a-mano rules inside the simulation (handicap 0x00442f60
     // every 0x39 ticks, applied in 0x004395e0). Off offline.
     void set_net(bool v) { net_ = v; }
@@ -883,9 +892,11 @@ class Race {
     int32_t ticks_ = 0;
     int level_ = 0;
     int last_target_ = -1;
-    bool demo_hold_ = false; // DAT_004753c8 (see set_demo_hold)
-    int32_t road_base_ = 0;  // absolute Q8 anchor (ctor param)
-    int32_t finish_q8_ = 0;  // global finish DAT_004b6e58 (Q8); 0 = route end (0x00454240/0x00406890)
+    bool demo_hold_ = false;                   // DAT_004753c8 (see set_demo_hold)
+    bool joy_active_ = false;                  // DAT_00476c98 (set_joystick_analog)
+    int32_t joy_throttle_ = 0, joy_steer_ = 0; // DAT_004b7e78 / DAT_004b7e7c
+    int32_t road_base_ = 0;                    // absolute Q8 anchor (ctor param)
+    int32_t finish_q8_ = 0; // global finish DAT_004b6e58 (Q8); 0 = route end (0x00454240/0x00406890)
     // 0x00465a10: per-level overtake eagerness, read once from the EXE; empty
     // image -> no table (the draw alone decides, as before).
     std::optional<std::array<int32_t, 5>> overtake_eagerness_;

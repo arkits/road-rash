@@ -53,6 +53,45 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 2, 2026: joystick codes in the Configure Input table
+
+- Joystick codes in a custom table now drive the race. `src/input.cpp`
+  ports `0x0044f880`: buttons 1..0x20, the hat (`0x21`–`0x24` at exactly
+  0/9000/18000/27000), stick directions `0x25`–`0x28` and pedals
+  `0x29`/`0x2a`, with the `0x00476c04` edges (0x6fff/0x8fff on rows 0, 2
+  and 9, 0x3fff/0xbffd elsewhere). `joystick_state` maps an SDL gamepad onto
+  the JOYINFOEX fields: left stick X/Y, triggers as the rudder R axis (left
+  pedal = left trigger), buttons 1–10 in XInput/winmm order, d-pad as hat.
+  This mapping is a native decision; the original saw whatever winmm
+  reported for the device.
+- The analog drive values are ported. Axis rows 0/2/9 write
+  `DAT_004b7e78`/`DAT_004b7e7c` (`0x0044fa00`); bound keys and buttons reset
+  them to full (`0x0044fa50`, in VK order for keys). While the table holds a
+  joystick code (`0x0044f7c0`), `Race::set_joystick_analog` makes accelerate
+  throttle to `+0x260` minus the cut (`0x0040ad10`) and steering target
+  steer − 0x20 / steer (`0x0040ad30`). Full deflection gives exactly the
+  digital result. Online races stay digital. With such a table the native
+  pad mapping is off, so a button does only its table action.
+- Capture takes joystick codes (`0x0040f6d0`/`0x0040f7a0`, polled once per
+  frame in the menu loop and the pause menu). Turn/Lean follow
+  `0x0040fc70`: the second half comes from the first half's device; hat
+  left, stick left and left pedal fill hat right, stick right and right
+  pedal. Native differences: a pad code counts only when the poll changes
+  to it, so the button that armed the row is not captured (the original's
+  `0x0040fc60` waits for nothing); Android Back cancels like Escape. An
+  armed row is now modal, as the original's capture loop is.
+- Saved settings carry `controls_codes=original`. Files without it predate
+  the November 1 code-space change and are migrated as SDL scancodes, so a
+  legacy 8, 9, 0 or Return capture stays a key. (A file written on November
+  1 with joystick codes and no marker is read the legacy way.)
+- Pause-menu rebinds now reach the running race; the race used to keep its
+  start-of-race copy of the table.
+- Remaining: no original capture with a joystick, so the gamepad mapping and
+  analog feel are unmeasured; table rows 11–18 (`DAT_0049e65c` 0xf/0x13) are
+  not ported; the `DAT_004c5ba3` flag set by a button poll has no known
+  reader; codes above `0x2a` (hand-edited files only) press without an
+  analog write, where the original reads an uninitialised value.
+
 ### November 1, 2026: controls key labels and Wingdings arrow keys
 
 - `src/frontend.cpp`/`.hpp`: `key_name` builds the original `0x0040e7b0`

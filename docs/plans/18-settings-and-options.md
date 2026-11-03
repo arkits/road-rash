@@ -412,6 +412,9 @@ are the original keyboard codes (US VK table `0x00465fe8`), Turn/Lean capture
 two keys (`0x0040fc70`), conflicts clear pair partners, the defaults rows run
 `0x0040fdf0`, and labels follow `0x0040e7b0` including joystick text. See
 [controls-key-labels-20261101](../agent-handoffs/controls-key-labels-20261101.md).
+November 2: table joystick codes drive the race (`0x0044f880`, with the analog
+throttle/steer values), capture takes pad codes including the paired Turn/Lean
+rules, and saved files mark the code space (`controls_codes=original`).
 
 ---
 

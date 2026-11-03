@@ -367,6 +367,74 @@ int main() {
     } else {
         check(false, SDL_GetError());
     }
+    // Joystick codes (0x0044f880 race read, 0x0040f6d0 capture, 0x0044fa00 analog).
+    {
+        rr::JoystickState idle;
+        check(rr::joystick_capture_code(idle) == 0, "idle stick captures nothing");
+        rr::JoystickState j;
+        j.x = 1000;
+        check(rr::joystick_capture_code(j) == 0x28, "stick left captures 0x28");
+        j = {};
+        j.y = 60000;
+        check(rr::joystick_capture_code(j) == 0x27, "stick down captures 0x27");
+        j = {};
+        j.r = 60000;
+        check(rr::joystick_capture_code(j) == 0x29, "left pedal captures 0x29");
+        j = {};
+        j.pov = 27000;
+        check(rr::joystick_capture_code(j) == 0x24, "hat left captures 0x24");
+        j.pov = 4500;
+        check(rr::joystick_capture_code(j) == 0, "diagonal hat captures nothing");
+        j = {};
+        j.buttons = 1u << 6;
+        check(rr::joystick_capture_code(j) == 7, "button 7 captures 7");
+        j.buttons = 3;
+        check(rr::joystick_capture_code(j) == 0, "two buttons capture nothing");
+
+        const auto joy = rr::default_joystick_controls();
+        check(rr::joystick_bound(joy) && !rr::joystick_bound(rr::default_keyboard_controls()),
+              "0x0044f7c0 joystick flag");
+        rr::JoystickAnalog a;
+        const int32_t top = 0x4000;
+        j = {};
+        j.buttons = 1; // row 5 button 1 punches
+        check(rr::joystick_control_bits(joy, j, a, top) == rr::control_punch, "button 1 punches");
+        j = {};
+        j.y = 0x3000; // row 0 stick up, inside the 0x6fff edge
+        a = {};
+        check(rr::joystick_control_bits(joy, j, a, top) == rr::control_accelerate, "stick up accelerates");
+        check(a.throttle == int32_t(int64_t(top) * 0x3000 / 0x7fff), "throttle cut from the deflection");
+        j.y = 0x7000;
+        check(rr::joystick_control_bits(joy, j, a, top) == 0, "past the 0x6fff edge: no accelerate");
+        j = {};
+        j.x = 0xa000; // row 9 stick right
+        check(rr::joystick_control_bits(joy, j, a, top) == rr::control_right, "stick right steers");
+        check(a.steer == (0xa000 - 0x7fff) / 800, "steer from the deflection");
+        j.x = 0x1000; // row 2 stick left
+        check(rr::joystick_control_bits(joy, j, a, top) == rr::control_left && a.steer == 0x1000 / 800,
+              "stick left steers");
+        // Row 1 (brake, stick down) uses the wide 0xbffd edge.
+        j = {};
+        j.y = 0xa000;
+        check(rr::joystick_control_bits(joy, j, a, top) == 0, "brake needs 0xbffd");
+        j.y = 0xc000;
+        check(rr::joystick_control_bits(joy, j, a, top) == rr::control_brake, "brake past 0xbffd");
+        // A bound key resets the analog values (0x0044fa50); the higher VK
+        // writes last, so Right (VK 0x27) beats Left (0x25) for the steer value.
+        bool down[SDL_SCANCODE_COUNT] = {};
+        down[SDL_SCANCODE_LEFT] = true;
+        down[SDL_SCANCODE_RIGHT] = true;
+        a = {7, 7};
+        const uint32_t bits = rr::bound_control_bits(rr::default_keyboard_controls(), down, a, top);
+        check(bits == (rr::control_left | rr::control_right) && a.steer == 0x6400 / 800,
+              "keys write full analog in VK order");
+        down[SDL_SCANCODE_RIGHT] = false;
+        down[SDL_SCANCODE_UP] = true;
+        a = {7, 7};
+        rr::bound_control_bits(rr::default_keyboard_controls(), down, a, top);
+        check(a.steer == 0 && a.throttle == 0, "Left and Up keys reset steer and throttle");
+        check(rr::joystick_state(nullptr).pov == 0xffff, "no pad reads idle");
+    }
     std::cout << failures << " failures\n";
     return failures ? 1 : 0;
 }

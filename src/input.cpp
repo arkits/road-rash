@@ -1,5 +1,6 @@
 #include "input.hpp"
 #include <algorithm>
+#include <bit>
 #include <cstdlib>
 
 namespace rr {
@@ -142,20 +143,259 @@ uint8_t original_key_code(int scancode) {
     return 0;
 }
 
+namespace {
+// Windows VK of a scancode, for the 0x0044fa80 scan order (numpad keys as
+// their NumLock-on VKs; left/right modifier VKs 0xa0-0xa5 not modelled).
+int scancode_vk(int sc) {
+    if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z) return 0x41 + sc - SDL_SCANCODE_A;
+    if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) return 0x31 + sc - SDL_SCANCODE_1;
+    if (sc >= SDL_SCANCODE_KP_1 && sc <= SDL_SCANCODE_KP_9) return 0x61 + sc - SDL_SCANCODE_KP_1;
+    switch (sc) {
+    case SDL_SCANCODE_0:
+        return 0x30;
+    case SDL_SCANCODE_KP_0:
+        return 0x60;
+    case SDL_SCANCODE_BACKSPACE:
+        return 0x08;
+    case SDL_SCANCODE_TAB:
+        return 0x09;
+    case SDL_SCANCODE_CLEAR:
+        return 0x0c;
+    case SDL_SCANCODE_RETURN:
+    case SDL_SCANCODE_KP_ENTER:
+        return 0x0d;
+    case SDL_SCANCODE_LSHIFT:
+    case SDL_SCANCODE_RSHIFT:
+        return 0x10;
+    case SDL_SCANCODE_LCTRL:
+    case SDL_SCANCODE_RCTRL:
+        return 0x11;
+    case SDL_SCANCODE_LALT:
+    case SDL_SCANCODE_RALT:
+        return 0x12;
+    case SDL_SCANCODE_ESCAPE:
+        return 0x1b;
+    case SDL_SCANCODE_SPACE:
+        return 0x20;
+    case SDL_SCANCODE_PAGEUP:
+        return 0x21;
+    case SDL_SCANCODE_PAGEDOWN:
+        return 0x22;
+    case SDL_SCANCODE_END:
+        return 0x23;
+    case SDL_SCANCODE_HOME:
+        return 0x24;
+    case SDL_SCANCODE_LEFT:
+        return 0x25;
+    case SDL_SCANCODE_UP:
+        return 0x26;
+    case SDL_SCANCODE_RIGHT:
+        return 0x27;
+    case SDL_SCANCODE_DOWN:
+        return 0x28;
+    case SDL_SCANCODE_INSERT:
+        return 0x2d;
+    case SDL_SCANCODE_DELETE:
+        return 0x2e;
+    case SDL_SCANCODE_KP_MULTIPLY:
+        return 0x6a;
+    case SDL_SCANCODE_KP_PLUS:
+        return 0x6b;
+    case SDL_SCANCODE_KP_MINUS:
+        return 0x6d;
+    case SDL_SCANCODE_KP_PERIOD:
+        return 0x6e;
+    case SDL_SCANCODE_KP_DIVIDE:
+        return 0x6f;
+    case SDL_SCANCODE_SEMICOLON:
+        return 0xba;
+    case SDL_SCANCODE_EQUALS:
+        return 0xbb;
+    case SDL_SCANCODE_COMMA:
+        return 0xbc;
+    case SDL_SCANCODE_MINUS:
+        return 0xbd;
+    case SDL_SCANCODE_PERIOD:
+        return 0xbe;
+    case SDL_SCANCODE_SLASH:
+        return 0xbf;
+    case SDL_SCANCODE_GRAVE:
+        return 0xc0;
+    case SDL_SCANCODE_LEFTBRACKET:
+        return 0xdb;
+    case SDL_SCANCODE_BACKSLASH:
+        return 0xdc;
+    case SDL_SCANCODE_RIGHTBRACKET:
+        return 0xdd;
+    case SDL_SCANCODE_APOSTROPHE:
+        return 0xde;
+    default:
+        return 0x100;
+    }
+}
+// 0x0044fa00: store an analog deflection for rows 0 (throttle) and 2/9 (steer).
+void set_analog(JoystickAnalog& a, int row, int32_t v, int32_t top_throttle) {
+    if (v < 0) v = 0;
+    if (row == 0)
+        a.throttle = int32_t(int64_t(top_throttle) * v / 0x7fff);
+    else if (row == 2 || row == 9)
+        a.steer = v / 800;
+}
+// 0x0044fa50: a key or button on rows 0/2/9 means full deflection.
+void full_analog(JoystickAnalog& a, int row, int32_t top_throttle) {
+    if (row == 0 || row == 2) set_analog(a, row, 0, top_throttle);
+    if (row == 9) set_analog(a, row, 0x6400, top_throttle);
+}
+} // namespace
+
+uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, const bool* down, JoystickAnalog& analog,
+                            int32_t top_throttle) {
+    // 0x0044fa80 walks VKs 0..255 and, per pressed VK, rows 0..n: order the
+    // pressed (VK, row) pairs the same way so the last analog write matches.
+    struct Hit {
+        int vk, row;
+    };
+    std::array<Hit, 11 * 2> hits{};
+    size_t n = 0;
+    uint32_t bits = 0;
+    for (int i = 0; i < 11; ++i) {
+        const uint8_t key = uint8_t(codes[size_t(i)] >> 8);
+        if (key == 0) continue;
+        for (int sc : original_key_scancodes(key))
+            if (pressed(down, sc)) {
+                bits |= kActionBits[i];
+                hits[n++] = {scancode_vk(sc), i};
+            }
+    }
+    std::stable_sort(hits.begin(), hits.begin() + std::ptrdiff_t(n),
+                     [](const Hit& a, const Hit& b) { return a.vk < b.vk; });
+    for (size_t k = 0; k < n; ++k) full_analog(analog, hits[k].row, top_throttle);
+    return bits;
+}
+
+JoystickState joystick_state(SDL_Gamepad* pad) {
+    JoystickState s;
+    if (!pad) return s;
+    const auto axis = [&](SDL_GamepadAxis a) { return int(SDL_GetGamepadAxis(pad, a)); };
+    s.x = uint32_t(std::clamp(axis(SDL_GAMEPAD_AXIS_LEFTX) + 32768, 0, 0xffff));
+    s.y = uint32_t(std::clamp(axis(SDL_GAMEPAD_AXIS_LEFTY) + 32768, 0, 0xffff));
+    s.r = uint32_t(std::clamp(
+        0x7fff + axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER) - axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER), 0, 0xffff));
+    static constexpr SDL_GamepadButton kButtons[] = {
+        SDL_GAMEPAD_BUTTON_SOUTH,         SDL_GAMEPAD_BUTTON_EAST,          SDL_GAMEPAD_BUTTON_WEST,
+        SDL_GAMEPAD_BUTTON_NORTH,         SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+        SDL_GAMEPAD_BUTTON_BACK,          SDL_GAMEPAD_BUTTON_START,         SDL_GAMEPAD_BUTTON_LEFT_STICK,
+        SDL_GAMEPAD_BUTTON_RIGHT_STICK,   SDL_GAMEPAD_BUTTON_GUIDE,         SDL_GAMEPAD_BUTTON_MISC1,
+        SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,  SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,
+        SDL_GAMEPAD_BUTTON_LEFT_PADDLE2,  SDL_GAMEPAD_BUTTON_TOUCHPAD,
+    };
+    for (size_t i = 0; i < std::size(kButtons); ++i)
+        if (SDL_GetGamepadButton(pad, kButtons[i])) s.buttons |= 1u << i;
+    const bool up = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+    const bool down = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    const bool left = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+    const bool right = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+    const int dx = int(right) - int(left), dy = int(down) - int(up);
+    if (dx || dy) {
+        // Clockwise from up in hundredths of a degree, as winmm reports a hat.
+        static constexpr uint32_t kPov[3][3] = {
+            {31500, 0, 4500}, {27000, 0xffff, 9000}, {22500, 18000, 13500}};
+        s.pov = kPov[dy + 1][dx + 1];
+    }
+    return s;
+}
+
+uint8_t joystick_capture_code(const JoystickState& s) {
+    // DAT_00481e70 capability bits 2 (R axis) and 0x10 (POV): a mapped pad has both.
+    if (s.x < 15000) return 0x28;
+    if (s.x > 45000) return 0x26;
+    if (s.y < 15000) return 0x25;
+    if (s.y > 45000) return 0x27;
+    if (s.r < 15000) return 0x2a;
+    if (s.r > 45000) return 0x29;
+    if (s.pov == 9000) return 0x22;
+    if (s.pov == 0) return 0x21;
+    if (s.pov == 18000) return 0x23;
+    if (s.pov == 27000) return 0x24;
+    // 0x0040f7a0: exactly one button bit names its button.
+    if (s.buttons == 0 || (s.buttons & (s.buttons - 1)) != 0) return 0;
+    return uint8_t(std::countr_zero(s.buttons) + 1);
+}
+
+bool joystick_bound(const std::array<uint16_t, 11>& codes) {
+    for (uint16_t c : codes)
+        if (c & 0xff) return true;
+    return false;
+}
+
+uint32_t joystick_control_bits(const std::array<uint16_t, 11>& codes, const JoystickState& s,
+                               JoystickAnalog& analog, int32_t top_throttle) {
+    // 0x00476c04: rows 1 and 3..8 and 10 use the wide 0x3fff/0xbffd edges;
+    // rows 0, 2 and 9 the 0x6fff/0x8fff edges and write the analog value.
+    static constexpr bool kAnalogRow[11] = {true,  false, true,  false, false, false,
+                                            false, false, false, true,  false};
+    static constexpr uint32_t kPov[4] = {0, 9000, 18000, 27000}; // 0x00476ca0
+    uint32_t bits = 0;
+    for (int i = 0; i < 11; ++i) {
+        const uint8_t code = uint8_t(codes[size_t(i)]);
+        if (code == 0) continue;
+        bool on = false;
+        if (code < 0x21) {
+            on = (s.buttons >> (code - 1)) & 1;
+            if (on) full_analog(analog, i, top_throttle);
+        } else if (code < 0x25) {
+            on = s.pov == kPov[code - 0x21];
+            if (on) full_analog(analog, i, top_throttle);
+        } else {
+            const bool a = kAnalogRow[i];
+            const uint32_t lo = a ? 0x6fff : 0x3fff, hi = a ? 0x8fff : 0xbffd;
+            int32_t v = 0;
+            bool have = true;
+            switch (code) {
+            case 0x25:
+                on = s.y <= lo, v = int32_t(s.y);
+                break;
+            case 0x26:
+                on = s.x >= hi, v = int32_t(s.x) - 0x7fff;
+                break;
+            case 0x27:
+                on = s.y >= hi, v = int32_t(s.y) - 0x7fff;
+                break;
+            case 0x28:
+                on = s.x <= lo, v = int32_t(s.x);
+                break;
+            case 0x29:
+                on = s.r >= hi, v = 0xffff - int32_t(s.r);
+                break;
+            case 0x2a:
+                on = s.r <= lo, v = 0x7fff - int32_t(s.r);
+                break;
+            default:
+                // The original reads an uninitialised deflection for codes
+                // above 0x2a and always reports them pressed; the port keeps
+                // the press and skips the analog write.
+                on = true, have = false;
+                break;
+            }
+            if (on && a && have) set_analog(analog, i, v, top_throttle);
+        }
+        if (on) bits |= kActionBits[i];
+    }
+    return bits;
+}
+
 uint32_t bound_control_bits(const std::array<uint16_t, 11>& codes, bool custom, const bool* down) {
     uint32_t bits = 0;
     for (int i = 0; i < 11; ++i) {
-        if (kActionBits[i] == 0) continue;
-        if (!custom) {
+        if (kActionBits[i] == 0 || custom) continue;
+        {
             if (pressed(down, kDefaultKeys[i][0]) || pressed(down, kDefaultKeys[i][1]))
                 bits |= kActionBits[i];
-        } else {
-            // 0x0044fa80: the pressed key's code against each row's keyboard byte.
-            const uint8_t key = uint8_t(codes[size_t(i)] >> 8);
-            if (key == 0) continue;
-            for (int sc : original_key_scancodes(key))
-                if (pressed(down, sc)) bits |= kActionBits[i];
         }
+    }
+    if (custom) {
+        JoystickAnalog unused;
+        bits = bound_control_bits(codes, down, unused, 0);
     }
     return bits;
 }

@@ -36,6 +36,7 @@ class RaceScreen {
     RaceEnd result_;
     LifecycleWatch lifecycle_;
     TouchInput touch_;
+    JoystickAnalog joy_analog_; // DAT_004b7e78 / DAT_004b7e7c, kept between polls
     TickClock clock_;
     SpriteCache sprites_;
     CourseCanvas canvas_;

@@ -3504,8 +3504,14 @@ void Race::rider_think(Rider& r, uint32_t controls, bool player) {
             // steer (0x0040ad30). Boost multiplies the throttle force
             // (0x0040adb0); nitro_throttle records the post-boost force.
             nitro_think(r, controls, player);
+            const bool joy = player && joy_active_ && !net_ && &r == &riders_[size_t(human_rider(0))];
             if ((b.u8(0xc0) & 0x10) == 0) {
-                if (controls & control_accelerate) drive_mode(b, 1);
+                if (controls & control_accelerate) {
+                    if (joy)
+                        throttle(b, b.i32(0x260) - joy_throttle_); // 0x0040ad10
+                    else
+                        drive_mode(b, 1);
+                }
                 if (controls & control_brake)
                     drive_mode(b, 2);
                 else if (!(controls & control_accelerate))
@@ -3521,7 +3527,10 @@ void Race::rider_think(Rider& r, uint32_t controls, bool player) {
             }
             const int32_t lean = (controls & control_lean_up) ? 1 : ((controls & control_lean_down) ? -1 : 0);
             const int mode = (controls & control_left) ? 1 : ((controls & control_right) ? 2 : 0);
-            steer_input(b, tables_, mode, lean);
+            if (joy && mode != 0)
+                steer(b, tables_, (mode == 1 ? joy_steer_ - 0x20 : joy_steer_) * 65536, lean);
+            else
+                steer_input(b, tables_, mode, lean);
         }
     } else {
         // Crashed: slide to a stop, wait one second, remount at the nearest lane.

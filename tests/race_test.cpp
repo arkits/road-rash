@@ -108,6 +108,37 @@ int main() {
     }
     check(l.lateral() < s.lateral(), "steering left decreases lateral position");
 
+    // Joystick analog (0x0040ad30 / 0x0040ad10): full deflection (steer 0,
+    // throttle cut 0) matches the digital path; a half stick steers less and a
+    // throttle cut holds speed down.
+    {
+        rr::Race dig(straight(2000), straight(2000), t, spec, 90),
+            full(straight(2000), straight(2000), t, spec, 90),
+            half(straight(2000), straight(2000), t, spec, 90);
+        full.set_joystick_analog(true, 0, 0);
+        half.set_joystick_analog(true, 0, 16);
+        for (int i = 0; i < 300; ++i) {
+            dig.step(rr::control_accelerate);
+            full.step(rr::control_accelerate);
+            half.step(rr::control_accelerate);
+        }
+        for (int i = 0; i < 90; ++i) {
+            dig.step(rr::control_accelerate | rr::control_left);
+            full.step(rr::control_accelerate | rr::control_left);
+            half.step(rr::control_accelerate | rr::control_left);
+        }
+        check(full.bike().m == dig.bike().m, "full analog deflection equals digital");
+        check(half.lateral() > dig.lateral(), "half stick steers less");
+        rr::Race cut(straight(2000), straight(2000), t, spec, 90),
+            open(straight(2000), straight(2000), t, spec, 90);
+        cut.set_joystick_analog(true, cut.bike().i32(0x260) / 2, 0);
+        for (int i = 0; i < 300; ++i) {
+            cut.step(rr::control_accelerate);
+            open.step(rr::control_accelerate);
+        }
+        check(cut.bike().i32(0xec) < open.bike().i32(0xec), "throttle cut slows the bike");
+    }
+
     // A curve pushes the rider toward its outside (0x004395e0 adds -bend*distance to lateral velocity).
     rr::Race curve(straight(2000, 20), straight(2000, 20), t, spec, 90),
         flat(straight(2000), straight(2000), t, spec, 90);

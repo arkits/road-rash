@@ -425,11 +425,18 @@ bool RaceScreen::iterate(uint64_t now_ns) {
         }
     }
     if (!running_) return false;
+    // The pause menu's Configure Input edits the live table (the original has
+    // one global 0x00465fb8), so a rebind applies on resume.
+    const bool live_table = opt_.menu && !opt_.online;
+    const auto& key_codes = live_table ? opt_.menu->settings().controls : opt_.key_codes;
+    const bool custom_keys = live_table ? opt_.menu->settings().custom_controls : opt_.custom_keys;
+    if (live_table && opt_.menu->pause_open() && pad_)
+        opt_.menu->poll_capture_joystick(joystick_capture_code(joystick_state(pad_.get())));
     PlayerInput in = touch_.current();
     const bool* keys = SDL_GetKeyboardState(nullptr);
     // Plan 18 Task 7: custom tables are honored via bound_control_bits below;
     // defaults use the hardcoded keys (touch_/gamepad layer through `in` either way).
-    if (!opt_.custom_keys) {
+    if (!custom_keys) {
         in.accelerate |= keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
         in.brake |= keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
         in.left |= keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A];
@@ -439,7 +446,11 @@ bool RaceScreen::iterate(uint64_t now_ns) {
         in.backhand |= keys[SDL_SCANCODE_C];
     }
     const int zone = opt_.stick_deadzone * 32768 / 100;
-    if (pad_) {
+    // 0x0044f7c0: a custom table holding a joystick code drives the pad itself
+    // (0x0044f880); the native pad mapping below then stays off so a button
+    // does not also do its native action.
+    const bool joy_table = custom_keys && joystick_bound(key_codes);
+    if (pad_ && !joy_table) {
         const auto south = SDL_GetGamepadButton(pad_.get(), SDL_GAMEPAD_BUTTON_SOUTH);
         const auto west = SDL_GetGamepadButton(pad_.get(), SDL_GAMEPAD_BUTTON_WEST);
         const auto north = SDL_GetGamepadButton(pad_.get(), SDL_GAMEPAD_BUTTON_NORTH);
@@ -454,7 +465,17 @@ bool RaceScreen::iterate(uint64_t now_ns) {
         in.backhand |= SDL_GetGamepadButton(pad_.get(), SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     }
     uint32_t controls = opt_.auto_drive ? autopilot(g_.race(), g_.traffic()) : controls_from(in, zone);
-    if (!opt_.auto_drive && opt_.custom_keys) controls |= bound_control_bits(opt_.key_codes, true, keys);
+    if (!opt_.auto_drive && custom_keys) {
+        // 0x0044f800: keyboard rows, then the joystick rows, each writing the
+        // analog drive values with the player's +0x260 at poll time.
+        const auto& race = g_.race();
+        const int human = race.humans() > 0 ? race.human_rider(0) : -1;
+        const int32_t top = human >= 0 ? race.riders()[size_t(human)].bike.i32(0x260) : 0;
+        controls |= bound_control_bits(key_codes, keys, joy_analog_, top);
+        if (joy_table)
+            controls |= joystick_control_bits(key_codes, joystick_state(pad_.get()), joy_analog_, top);
+    }
+    g_.race().set_joystick_analog(!opt_.auto_drive && joy_table, joy_analog_.throttle, joy_analog_.steer);
 
     if (lifecycle_.state.take_clock_reset()) {
         reset_clock(now);

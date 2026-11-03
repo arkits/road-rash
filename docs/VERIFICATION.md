@@ -44,7 +44,13 @@ for MSVC and clang-cl.
   label; stick left fills stick right; Lean takes two joystick codes and
   ignores keys; keyboard first half ignores the pad; armed capture is modal
   and Android Back cancels.
-- Build `build-agent-keylabels` (Debug): see the gate line below.
+- Build `build-agent-keylabels` (Debug): build PASS; `ctest` 134/134 PASS
+  (macOS, disc present); clang-format PASS; `tools/portability_check.py` 0
+  problems; `tools/agent_gate.py android-debug` PASS (receipt
+  `analysis/agent-gates/android-debug-64f578be41584b1696b5e41004bc80c3`,
+  hardware not run).
+- Not run: sanitizers, oracle sim (sim unchanged when no joystick code is
+  bound: the analog path is gated off), web build, Linux/Windows, a pad by hand.
 
 ## Configure Input rows, key codes and Turn/Lean pairs (November 1, 2026)
 
