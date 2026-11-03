@@ -4081,3 +4081,25 @@ messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
   121/121 passed.
 - Not run: Android/Linux/Windows font paths, debug-font fallback on screen,
   the loading screen inside a live `rr-game` run (it shows for under a second).
+
+## 2026-11-02 — rr-netd non-blocking health responder
+
+- Build `build-agent-netd-health-20261102` (Debug, macOS ARM64).
+- `ctest -R "server_|net_hostile_ws"`: 5/5 passed (`server_health`,
+  `server_room`, `server_hostile`, `server_sealer`, `net_hostile_ws`).
+  `server_health` passed 5 runs in a row. It checks that a poll with 8
+  stalled clients returns in under 50 ms, that a request split across polls
+  gets 200, that other paths get 404 without building the body, that
+  stalled clients are closed exactly at the 2 s deadline, and the 32-socket cap.
+- Live daemon: `rr-netd` on 127.0.0.1:18980/18981 with 8 stalled health
+  connections held open answered three `GET /net/health` requests in
+  2.4–2.6 ms each (200, body ends with the revision) and closed all 8
+  stalled sockets after the deadline. The old responder would have spent
+  up to 1.6 s per loop pass on those 8.
+- Full suite (`cmake --build` + `ctest`): 134/135. The one failure was
+  `portability-lint` (A6: unguarded POSIX headers in the new test). After
+  moving them behind `#ifndef _WIN32`, `portability-lint` and
+  `server_health` pass; the other 133 were not rerun for that header-only
+  test change.
+- Not run: Linux Docker image build (the Linux `MSG_NOSIGNAL` branch has not
+  been compiled here), production deploy.

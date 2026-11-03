@@ -7,6 +7,7 @@
 //   RR_NETD_LOG_DIR     race logs, kept 7 days (default ./race-logs)
 //   RR_NETD_MAX_ROOMS   room cap (default 500)
 //   RR_NETD_MIN_HUMANS  humans needed to start (default 2)
+#include "health_http.hpp"
 #include "room.hpp"
 
 #include "net/ws_channel.hpp"
@@ -15,10 +16,7 @@
 #include <rtc/websocketserver.hpp>
 
 #include <arpa/inet.h>
-#include <fcntl.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
@@ -57,53 +55,6 @@ uint64_t wall_ms() {
 void log_line(const std::string& json) {
     std::cout << "{\"t\":" << wall_ms() << ",\"svc\":\"rr-netd\"," << json.substr(1) << '\n' << std::flush;
 }
-
-// Minimal non-blocking HTTP/1.0 responder: GET /net/health and /health only.
-class Health {
-  public:
-    Health(const std::string& bind, int port) {
-        fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (fd_ < 0) return;
-        int one = 1;
-        ::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
-        sockaddr_in a{};
-        a.sin_family = AF_INET;
-        a.sin_port = htons(uint16_t(port));
-        ::inet_pton(AF_INET, bind.c_str(), &a.sin_addr);
-        if (::bind(fd_, reinterpret_cast<sockaddr*>(&a), sizeof a) != 0 || ::listen(fd_, 16) != 0) {
-            ::close(fd_);
-            fd_ = -1;
-            return;
-        }
-        ::fcntl(fd_, F_SETFL, O_NONBLOCK);
-    }
-    ~Health() {
-        if (fd_ >= 0) ::close(fd_);
-    }
-    bool ok() const { return fd_ >= 0; }
-    void serve(const std::string& body) {
-        for (int n = 0; n < 8; ++n) {
-            const int c = ::accept(fd_, nullptr, nullptr);
-            if (c < 0) return;
-            timeval tv{0, 200000};
-            ::setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-            char buf[512];
-            const ssize_t got = ::recv(c, buf, sizeof buf - 1, 0);
-            std::string req(buf, size_t(got > 0 ? got : 0));
-            const bool health = req.rfind("GET /net/health", 0) == 0 || req.rfind("GET /health", 0) == 0;
-            const std::string payload = health ? body : "{\"error\":\"not found\"}";
-            const std::string resp =
-                std::string("HTTP/1.0 ") + (health ? "200 OK" : "404 Not Found") +
-                "\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: " +
-                std::to_string(payload.size()) + "\r\n\r\n" + payload;
-            (void)::send(c, resp.data(), resp.size(), 0);
-            ::close(c);
-        }
-    }
-
-  private:
-    int fd_ = -1;
-};
 
 void write_record(const std::filesystem::path& dir, const rr::netd::RaceRecord& r) {
     std::error_code ec;
@@ -191,7 +142,7 @@ int main() {
         std::lock_guard lock(mu);
         incoming.push_back(std::move(client));
     });
-    Health health(bind, env_int("RR_NETD_HTTP_PORT", 8081));
+    rr::netd::HealthHttp health(bind, env_int("RR_NETD_HTTP_PORT", 8081));
     log_line(std::string("{\"event\":\"start\",\"rev\":\"") + RR_GIT_REVISION + "\",\"ws_port\":" +
              std::to_string(ws.port()) + ",\"health\":" + (health.ok() ? "true" : "false") + "}");
 
@@ -208,11 +159,11 @@ int main() {
             incoming.clear();
         }
         server.step(now);
-        if (health.ok()) {
+        health.poll(now, [&] {
             std::string body = server.health_json(now);
             body.insert(body.size() - 1, std::string(",\"rev\":\"") + RR_GIT_REVISION + "\"");
-            health.serve(body);
-        }
+            return body;
+        });
         if (now >= next_prune) {
             next_prune = now + 3600 * 1000;
             prune_logs(log_dir);

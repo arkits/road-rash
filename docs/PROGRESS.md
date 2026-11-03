@@ -3046,3 +3046,22 @@ messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
   loading overlay.
 - Remaining: Android, Linux, Windows and the debug-font fallback were not
   seen on screen.
+
+## 2026-11-02 — rr-netd health responder off the blocking path
+
+- `server/health_http.{hpp,cpp}` (`rr::netd::HealthHttp`) replaces the inline
+  `Health` class in `server/main.cpp`. The old one ran on the race event loop
+  and did a blocking `recv` with a 200 ms timeout on each accepted socket, up
+  to 8 per pass, so one stalled `/net/health` client could hold input sealing
+  for 200 ms and eight for 1.6 s. Production was shielded by Nginx buffering
+  the request, but the daemon itself was not.
+- Now every socket is non-blocking. A request may arrive over several polls,
+  partial writes resume on the next pass, a client is closed 2 s after
+  accept, at most 32 sockets wait at once (extra connections are closed) and
+  requests are capped at 2 KiB. `health_json` is built only when a health
+  request needs an answer, instead of on every 2 ms loop pass.
+- Same responses as before (200 for `GET /net/health` and `GET /health`, 404
+  otherwise), plus `Connection: close`. Deploy health checks are unchanged.
+- New test `server_health` (POSIX only; not built for Windows or the web).
+- Remaining: not yet deployed to `agnee`; the next `net-deploy.yml` run
+  carries it.
