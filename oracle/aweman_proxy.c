@@ -61,8 +61,10 @@ static int g_knock_tick;
  * within 0x1000 of the player (ord.<k> address, .t type, .p position, .l
  * lateral, .s slice, .v +0x108) and the
  * player half's address, +0x108 and +0x2c: the 0x00449e90 walk order; also
- * the race-end timer DAT_004753c4 and outcome DAT_004c5d7c (4 = arrest). */
+ * the race-end timer DAT_004753c4 and outcome DAT_004c5d7c (4 = arrest).
+ * RR_ORACLE_ORDER_RANGE=<q8> widens the window (default 0x1000). */
 static int g_order;
+static int32_t g_order_range = 0x1000;
 static int g_police_probe;
 static int g_terrain_seeded;
 static int g_terrain_trace;
@@ -383,7 +385,7 @@ static void dump_sim_tick(void) {
             if (g_order && g_sim_frames > 0 && player && readable(player, 0x300)) {
                 const uint32_t type = (uint32_t)sim_field_value(node, 0xc4, 4, 0);
                 const int32_t d = (int32_t)RD32(node + 0x1c) - (int32_t)RD32(player + 0x1c);
-                if (d > -0x1000 && d < 0x1000) {
+                if (d > -g_order_range && d < g_order_range) {
                     snprintf(key, sizeof key, "ord.%d", guard);
                     rr_log(key, (long long)node);
                     snprintf(key, sizeof key, "ord.%d.t", guard);
@@ -4327,6 +4329,8 @@ static int rr_install_hooks(void) {
     if (GetEnvironmentVariableA("RR_ORACLE_HUMAN", buf, sizeof buf)) g_human = atoi(buf) != 0;
     if (GetEnvironmentVariableA("RR_ORACLE_KNOCK", buf, sizeof buf)) g_knock_tick = atoi(buf);
     if (GetEnvironmentVariableA("RR_ORACLE_ORDER", buf, sizeof buf)) g_order = atoi(buf) != 0;
+    if (GetEnvironmentVariableA("RR_ORACLE_ORDER_RANGE", buf, sizeof buf))
+        g_order_range = (int32_t)strtol(buf, 0, 0);
     if (GetEnvironmentVariableA("RR_ORACLE_PALETTE", buf, sizeof buf)) g_palette = atoi(buf) != 0;
     if (GetEnvironmentVariableA("RR_ORACLE_EXIT_FADEOUT", buf, sizeof buf))
         g_palette_exit_fadeout = atoi(buf) != 0;

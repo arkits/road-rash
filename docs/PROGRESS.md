@@ -53,6 +53,33 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 3, 2026: City pedestrian RNG parity (plan 10)
+
+- The City RNG gap at tick 955 came from one pedestrian, not the AI. A
+  crosser ~10000 Q8 ahead of the parked camera thinks every 20 ticks and
+  draws in `0x00440dd0`. Two fixes in `src/race_pedestrians.cpp`:
+  - `load_pedestrian_looks` now loads a pedestrian's category-2 resources
+    only when its slice is in the frame's drawn reach (one slice behind the
+    ring camera up to camera + 0x1e00, as for static boxes; `0x00438610` →
+    `0x00440680`). Far pedestrians stay unloaded and walk at the unloaded
+    pace 4, as measured in a new original capture.
+  - `pedestrian_road_clear` (`0x00441500`/`0x00449ce0`) skips bikes without
+    a slice and uses a car's `+0x108` motion word, which is 0 for crossing
+    cars, instead of its speed.
+- Results (`police-test`, one RNG anchor): `city-cops-parked-20261026` RNG
+  954 → **4552** (capture end), ring-window riders and cop to 4552, and the
+  native arrest on tick 4552 as the original (now asserted). Two new captures
+  `city-parked-randlog-20261102` and `city-parked-randlog2-20261102` match
+  RNG and riders on all **2400** ticks (954 at the baseline).
+- `oracle/aweman_proxy.c`: `RR_ORACLE_ORDER_RANGE` widens the per-tick order
+  window (default 0x1000 unchanged).
+- Remaining: the projected-x part of the draw test is not ported. Other
+  City levels, moving-camera City races and the other courses have no
+  captures yet. Napa field captures are unchanged (contact 4096, fight-steal
+  896, fight-steal-l5 816, steal-bunch 1399, steal-farm 3627, steal-farm-l1
+  2837, steal-vary 941, traffic-field 2279; the Oct 28 traffic captures stay
+  4381/4381). See [city-rng-20261102](agent-handoffs/city-rng-20261102.md).
+
 ### November 2, 2026: joystick codes in the Configure Input table
 
 - Joystick codes in a custom table now drive the race. `src/input.cpp`

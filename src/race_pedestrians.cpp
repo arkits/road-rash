@@ -10,8 +10,9 @@
 // Known native differences (labelled where they occur):
 // - 0x004415b0 (traffic-light phase) reads live intersection signals:
 //   phase 2 crosses without a road check, phases 0/1 wait, -1 checks;
-// - category-2 resources load at spawn, not at the first draw (0x00440680
-//   calls 0x00440b80 lazily), so +0x1e0 is set one or more ticks early;
+// - category-2 resources load after the step whose frame first reaches the
+//   pedestrian's slice (0x00440680 calls 0x00440b80 lazily on draw); the
+//   draw's on-screen x test on the projected node is not ported;
 // - the ground height +0x24 settles on the first move instead of
 //   0x00439b10 at allocation;
 // - 0x0043a610 walls are not yet applied to pedestrians (Race::walls now
@@ -206,11 +207,20 @@ void Race::load_pedestrian_looks() {
     // resources on its first drawn frame, after that tick's sim step. The
     // think gate at 0x00440eff reads the still-unloaded +0x208/+0x21c words
     // until then and passes via +0x1e0 == 0 (plan 10 napa-field-l5 measured
-    // the resulting tick-1 rand() draw). Every spawn lands inside the camera
-    // ring window, so one end-of-tick load pass models that render.
+    // the resulting tick-1 rand() draw). 0x00438610 calls a node's draw
+    // (+0xdc) only on the slices that frame draws: one behind the ring
+    // camera (front - 0x5000) up to camera + 0x1e00, the static-box reach.
+    // A pedestrian beyond it stays unloaded and keeps thinking as one
+    // (city-parked-randlog-20261102: the parked-camera crosser 10000 Q8
+    // ahead walks at the unloaded pace 4). The on-screen x test on the
+    // projected node is not ported.
     if (!pedestrians_) return;
+    const int32_t camera =
+        std::max<int32_t>(ring_ ? ring_->front_q8() - 0x5000 : int32_t(camera_position()), 0);
+    const size_t first = size_t(std::max<int32_t>((camera >> 8) - 1, 0));
     for (auto& p : pedestrians_->pool()) {
         if (!p.active || p.look) continue;
+        if (p.body.sample < first || int64_t(p.body.sample) * 256 > int64_t(camera) + 0x1e00) continue;
         const auto& road = route_of(p.body);
         p.look = pedestrians_->look(road[std::min(p.body.sample, road.size() - 1)], p.selector);
         if (p.look) { // 0x00440b80
@@ -308,6 +318,8 @@ bool Race::pedestrian_road_clear(const Pedestrian& p, int factor, int delta) con
         other_velocity = velocity;
     };
     for (const auto& r : riders_) {
+        if (!r.bike_slice_present)
+            continue; // 0x00449ce0 skips nodes without a slice (+0x2c), e.g. parked bikes
         const auto& sample = route_of(r)[r.sample];
         if (sample.dual && r.route != p.body.route) continue; // 0x00449ce0 roadway-half test
         consider(r.bike.i32(0x1c), r.bike.i32(0x28), sample.offset, r.bike.i32(0x108));
@@ -317,7 +329,7 @@ bool Race::pedestrian_road_clear(const Pedestrian& p, int factor, int delta) con
         for (const auto& car : traffic_->cars()) {
             if (!car.active || car.position < 0) continue;
             const size_t s = std::min(size_t(car.position) >> 8, road.size() - 1);
-            consider(car.position, car.lateral, road[s].offset, car.kind == 2 ? -car.speed : car.speed);
+            consider(car.position, car.lateral, road[s].offset, car.motion.i32(0x108));
         }
     }
     if (!found) return true;

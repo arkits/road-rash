@@ -604,3 +604,15 @@ This completes the requested full live-field capture. The task checkboxes
 above remain open for the other specified scenarios (level5, dedicated fights,
 steals and isolated traffic) and unmeasured police/split/mixed-actor branches.
 Do not infer all-game or all-course parity from this single captured route.
+
+
+### City pedestrian RNG (November 3)
+
+`city-cops-parked-20261026` now matches RNG, ring-window riders and the cop
+to its 4552 end, with the original arrest on 4552 asserted. Two new
+2400-tick City captures match end to end. The fixes are pedestrian rules:
+resources load only for pedestrians inside the drawn slices, and the
+road-clear scan follows `0x00449ce0` (slice-holding nodes, car `+0x108`).
+This covers City at level byte 2 (`RR_ORACLE_LEVEL=3`) with a parked player only. Moving-camera City races,
+other levels and the remaining courses still need captures. See
+[handoff](../agent-handoffs/city-rng-20261102.md).

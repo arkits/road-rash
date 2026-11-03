@@ -1,5 +1,40 @@
 # Verification log (all sessions September 28, 2026)
 
+## City pedestrian RNG parity (November 3, 2026)
+
+Owned Debug build `build-agent-city-rng-20261102` at baseline `1f02453` plus
+the change. Baseline comparison build: detached worktree
+`/Users/archit/Dev/rr/wt-baseline-cityrng-20261102` at `1f02453`.
+
+- Full build, `ctest --test-dir build-agent-city-rng-20261102 -j8`:
+  **135/135 passed**, 0 failed (474 s). `police-test` prints three
+  pre-existing fixture skips (`napa-randlog1/2-20261018`,
+  `napa-backward-ring-randlog-20261018` are not on this disk).
+- `python3 tools/agent_gate.py oracle --build-dir build-agent-city-rng-20261102`
+  (= `make verify-sim`): **passed**, receipt
+  `analysis/agent-gates/oracle-73edceeaebce42afb0dab044da569331/receipt.json`.
+- `police-test` (one RNG anchor at tick 1):
+
+| Capture | Baseline `1f02453` | Now |
+| --- | --- | --- |
+| `city-cops-parked-20261026` | RNG to 954, riders to 4551 | RNG/riders/cop to **4552**, arrest 4552 asserted |
+| `city-parked-randlog-20261102` | RNG to 954 | **2400/2400** |
+| `city-parked-randlog2-20261102` | RNG to 954 | **2400/2400** |
+| Napa parked / crashed / foot / foot2 | 4730 / 4715 / 4700 / 4700 | unchanged |
+
+  "Riders" means the riders the capture dumps each tick (those inside the
+  ring window). Parked riders outside it are covered only through the RNG.
+- `oracle-sim-test --driver=human` first divergence, baseline vs now
+  (identical on both): contact 4096, fight-steal 896, fight-steal-l5 816,
+  steal-bunch 1399, steal-farm 3627, steal-farm-l1 2837, steal-vary 941,
+  traffic-field 2279. traffic-field body/box/slice/carcrash and fight: full
+  length identical (4381 / 2581).
+- New captures (original, receipted, valid; private install
+  `prefix/drive_c/ElectronicArts/RoadRashOracle-cityrng20261102`, proxy
+  `b02fffda7725`, built from this commit's proxy before clang-format
+  whitespace only). Shared install untouched (`30f4a83e8c48`).
+- Not run: Android, sanitizers, package gates (simulation-only change).
+
 ## CI: multi-config pinned libraries and touch-control fixture (November 2, 2026)
 
 GitHub Actions had failed since `278dd5e`: every Windows job (Windows, Determinism

@@ -2512,3 +2512,50 @@ in the RE worktree; trace SHA-256
 These are original component measurements, not native replay, live gameplay,
 real-asset animation verification, normal damage or a free-running steal.
 The plan 10 Task 6 / plan 16 Task 3 full steal acceptance remains open.
+
+## City parked-camera pedestrians: draw-gated load and road-clear scan (November 3, 2026)
+
+Disc EXE SHA-256 `73d7f9744b5b1a9482b3909950cdf3fe34119fe13d023b031e9c6739a60f18a2`
+(checked against `analysis/inventory.json`). Sources: project exports
+`analysis/decompiled/{00440dd0,00440b80,00438610,00441500,0044a070,00449e60,00449ce0,004415b0,0044a020,004498c0,00440990,0043adc0,0043a190}.c`
+and two new original captures (`city-parked-randlog-20261102`,
+`city-parked-randlog2-20261102`, see SIM_SCENARIOS). No Ghidra writes.
+
+- The City RNG gap at tick 955 (`city-cops-parked-20261026`) was one missing
+  `rand()` in a pedestrian think, not AI. The per-tick stream showed a single
+  draw every 20 ticks (ticks ≡ 15 mod 20) from a type-5 crosser at sample 89,
+  ~10000 Q8 ahead of the parked camera; native skipped 955 and then fell
+  further behind. RANDLOG callers are `0x00440eff` (state 0 `rand & 1`) and
+  `0x004410ba` (state 1 `rand & 3`).
+- **Load on draw, only on drawn slices.** `0x00440b80` sets `+0x1e0` and the
+  animation words `+0x208..+0x220` from the draw callback `0x00440680`.
+  `0x00438610` invokes a node's `+0xdc` draw only for slices that frame draws,
+  and only when the projected x (`+0x50 >> 8`) lies inside the slice span. A
+  pedestrian beyond the drawn slices never loads. Its think then takes the
+  unloaded branches: state 0 → 1 sets pace 8 (`+0x208 == 0`), state 1 sets
+  pace 4 (`+0x208`, `+0x21c` and `+0x1e0` all zero). Measured with the new
+  0x3000 ORDER window: the crosser's lateral goes 153644 → 140249 on the
+  first walking run (dt 19 at pace 8), then −305/tick (dt 19) and −300/tick
+  (dt 20), the pace-4 law `dt·(pace·100 − 5·dt)`. The native loaded every
+  active pedestrian at the end of each tick and walked it at pace 8. Native
+  now loads only pedestrians whose slice lies between one slice behind the
+  ring camera (front − 0x5000) and camera + 0x1e00, the reach measured for
+  static boxes (traffic-field slice capture). The projected-x test is not
+  ported; that remains a labelled approximation.
+- **Road-clear scan (`0x00441500` → `0x0044a070` → `0x00449e60` →
+  `0x00449ce0`).** It walks the position-sorted scheduler list from the
+  pedestrian: ahead (`param_3` 0) for a negative lane, behind (2) otherwise,
+  with type mask `0x14` (bikes and cars), no range limit, and it returns the
+  first node in that lane (lane from `+0x28` minus slice `+0xcc`, divided by
+  250, as `0x0044a020`). `0x00449ce0` skips nodes without a slice (`+0x2c == 0`),
+  so parked bikes are never obstacles, and requires overlapping roadway bits
+  (`slice+0x36 & 3`). The test then compares the obstacle's `|+0x108|` (scaled
+  by `DAT_004b7e8c + 1` and the crossing factor) with the distance. `+0x108`
+  is the along-road velocity from the `0x0043adc0` motion words. A crossing
+  car (kinds 1 and 3) carries `+0x108 = 0` even while its `+0xec` speed is
+  2868. Native used `car.speed` (negated for kind 2), so a crossing car
+  blocked the crosser at tick 995; it now reads `car.motion.i32(0x108)`.
+- Earlier City notes on tick 235 (`0x4410b5`) and "City AI RNG" are
+  superseded: with these two rules every City capture matches its RNG and
+  ring-window riders to the end (4552 and 2×2400 ticks), including the
+  original arrest at 4552.

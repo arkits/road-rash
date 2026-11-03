@@ -281,19 +281,23 @@ int main() {
         //   single RNG-state gap at 4716 and full field/cop parity to 5030.
         //   Foot runs arrest on foot (4616 and 4544) with full RNG/field/cop
         //   parity to tick 4700.
-        // - CITY (20261026): RNG matches to tick 954, opponents and cop match
-        //   on every tick to the 4551 end; the original arrests at 4552
-        //   (outcome 4, measured) but no arrest tick is asserted while City
-        //   AI RNG stays open past 954.
+        // - CITY (20261026): RNG, the dumped (ring-window) opponents and the cop
+        //   match on every tick to the 4552 end, and the arrest falls on 4552
+        //   as in the original (outcome 4). The 20261102 RANDLOG run matches
+        //   RNG and opponents on all 2400 ticks. Both depend on far pedestrians
+        //   staying unloaded (0x00440680 loads on draw) and on the road-clear
+        //   scan's slice and +0x108 rules (0x00441500/0x00449ce0).
         //   See docs/VERIFICATION.md for measured spans and capture provenance.
-        // - CITY: to 234; tick 235 draws in the pedestrian think (0x004410b5), and rider
-        //   row 11 differs from tick 148 (City AI not at parity). The cop matches to the end.
         for (const CopCapture& scenario :
              {CopCapture{"NAPA", "napa-cops-parked-20261026", 4730, 0, 4730, 4552, 4730, 4730},
-              CopCapture{"CITY", "city-cops-parked-20261026", 4551, 0, 4551, 0, 954, 4551},
+              CopCapture{"CITY", "city-cops-parked-20261026", 4552, 0, 4552, 4552, 4552, 4552},
               CopCapture{"NAPA", "napa-cops-crashed-20261026", 5030, 4400, 5030, -1, 4715, 5030},
               CopCapture{"NAPA", "napa-cops-foot-20261026", 4700, 4460, 4700, 4616, 4700, 4700},
               CopCapture{"NAPA", "napa-cops-foot2-20261026", 4700, 4460, 4700, 4544, 4700, 4700},
+              // City parked again with a 0x3000 ORDER window, the second also with RANDLOG
+              // (no cop: end 2400).
+              CopCapture{"CITY", "city-parked-randlog-20261102", 0, 0, 2400, -1, 2400, 2400},
+              CopCapture{"CITY", "city-parked-randlog2-20261102", 0, 0, 2400, -1, 2400, 2400},
               // Two launches one second apart (no cop: end 1200): rows 9..14 differ, so
               // the overtake draws fall on different ticks (245.. vs 403..).
               CopCapture{"NAPA", "napa-randlog1-20261018", 0, 0, 1200, -1, 1200, 1200},

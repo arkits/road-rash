@@ -415,8 +415,16 @@ asserted end, native arrest tick vs the measured `end_timer` tick.
 - `napa-cops-order2-20261026`: second KNOCK=4400 run, FRAMES=5031.
 - `napa-cops-foot-20261026`, `napa-cops-foot2-20261026`: KNOCK=4460,
   FRAMES=4701 (on-foot arrest window).
-- `city-cops-parked-20261026`: `RR_ORACLE_COURSE=1`, FRAMES=4552 (City AI is
-  not at parity; cop-only comparison to tick 4551).
+- `city-cops-parked-20261026`: `RR_ORACLE_COURSE=1`, FRAMES=4552. Since
+  November 3 the RNG, ring-window riders and cop match to 4552, and the
+  arrest on 4552 is asserted.
+- `city-parked-randlog-20261102` (trace `a0dae00d7e0b`) and
+  `city-parked-randlog2-20261102` (trace `0fef564dd1bf`): same City recipe
+  with FRAMES=2400, `RR_ORACLE_ORDER_RANGE=0x3000` (pedestrian laterals ~10000
+  Q8 ahead of the parked player), the second also with
+  `RR_ORACLE_RANDCOUNT=1 RR_ORACLE_RANDLOG=1` (per-draw callers). Proxy
+  `b02fffda7725`, private install `RoadRashOracle-cityrng20261102`. Both
+  replay 2400/2400 in `police_test`.
 
 Example recipe:
 
