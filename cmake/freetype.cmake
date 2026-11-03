@@ -39,6 +39,13 @@ if(RR_FREETYPE_MULTI_CONFIG)
 else()
     set(RR_FREETYPE_LIBRARY "${RR_FREETYPE_BINARY}/${RR_FREETYPE_NAME}")
 endif()
+# The port links the static CRT (cmake/msvc.cmake); FreeType's 3.5 policy cap
+# would ignore CMAKE_MSVC_RUNTIME_LIBRARY and leave it on the DLL CRT. The parent
+# evaluates the expression, so a Debug port gets /MTd under FreeType's Release.
+if(MSVC)
+    list(APPEND RR_FREETYPE_PLATFORM_ARGS -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
+        "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+endif()
 file(MAKE_DIRECTORY "${RR_FREETYPE_SOURCE}/include" "${RR_FREETYPE_BINARY}/include")
 ExternalProject_Add(rr-freetype-build
     ${RR_FREETYPE_FETCH}

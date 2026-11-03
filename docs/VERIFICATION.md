@@ -24,6 +24,18 @@ and `--synthetic` runs. The single-config Debug build and `ctest` pass.
 No Windows host was available locally; the Windows jobs on the pushed commit are the check
 for MSVC and clang-cl.
 
+Follow-up after `315454b`: with the paths found, Windows links failed on
+`freetype.lib(ftbase.c.obj) : error LNK2019: unresolved external symbol
+__imp_strncpy` (LNK4098 `MSVCRT` conflicts). FreeType's `cmake_minimum_required(3.0...3.5)`
+leaves CMP0091 unset, so it built against the DLL CRT while the port links the
+static one (`cmake/msvc.cmake`). FreeType now gets `CMAKE_POLICY_DEFAULT_CMP0091=NEW`
+and the port's `CMAKE_MSVC_RUNTIME_LIBRARY`. The parent evaluates that expression,
+so a Debug port gets `/MTd` (checked with a scratch ExternalProject). libjpeg-turbo
+chooses its own static CRT from `CMAKE_BUILD_TYPE`, which was empty under
+multi-config, so it now receives `$<CONFIG>`. The Xcode build script shows
+`-DCMAKE_BUILD_TYPE=Debug/Release/...` per configuration; Release `rr-determinism`
+and the single-config Debug unit tests still pass on macOS.
+
 ## Joystick codes in the Configure Input table (November 2, 2026)
 
 - Scope: native component tests against decompiled flow and EXE tables. No

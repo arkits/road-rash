@@ -37,11 +37,13 @@ if(RR_JPEG_MULTI_CONFIG)
 else()
     set(RR_JPEG_LIBRARY "${RR_JPEG_BINARY}/${RR_JPEG_NAME}")
 endif()
+# libjpeg-turbo picks the static CRT, Debug or not, from CMAKE_BUILD_TYPE;
+# $<CONFIG> keeps that matched to the port's /MT or /MTd under multi-config.
 file(MAKE_DIRECTORY "${RR_JPEG_SOURCE}/src" "${RR_JPEG_BINARY}")
 ExternalProject_Add(rr-jpeg-build
     ${RR_JPEG_FETCH}
     SOURCE_DIR "${RR_JPEG_SOURCE}" BINARY_DIR "${RR_JPEG_BINARY}"
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=$<CONFIG> -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_SIMD=OFF -DWITH_TURBOJPEG=OFF
         ${RR_JPEG_PLATFORM_ARGS}
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target jpeg-static --config $<CONFIG>
