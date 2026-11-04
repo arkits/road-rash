@@ -41,18 +41,18 @@ Temporary instrumentation removed.
 
 ## Checks / remaining work
 
-Full integration CTest is running, log /tmp/rr-traffic-ctest.log.
+Full integration CTest passed: 135/135, zero failures or skips (529.25s),
+log /tmp/rr-traffic-ctest.log. Commit 38a2c14 pushed to origin/main.
 Build logs /tmp/rr-traffic-final-build.log and /tmp/rr-traffic-formatted-build.log.
 Focused traffic test passed. Format gate initially flagged wrapping, corrected
 using tools/cpp_quality.py format; format-check and git diff --check now pass.
 Replay logs /tmp/rr-steal-farm-fix.log and /tmp/rr-steal-farm-l1-fix.log.
 Do not stage concurrent docs/PROGRESS.md or docs/REVERSE_ENGINEERING.md edits.
-Next: finish integration gate, commit explicit owned paths and this handoff,
-push main, then trace steal-farm player scheduler at tick 6422.
+Next: implement the separately claimed player-cadence slice below.
 
 ## Live processes / resources
 
-File claims above. Record capture/Ghidra processes here.
+Traffic claims released. No traffic capture/build/test processes remain.
 
 ## Next slice research (read-only)
 
