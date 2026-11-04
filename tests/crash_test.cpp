@@ -383,6 +383,41 @@ int main(int argc, char** argv) {
             if (bike.i32(0xf4) != 11 + 0x100) throw std::runtime_error("bike impulse did not land on +0xf4");
         }
         std::cout << "contact crash impulse pair lands on the vertical velocity (+0xf4)\n";
+        // 0x00404560 tail calls 0x004067d0 on the remount: the half rejoins
+        // the bike on the remount tick itself, not on the next bike move
+        // (traffic-field 2279: original shadow 75067, native kept the stale
+        // crash-body 75033). Only the half node runs this tick, so a missing
+        // copy-back stays visible in the mirror.
+        {
+            std::vector<rr::Opponent> opponents;
+            opponents.push_back({specs.at(0), 90, 87, 70, 0, 1, 1, 0x3200 + 20 * 256, 0x8000});
+            rr::Race live(rr::make_route(course, false), rr::make_route(course, true), tables, specs.at(0),
+                          90, opponents);
+            live.set_crash_library(library, config);
+            live.set_live_schedule(true);
+            auto& ai = live.riders()[1];
+            const int32_t bike_pos = 200 * 256, body_pos = 190 * 256;
+            ai.sample = ai.previous_sample = 200;
+            ai.bike.i32(0x1c) = bike_pos;
+            ai.bike.i32(0x28) = 0x8000;
+            ai.bike.i32(0x2f4) = 3;
+            ai.crash_active = true;
+            ai.crash_timer = 0;
+            ai.crash_actor.motion.i32(0x1c) = body_pos;
+            ai.crash_actor.motion.i32(0x28) = 0x8000;
+            ai.crash_actor.sample = ai.crash_actor.previous_sample = 190;
+            ai.crash_actor.animation.animation = 2; // past 41: recover remounts at once
+            ai.sched_next = live.ticks() + 100;     // bike node not due: no 0x004060b0 copy
+            ai.half_sched_next = live.ticks();      // half node due: think_half remounts
+            live.step(0);
+            if (ai.bike.i32(0x2f4) != 0 || ai.crash_active)
+                throw std::runtime_error("Live remount did not clear on the half node");
+            if (ai.half_mirror.position != bike_pos || ai.half_mirror.lateral != 0x8000)
+                throw std::runtime_error("Live remount did not rejoin the half: mirror " +
+                                         std::to_string(ai.half_mirror.position) + "/" +
+                                         std::to_string(ai.half_mirror.lateral));
+            std::cout << "Live remount rejoins the half on the remount tick\n";
+        }
         test_knock_off_reasons();
         return 0;
     } catch (const std::exception& e) {

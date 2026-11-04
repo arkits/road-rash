@@ -1,5 +1,41 @@
 # Verification log (all sessions September 28, 2026)
 
+## Remount rejoins the half on the remount tick (November 4, 2026)
+
+Owned Debug build `build-agent-remount-20261104` at baseline `d063704` plus
+the change (one line in `src/race.cpp`, one block in `tests/crash_test.cpp`).
+
+- Full build, `cmake --build build-agent-remount-20261104 --parallel`:
+  exit 0. `python3 tools/cpp_quality.py format-check`: 0 violations.
+- New `crash-test` block (live-schedule Race, crash state 3 with the
+  pickup animation past 41, bike moved on, only the half node due):
+  fails without the fix (`Live remount did not rejoin the half: mirror
+  17920/32768`), passes with it (`Live remount rejoins the half on the
+  remount tick`); `crash-test` exit 0.
+- `oracle-sim-test --driver=human` first divergence, post-fix binary:
+
+| Scenario | Baseline `d063704` | Now |
+| --- | --- | --- |
+| traffic-field | 2279 (shadow 75067 vs 75033) | **4381/4381 identical** (full pass) |
+| steal-farm | 3627 | 4059 (ring car lateral) |
+| steal-farm-l1 | 2837 | 5697 (RNG) |
+| contact / fight-steal / fight-steal-l5 / steal-bunch / steal-vary | 4096 / 896 / 816 / 1399 / 941 | unchanged |
+
+- No regressions (same post-fix binary): `napa-field-l1`,
+  `napa-field-l1-schema2-20261018`, `napa-field-l5-20261018` each
+  2400/2400; `police-test` city `cops-parked-20261026` RNG/riders/cop to
+  4552 with the arrest, both `city-parked-randlog*` 2400/2400;
+  `python3 tools/verify_sim.py --mode acceptance` 1431/1431, exit 0.
+- Full `ctest --test-dir build-agent-remount-20261104 --output-on-failure`:
+  **127/135 passed** (log `build-agent-remount-20261104.ctest.log`). The 8
+  failures (`first-run-smoke`, `first-run-smoke-unicode`,
+  `game-race-wiring`, `net_ws`, `net_hostile_ws`, `server_health`,
+  `net_presentation`, `net_rtc`) fail identically with the untouched
+  baseline build `build-agent-city-rng-20261102` (same 8 test IDs): no
+  displays and no TCP bind in this sandbox (`The video driver did not add
+  any displays`; `TCP server socket binding failed`). Not run: Android,
+  sanitizers, package gates (simulation-only change; same scope as Nov 3).
+
 ## City pedestrian RNG parity (November 3, 2026)
 
 Owned Debug build `build-agent-city-rng-20261102` at baseline `1f02453` plus

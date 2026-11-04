@@ -2559,3 +2559,30 @@ and two new original captures (`city-parked-randlog-20261102`,
   superseded: with these two rules every City capture matches its RNG and
   ring-window riders to the end (4552 and 2×2400 ticks), including the
   original arrest at 4552.
+
+## Remount tail: 0x004067d0 rejoins the half on the remount tick (November 4, 2026)
+
+Disc EXE SHA-256 `73d7f9744b5b1a9482b3909950cdf3fe34119fe13d023b031e9c6739a60f18a2`
+(checked against `analysis/inventory.json`). Sources: project exports
+`analysis/decompiled/{00404560,004067d0}.c` and the git-ignored capture
+`analysis/oracle/sim-napa-traffic-field.tsv`. No Ghidra writes.
+
+- The traffic-field replay diverged at tick 2279 on one node only: the
+  0x004463e0 shadow at 75067 in the original vs 75033 natively, while the
+  rider's dumped position matched (75067). Golden archaeology: the
+  original's node.28 jumps 75033 -> 75067 exactly when rider slot 3's
+  crash flag clears 3 -> 0, i.e. the shadow follows the remount.
+- `0x00404560` remount tail (export line 37) calls `FUN_004067d0(param_1)`
+  after zeroing 0x2f4, then thunks 0x00407410. `0x004067d0` copies the
+  bike motion words to `*(bike+0x2fc)` gated on 0x2f4 == 0, which holds at
+  that point. The half therefore rejoins the bike on the remount tick
+  itself, even when the bike node is not due after the half node.
+- Native `Race::crash_recovery` now calls `live_standings(r)` (the native
+  0x004067d0 image, same words; slice presence follows the +0x2c copy) in
+  the remount branch, matching the original call order (copy, then the
+  0x00407410 finish recompute). The non-live path is unchanged:
+  `update_halves` rewrites the same words at end of tick with no RNG.
+- REA 6.4.0 was requested as a second opinion but its Ghidra headless
+  launch fails persistently in this sandbox (`GhidraLaunchError`; doctor
+  reports ghidra/headless/java healthy; retried twice). The project export
+  above is the evidence.

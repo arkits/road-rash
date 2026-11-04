@@ -2503,6 +2503,12 @@ void Race::crash_recovery(Rider& r, bool player, uint32_t controls) {
         r.half_object.u8(0xc0) &= 0xfc;
         r.stamina.current = r.stamina.max;
         r.crash_active = false;
+        // 0x00404560 tail calls 0x004067d0 on the remount (decompiled line
+        // 37; the copy runs because 0x2f4 was just zeroed), so the half
+        // rejoins the bike on the remount tick itself. Without this the
+        // live path keeps the stale crash-body mirror until the next bike
+        // move (traffic-field 2279: original shadow 75067, native 75033).
+        live_standings(r);
         // 0x00404560 tail: thunk 0x00407410 on the half, which now sits at
         // the bike's position (0x004067d0 copy-back). Direct path with the
         // finish known (traffic-field-body tick 2575: +0x1f8 1496540 ->

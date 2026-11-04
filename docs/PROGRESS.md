@@ -53,6 +53,35 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 4, 2026: remount rejoins the half on the remount tick (plan 10)
+
+- The traffic-field replay diverged at tick 2279 on one node only: the
+  0x004463e0 shadow at 75067 in the original vs 75033 natively, while the
+  rider position matched. Golden archaeology: the original's node.28 jumps
+  75033 -> 75067 exactly when rider slot 3's crash flag clears 3 -> 0.
+  `Race::crash_recovery` ran `remount_crash_actor` (bike 0x2f4 = 0, body =
+  bike) but not the 0x004067d0 copy-back, and the bike node was not due
+  that tick; the non-live path was masked by `update_halves`.
+  `analysis/decompiled/00404560.c:37` calls `FUN_004067d0` in the remount
+  tail, gated on 0x2f4 == 0. The fix is one line: `live_standings(r)`
+  (the native 0x004067d0 image) in the remount branch, matching the
+  original call order. REA 6.4.0 was requested but its Ghidra headless
+  launch fails persistently in this sandbox; the project export is the
+  evidence (see REVERSE_ENGINEERING.md).
+- New `crash-test` block (live-schedule Race, forced crash state 3 with
+  the pickup animation past 41, bike moved on from the stale body, only
+  the half node due): fails pre-fix (`mirror 17920/32768`), passes
+  post-fix. `format-check` clean.
+- Scenario replays (`oracle-sim-test --driver=human`): traffic-field
+  2279 -> **4381/4381 identical** (full pass); steal-farm 3627 -> 4059;
+  steal-farm-l1 2837 -> 5697; contact/fight/steal otherwise unchanged.
+  No regressions: napa-field-l1/schema2/l5 2400/2400, city parked
+  captures unchanged, strict acceptance 1431/1431. Full Debug ctest:
+  127/135; the 8 failures (first-run-smoke x2, game-race-wiring, net x4,
+  server_health, net_presentation) fail identically on the untouched
+  baseline build (no displays / no TCP bind in this sandbox).
+  See [remount-mirror-20261104](agent-handoffs/remount-mirror-20261104.md).
+
 ### November 3, 2026: City pedestrian RNG parity (plan 10)
 
 - The City RNG gap at tick 955 came from one pedestrian, not the AI. A
