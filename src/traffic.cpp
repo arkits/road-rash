@@ -337,6 +337,10 @@ std::pair<int32_t, int32_t> TrafficSystem::plan_speed(TrafficCar& car, const std
                 size_t(std::clamp(o.position, int32_t(0), int32_t((route.size() - 1) * 256)) >> 8);
             if (lane_of(o.lateral, route[os].offset) != car.lane) return;
         } else {
+            // 0x00449da0 scans strictly less than 0x80 Q8 forward/back
+            // before 0x0044a070 applies its same-sample test.
+            const int64_t ahead = int64_t(o.position) - car.position;
+            if (ahead <= -0x80 || ahead >= 0x80) return;
             if (((o.position ^ car.position) & ~0xff) != 0) return;
             distance = kind == 1 ? o.lateral - car.lateral : car.lateral - o.lateral;
             if (distance <= 0) return;
