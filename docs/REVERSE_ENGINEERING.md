@@ -2586,3 +2586,40 @@ Disc EXE SHA-256 `73d7f9744b5b1a9482b3909950cdf3fe34119fe13d023b031e9c6739a60f18
   launch fails persistently in this sandbox (`GhidraLaunchError`; doctor
   reports ghidra/headless/java healthy; retried twice). The project export
   above is the evidence.
+
+## Pedestrian projected-x draw test: scene-build data, not sim state (November 4, 2026)
+
+Follow-up to the city-rng-20261102 handoff item 1 (the unported
+projected-x part of the draw gate). Sources: project exports
+`analysis/decompiled/{00438610,00443b40,00443c00,00443af0,00443cd0,
+00440680,004463e0,00444630}.c`. No Ghidra writes. Time-boxed trace;
+stops below rather than guessing the actor-node writer.
+
+- `0x00438610` is the only indirect `+0xdc` dispatcher in the export set,
+  and `0x00440680` (pedestrian load/draw) has no direct callers, so ped
+  loads fire only through that dispatch. The dispatch additionally
+  requires `node+0x54 == half` and the bucket test
+  `(node+0x50 rounded)>>8 in [param_2, param_3)`, with the spans from the
+  half (`+0xe8/+0xec` in `0x00443c00`, else +-10000).
+- `0x00444630` writes the tested words per node per frame during the
+  scene build: `+0x44` depth, `+0x48` vertical, `+0x50` x, `+0x54/+0x58/
+  +0x60/+0x68` spans, all from projection math with screen-width terms
+  (`(DAT_0046667c & ~1) * 0x8000`). These are render-side, per-frame
+  values: there is no sim-side per-pedestrian projected-x word to port.
+  (The same `(node+0x50 rounded)>>8` value is passed as the world-x input
+  to `0x0044ba40` by the actor draw callbacks, so actor `+0x50` doubles
+  as the projection input at draw time.)
+- Open: which builder writes the actor (rider/pedestrian/car) nodes that
+  satisfy `node+0x54 == half`, and the exact span contents of half
+  `+0xe8/+0xec`. No `+0x54` writer was found in the scheduler
+  (`0x00438170`, `0x004060b0`, `0x00406890`) or the pedestrian think/spawn
+  (`0x00440dd0`, `0x00440990`) exports.
+- Consequence: the native slice-reach approximation in
+  `load_pedestrian_looks` stands until moving-camera evidence shows the
+  x-gate firing. All parked City captures pass without it (2x2400,
+  4552). The faithful port would drive ped loads from the native
+  scene-build draw decision on the same tick (deterministic: same
+  post-step state), not from sim-side span plumbing. `city-moving.tsv`
+  is a scene capture (slices/pixels, no rider/RNG keys), not a replay
+  golden; a moving-camera replay still needs a fresh `RR_ORACLE_INPUT`
+  capture with prefix coordination.

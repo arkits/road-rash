@@ -81,6 +81,14 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
   server_health, net_presentation) fail identically on the untouched
   baseline build (no displays / no TCP bind in this sandbox).
   See [remount-mirror-20261104](agent-handoffs/remount-mirror-20261104.md).
+- Follow-up (same day): the projected-x draw-test trace stopped with a
+  finding, not a port. `0x00438610` is the only `+0xdc` dispatcher and
+  `0x00444630` writes the tested `+0x44/+0x48/+0x50/+0x54` words per node
+  per frame during the scene build (render-side projection, no sim-side
+  word to port). The slice-reach approximation stands; the faithful port
+  would drive loads from the native scene-build draw decision. Details in
+  REVERSE_ENGINEERING.md; `city-moving.tsv` is a scene capture, not a
+  replay golden.
 
 ### November 3, 2026: City pedestrian RNG parity (plan 10)
 
