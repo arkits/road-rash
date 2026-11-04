@@ -261,6 +261,12 @@ void Race::schedule_pass(uint32_t controls, bool countdown) {
     }
     run_cars(INT32_MIN);
     run_peds(INT32_MIN);
+    // 0x00438170, 0x00438385..0x004383a2: human play forces the
+    // player's bike and half due next tick, retaining their LOD +0x14.
+    // Plan 34 applies the same rule to each human seat.
+    if (!demo_hold_)
+        for (auto& r : riders_)
+            if (human(r)) r.sched_next = r.half_sched_next = ticks_ + 1;
 }
 
 void Race::parked_pace_band() {

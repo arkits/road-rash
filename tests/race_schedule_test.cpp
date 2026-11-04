@@ -101,6 +101,25 @@ int main() {
         check(o.live && !o.parked, "no ring: no window parking");
     }
 
+    // 0x00438170 tail overrides +0xc for both player nodes, without
+    // changing their stored LOD interval. A missing slice gives interval
+    // 30 and makes the override observable even on a synthetic road.
+    for (bool demo : {false, true}) {
+        rr::Race race(straight(4000), straight(4000), rr::PhysicsTables::synthetic(), rr::BikeSpec{}, 90, {});
+        race.set_live_schedule(true);
+        race.set_demo_hold(demo);
+        auto& player = race.riders()[0];
+        player.bike_slice_present = player.half_slice_present = false;
+        race.countdown_step();
+        check(player.sched_interval == 30 && player.half_sched_interval == 30,
+              "player stores the no-slice LOD interval");
+        check(player.sched_next == (demo ? 31 : 2) && player.half_sched_next == (demo ? 31 : 2),
+              "only human play forces both player nodes due next tick");
+        race.countdown_step();
+        check(player.sched_last == (demo ? 1 : 2) && player.half_sched_last == (demo ? 1 : 2),
+              "human player runs again while demo retains its cadence");
+    }
+
     if (failures) return 1;
     std::cout << "race schedule ok\n";
     return 0;
