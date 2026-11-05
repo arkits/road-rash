@@ -85,6 +85,25 @@ void walk_intervals(const Reader& r, size_t chunk, const char* tag, size_t strid
 }
 } // namespace
 
+// Resolve a physical half without substituting the route's selected road
+// for an intersection or signal attached to the opposite sub-slice.
+RouteSample route_half(const RouteSample& sample, uint8_t half) {
+    if (!sample.dual || sample.half == half) return sample;
+    RouteSample out = sample;
+    out.path = sample.other;
+    out.offset = sample.other_offset;
+    out.node = sample.other_node;
+    out.section = sample.other_section;
+    out.local = sample.other_local;
+    out.half = half;
+    out.other = sample.path;
+    out.other_offset = sample.offset;
+    out.other_node = sample.node;
+    out.other_section = sample.section;
+    out.other_local = sample.local;
+    return out;
+}
+
 Course read_course(const std::vector<uint8_t>& bytes) {
     auto resources = read_resources(bytes);
     auto get = [&](const char* tag) {
@@ -487,7 +506,7 @@ std::vector<RouteSample> make_route_indexed(const Course& course, const std::vec
             auto it = std::find(splits_by_node.begin(), splits_by_node.end(), offset);
             if (it == splits_by_node.end()) throw std::runtime_error("Split node missing from census order");
             const int branch = choices.empty() ? global_branch : choices[size_t(it - splits_by_node.begin())];
-            splits.push_back({route.size(), branch ? node.previous : node.next, branch});
+            splits.push_back({route.size(), branch ? node.next : node.previous, branch});
             offset = branch ? node.previous : node.next;
         } else {
             const uint8_t half = arrived == node.next ? 0 : 1;

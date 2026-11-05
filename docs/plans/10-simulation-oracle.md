@@ -633,3 +633,15 @@ block fails pre-fix and passes post-fix. Results: traffic-field 2279 ->
 steal-farm 3627 -> 4059, steal-farm-l1 2837 -> 5697; contact/fight/steal
 first divergences unchanged; field/city/acceptance goldens unchanged. See
 [handoff](../agent-handoffs/remount-mirror-20261104.md).
+
+
+### November 4, 2026: split-ring continuation checkpoint
+
+Dual-half runtime walkers, cached window reentry, commitment and lane offsets
+are implemented with synthetic forward/back/snapshot coverage. Static route
+opposite identity, intersection roadway selection and the ground right-forward
+link are corrected. Single-anchor `sim-napa-steal-farm` now matches through7872;
+first gap7873 is body_f4 original1302/native1032. Strict human1431/1431 remains
+exact. No all-split or full-race acceptance claim: arbitrary route choices,
+complete neighbor topology and other-course/human cases remain open.
+[Evidence and next action](../agent-handoffs/split-ring-latest-20261104.md).

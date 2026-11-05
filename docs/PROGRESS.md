@@ -53,6 +53,24 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 4, 2026: dual-half ring traversal and physical-road selection (plans 10/17)
+
+- Recovered forward/back split and merge walker entry, cached 81-sample
+  windows, branch commitment/collapse, selected-half-first slice construction,
+  lane-edge offsets and snapshot restoration. Corrected static opposite-half
+  route identity and intersection/signal geometry on that physical roadway.
+- Ground interpolation now follows the original right-forward sub-slice link
+  at a split. This also restores the existing finish snapshot test without
+  changing its controls, fixture or assertions.
+- Original single-anchor `sim-napa-steal-farm` replay improved from the
+  tick-6719 RNG gap to tick-7873 body vertical velocity (7872 matching ticks).
+  Strict human acceptance remains 1431/1431 identical. Full integration gate passed 135/135 (428.01s); the November 5
+  resume build also passed. See VERIFICATION for the fresh gate result.
+- Broader plan acceptance remains open: arbitrary per-split route choices,
+  complete road-link topology, crossing-car half sampling, other-course and
+  human coverage. See [current handoff](agent-handoffs/split-ring-latest-20261104.md).
+
+
 ### November 4, 2026: remount rejoins the half on the remount tick (plan 10)
 
 - The traffic-field replay diverged at tick 2279 on one node only: the

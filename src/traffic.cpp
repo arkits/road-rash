@@ -591,19 +591,19 @@ void TrafficSystem::build_slice(const std::vector<RouteSample>& route, int32_t s
     if (sample < 0 || size_t(sample) >= route.size()) return;
     if (windows_.size() > 1 && slice_owned_elsewhere(sample)) return; // plan 34: first window owns it
     const auto& at = route[size_t(sample)];
-    auto zone = [&](const PathSample& path) {
+    auto zone = [&](const PathSample& path, uint8_t half) {
         if (!path.zone_end) return;
         if (path.event_type >= 1 && path.event_type <= 3)
-            place_intersection(route, sample, path, back_q8, front_q8, tick);
+            place_intersection(route, sample, path, back_q8, front_q8, tick, half);
         traffic_set_density(timers_, int8_t(path.event_parameters[1]), net_);
         ++zone_events_;
     };
-    zone(at.path);
-    if (at.dual) zone(at.other);
+    zone(at.path, at.half);
+    if (at.dual) zone(at.other, at.half ^ 1);
 }
 
 int TrafficSystem::place_signal(const std::vector<RouteSample>& route, int controller, int index, int side,
-                                int32_t fraction, int32_t slice, int lane) {
+                                int32_t fraction, int32_t slice, int lane, uint8_t half) {
     // 0x0041ef60: type 0x40 << index (template word written to 0x00468f34),
     // at the corner slice + fraction, laterally in the middle of the side's
     // shoulder interpolated toward the next slice by the same fraction
@@ -622,7 +622,7 @@ int TrafficSystem::place_signal(const std::vector<RouteSample>& route, int contr
         return side ? (2 * r.offset + 2 * r.path.right + r.path.shoulder_right) / 2
                     : (2 * r.offset - 2 * r.path.left - r.path.shoulder_left) / 2;
     };
-    const int32_t here = middle(route[s]), next = middle(route[n]);
+    const int32_t here = middle(route_half(route[s], half)), next = middle(route_half(route[n], half));
     auto& g = signals_[size_t(si)];
     g = IntersectionSignal{};
     g.active = true;
@@ -639,18 +639,18 @@ int TrafficSystem::place_signal(const std::vector<RouteSample>& route, int contr
 
 void TrafficSystem::place_intersection(const std::vector<RouteSample>& route, int32_t s,
                                        const PathSample& path, int32_t back_q8, int32_t front_q8,
-                                       uint32_t tick) {
+                                       uint32_t tick, uint8_t half) {
     // 0x0041eca0. s is the zone-end sample; the event runs from
     // event_start to event_end in section-local samples.
     const int variant = path.event_type;
     const int32_t span = path.event_end - path.event_start;
     const int32_t start = std::max<int32_t>(0, s - span), last = std::max<int32_t>(0, s - 1);
-    const auto& first = route[size_t(start)];
-    const auto& before = route[size_t(last)];
-    const bool split_hills =
-        route[size_t(s)].dual && terrain_type_ && terrain_type_(route[size_t(s)]) == 4; // bVar1
-    const bool quiet = path.event_parameters[2] == 0;                                   // bVar13
-    const int rear = int8_t(span - 2);                                                  // cVar2
+    const auto first = route_half(route[size_t(start)], half);
+    const auto before = route_half(route[size_t(last)], half);
+    const bool split_hills = route[size_t(s)].dual && terrain_type_ &&
+                             terrain_type_(route_half(route[size_t(s)], half)) == 4; // bVar1
+    const bool quiet = path.event_parameters[2] == 0;                                // bVar13
+    const int rear = int8_t(span - 2);                                               // cVar2
     const int across =
         int8_t(traffic_lane_count(first.path.right_q8) + traffic_lane_count(first.path.left_q8)); // cVar3
     int ci = -1;
@@ -672,6 +672,7 @@ void TrafficSystem::place_intersection(const std::vector<RouteSample>& route, in
     c.start_q8 = start * 256;
     c.end_q8 = s * 256;
     c.variant = variant;
+    c.half = half;
     c.lanes = int8_t(path.event_parameters[0]);
     if (split_hills && quiet) {
         c.durations[0] = 0x4b;
@@ -687,12 +688,12 @@ void TrafficSystem::place_intersection(const std::vector<RouteSample>& route, in
                 if (c.signals[k] >= 0) signals_[size_t(c.signals[k])].quiet = true;
     };
     if (traffic_lane_count(first.path.right_q8) > 0 &&
-        (c.signals[0] = place_signal(route, ci, 0, 1, 0x50, last, rear)) < 0) {
+        (c.signals[0] = place_signal(route, ci, 0, 1, 0x50, last, rear, half)) < 0) {
         finish_signals();
         return;
     }
     if (traffic_lane_count(before.path.left_q8) > 0 &&
-        (c.signals[2] = place_signal(route, ci, 2, 0, 0xb0, start, rear)) < 0) {
+        (c.signals[2] = place_signal(route, ci, 2, 0, 0xb0, start, rear, half)) < 0) {
         finish_signals();
         return;
     }
@@ -701,11 +702,11 @@ void TrafficSystem::place_intersection(const std::vector<RouteSample>& route, in
         return;
     }
     if ((variant == 1 || variant == 2) &&
-        (c.signals[3] = place_signal(route, ci, 3, 0, 0x50, last, across)) < 0) {
+        (c.signals[3] = place_signal(route, ci, 3, 0, 0x50, last, across, half)) < 0) {
         finish_signals();
         return;
     }
-    if (variant == 1 || variant == 3) c.signals[1] = place_signal(route, ci, 1, 1, 0xb0, start, across);
+    if (variant == 1 || variant == 3) c.signals[1] = place_signal(route, ci, 1, 1, 0xb0, start, across, half);
     finish_signals();
 }
 
@@ -791,7 +792,7 @@ void TrafficSystem::place_crossing(const IntersectionController& c, int signal, 
     if (net_) return; // 0x0044df60: odd kinds never spawn in a networked race
     const int32_t s =
         std::clamp((lane + 1) * 0x100 + c.start_q8, int32_t(0), int32_t((route.size() - 1) * 256)) >> 8;
-    const auto& at = route[size_t(s)];
+    const auto at = route_half(route[size_t(s)], c.half);
     const int vehicle = library_->choose(uint8_t(kind), random());
     if (vehicle < 0) return;
     for (auto& car : cars_) {

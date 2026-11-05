@@ -83,6 +83,8 @@ struct RouteSample {
     int32_t other_offset = 0;
     int32_t dx_sep = 0, x_sep = 0; // half 1 minus half 0: traversal [5], [6]
 };
+// Select one physical sub-slice while preserving the opposite half's metadata.
+RouteSample route_half(const RouteSample& sample, uint8_t half);
 Course read_course(const std::vector<uint8_t>& bytes);
 // Split node offsets in traversal order (kind 1 nodes reached from root).
 // Census key: one branch bit per split, in this order (26 combos total:

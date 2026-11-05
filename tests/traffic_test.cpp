@@ -905,6 +905,41 @@ static std::vector<rr::RouteSample> intersection_route(int variant = 1) {
     route[100].path.zone_end = true;
     return route;
 }
+static void test_opposite_intersection() {
+    rr::VehicleLibrary library(synthetic_container(0));
+    rr::TrafficSystem system(library, synthetic_exe());
+    system.configure(6);
+    system.set_spawn_enabled(false);
+    auto route = intersection_route(3);
+    for (auto& s : route) {
+        s.dual = true;
+        s.half = 0;
+        s.other = s.path;
+        s.other.left_q8 = 0;
+        s.other.left = 0;
+        s.other.right_q8 = 256;
+        s.other.right = 250;
+        s.other.shoulder_left = s.other.shoulder_right = 100;
+        s.other_offset = 1000;
+        s.other_section = 1;
+        s.path.event_type = 0;
+        s.path.zone_end = false;
+    }
+    system.set_terrain_type([](const rr::RouteSample& s) { return s.section == 1 ? 4 : 1; });
+    const int32_t camera = 0x3100;
+    system.step(route, camera + 256, camera + 0x5100, 0, camera, 0, [] { return 1u; }, 100);
+    int signals = 0;
+    for (const auto& g : system.signals())
+        if (g.active) {
+            ++signals;
+            if (g.index != 0 || g.position_q8 != 99 * 256 + 0x50 || g.lateral_q8 != 1300 * 256 || !g.quiet)
+                throw std::runtime_error("opposite intersection signal uses its own lane edge and shoulder");
+        }
+    if (signals != 1 || !system.controllers()[0].active || system.controllers()[0].half != 1)
+        throw std::runtime_error(
+            "opposite intersection must not create a signal for the selected road's left lanes");
+}
+
 static void test_intersections() {
     // 0x0041eca0 / 0x0041ef60 / 0x0041f040 / 0x0044df60 / 0x0044e710.
     rr::VehicleLibrary library(synthetic_container(0));
@@ -1167,6 +1202,7 @@ int main() {
         test_spawn_and_move();
         test_zone_events();
         test_intersections();
+        test_opposite_intersection();
         test_signal_phase();
         test_intersections_all_courses();
         test_corpus();

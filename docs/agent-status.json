@@ -18,14 +18,15 @@
     {
       "area": "Simulation parity",
       "implementation": "Original live rider/car scheduler, native countdown, scene construction, AI combat/relationships, car callbacks, marking lifetimes and single-anchor replay",
-      "verification": "Napa L1 full live field2400/2400 ticks identical with RNG; corrected schema2 also2400/2400 including valid car metadata and all AI animation/relationship fields; strict human1431/1431 identical; City level-byte-2 parked captures (cops 4552 with the original arrest, two RANDLOG runs 2400) identical in RNG and ring-window riders (November 3); Napa traffic-field 4381/4381 identical with RNG (November 4 remount copy-back; steal-farm 4059, steal-farm-l1 5697)",
-      "remaining": "Other levels/courses, moving-camera City, dedicated fight/steal/isolated traffic cases, pedestrian projected-x draw test, split/merge ring walking, complete mixed pedestrian/controller order and human paths outside the captured1431 ticks",
+      "verification": "Napa L1 full live field2400/2400 ticks identical with RNG; corrected schema2 also2400/2400 including valid car metadata and all AI animation/relationship fields; strict human1431/1431 identical; City level-byte-2 parked captures (cops 4552 with the original arrest, two RANDLOG runs 2400) identical in RNG and ring-window riders (November 3); Napa traffic-field 4381/4381 identical with RNG (November 4 remount copy-back; steal-farm 7872 (split-ring/physical-road fixes), steal-farm-l1 5697)",
+      "remaining": "Other levels/courses, moving-camera City, dedicated fight/steal/isolated traffic cases, pedestrian projected-x draw test, full split/merge neighbor topology and arbitrary-branch acceptance, complete mixed pedestrian/controller order and human paths outside the captured1431 ticks",
       "evidence": [
         "SIM_SCENARIOS.md",
         "plans/10-simulation-oracle.md",
         "VERIFICATION.md",
         "agent-handoffs/field-parity-20261018.md",
-        "agent-handoffs/remount-mirror-20261104.md"
+        "agent-handoffs/remount-mirror-20261104.md",
+        "agent-handoffs/split-ring-latest-20261104.md"
       ],
       "last_verified_commit": null,
       "fidelity_level": "partial"

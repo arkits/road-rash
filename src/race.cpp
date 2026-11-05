@@ -439,6 +439,20 @@ void Race::cross_sample(Rider& r, int32_t delta) {
             const int32_t half0_right = a.offset + a.path.right;
             if ((b.i32(0x28) >> 8) >= half0_right) r.route = 1;
         }
+        // 0x00439390 -> 0x004540e0: committing to half 0 also
+        // updates the lookahead walkers, even when the route stays 0.
+        // Each native human seat owns its own ring (plan 34).
+        if (human(r) && size_t(r.human) < rings_.size() && rings_[size_t(r.human)]) {
+            const auto& chosen = route_of(r)[r.sample];
+            const auto& before = route_of(r)[from_sample];
+            const bool forward_split = int32_t(to) > int32_t(from) && chosen.event == RoadEvent::split;
+            const bool backward_merge = int32_t(to) < int32_t(from) && before.event == RoadEvent::merged;
+            if ((forward_split || backward_merge) && chosen.dual) {
+                const int32_t half0_right = chosen.half == 0 ? chosen.offset + chosen.path.right
+                                                             : chosen.other_offset + chosen.other.right;
+                rings_[size_t(r.human)]->commit_branch(uint8_t((b.i32(0x28) >> 8) >= half0_right));
+            }
+        }
     }
     accumulate(r, from, to, from_sample, r.sample);
 }
@@ -2240,7 +2254,10 @@ void Race::vertical(Rider& r) {
     if (terrain_source_) {
         const auto& route = route_of(r);
         const auto& current = route[r.sample];
-        const auto& next = route[std::min(r.sample + 1, route.size() - 1)];
+        auto next = route[std::min(r.sample + 1, route.size() - 1)];
+        // 0x00439b10 case4 follows sub-slice +0x0c. At a split
+        // the common road's right-forward link is physical half1.
+        if (next.dual && next.event == RoadEvent::split) next = route_half(next, 1);
         ground = terrain_height(this->ground(current), current.path, this->ground(next), next.path,
                                 b.i32(0x28) - current.offset * 256, uint8_t(b.i32(0x1c)),
                                 next.offset - current.offset, current.offset);

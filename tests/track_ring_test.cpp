@@ -221,6 +221,134 @@ int main() {
     draws = 0;
     ring.advance(-0x100, random, sink);
     check(!ring.unsupported() && draws == 16, "backward crossing: wall steps and two BORR passes");
+    // The selected half is stepped and built first after the split;
+    // both section iterators remain live and the reverse edge rejoins
+    // the common road without consuming an invented entry draw.
+    {
+        const auto split_course = window_course(400);
+        rr::TrackRing split(split_course, 0);
+        split.setup(0x3200, random, {});
+        for (int i = 130; i < 300; ++i) split.advance(256, random, {});
+        auto state = split.diagnostic_state();
+        check(!split.unsupported() && state.front_dual && state.front_active == 1 && state.front.node == 80 &&
+                  state.front.position == 0 && state.front_other.node == 60,
+              "split enters both halves and selects the original primary");
+        std::vector<uint32_t> built;
+        split.set_slice_sink([&](uint32_t section, uint32_t, const rr::PathSample&, const rr::TerrainSlice&) {
+            built.push_back(section);
+        });
+        split.advance(256, random, {});
+        state = split.diagnostic_state();
+        check(built == std::vector<uint32_t>{2, 1} && state.front.position == 256 &&
+                  state.front_other.position == 256,
+              "dual slice builds selected half first and steps both iterators");
+        split.advance(-256, random, {});
+        split.advance(-256, random, {});
+        state = split.diagnostic_state();
+        check(!split.unsupported() && !state.front_dual && state.front.node == 20 &&
+                  state.front.position == 299 * 256,
+              "reversing through the split applies the residual on the common road");
+        for (int i = 299; i < 700; ++i) split.advance(256, random, {});
+        state = split.diagnostic_state();
+        check(!split.unsupported() && !state.front_dual && state.front.node == 120 &&
+                  state.front.position == 0,
+              "forward merge retains the selected branch and enters the outgoing road");
+        split.advance(-256, random, {});
+        state = split.diagnostic_state();
+        check(!split.unsupported() && state.front_dual && state.front_active == 0 && state.front.node == 60 &&
+                  state.front_other.node == 80 && state.front.position == 399 * 256 &&
+                  state.front_other.position == 399 * 256,
+              "backward merge enters both branch ends with the negative residual");
+    }
+    // 0x004540e0 commits both walkers. 0x00452fd0 keeps the chosen
+    // section outside the 81-sample window; 0x00453030 restores the
+    // cached opposite iterator on a later approach to either boundary.
+    {
+        const auto course = window_course(400);
+        rr::TrackRing committed(course, 0);
+        committed.setup(0x3200, random, {});
+        for (int i = 130; i < 300; ++i) committed.advance(256, random, {});
+        committed.commit_branch(1);
+        for (int i = 0; i < 82; ++i) committed.advance(256, random, {});
+        auto state = committed.diagnostic_state();
+        check(!state.front_dual && state.front.node == 80 && state.front.position == 82 * 256,
+              "committed split collapses to the chosen half after sample 81");
+        committed.advance(-256, random, {});
+        state = committed.diagnostic_state();
+        check(state.front_dual && state.front_active == 1 && state.front.position == 81 * 256 &&
+                  state.front_other.node == 60 && state.front_other.position == 80 * 256,
+              "backward split window restores its precomputed opposite iterator");
+        for (int i = 81; i < 319; ++i) committed.advance(256, random, {});
+        state = committed.diagnostic_state();
+        check(state.front_dual && state.front_active == 1 && state.front.node == 80 &&
+                  state.front.position == 319 * 256 && state.front_other.node == 60 &&
+                  state.front_other.position == 319 * 256,
+              "forward merge window restores both branch-relative iterator positions");
+    }
+    // NALR lane changes align the outer edges of the two halves to
+    // the old common road; rejoining on either side restores its centre.
+    {
+        auto course = window_course(400);
+        for (auto& p : course.sections[1].samples) {
+            p.left_q8 = 256;
+            p.left = 250;
+        }
+        for (auto& p : course.sections[2].samples) {
+            p.right_q8 = 256;
+            p.right = 250;
+        }
+        rr::TrackRing edges(course, 0);
+        edges.setup(0x3200, random, {});
+        for (int i = 130; i < 300; ++i) edges.advance(256, random, {});
+        auto state = edges.diagnostic_state();
+        check(state.front.offset == 250 && state.front_other.offset == -250,
+              "split aligns each half to its old outer lane edge");
+        edges.commit_branch(0);
+        for (int i = 300; i < 700; ++i) edges.advance(256, random, {});
+        state = edges.diagnostic_state();
+        check(!state.front_dual && state.front.node == 120 && state.front.offset == 0,
+              "merge restores the common centre while preserving half-zero outer edge");
+    }
+    // Snapshot restore must retain both live and cached section iterators
+    // and consume the same random stream on replay through a split.
+    {
+        const auto course = window_course(400);
+        rr::TrackRing snapshot(course, 0);
+        uint32_t seed = 1;
+        auto draw = [&] {
+            seed = seed * 214013u + 2531011u;
+            return (seed >> 16) & 32767u;
+        };
+        snapshot.setup(0x3200, draw, {});
+        for (int i = 130; i < 290; ++i) snapshot.advance(256, draw, {});
+        const auto saved = snapshot;
+        const uint32_t saved_seed = seed;
+        for (int i = 0; i < 120; ++i) snapshot.advance(256, draw, {});
+        const auto first = snapshot.diagnostic_state();
+        const auto first_seed = seed;
+        snapshot = saved;
+        seed = saved_seed;
+        for (int i = 0; i < 120; ++i) snapshot.advance(256, draw, {});
+        const auto replay = snapshot.diagnostic_state();
+        check(seed == first_seed && replay.front.node == first.front.node &&
+                  replay.front.position == first.front.position &&
+                  replay.front_other.node == first.front_other.node &&
+                  replay.front_other.position == first.front_other.position &&
+                  replay.front.terrain->position == first.front.terrain->position,
+              "restored dual walker and cached windows reproduce the random stream");
+    }
+    // 0x00452e10 result 3 leaves a terminal section intact. The outer
+    // traversal can subsequently walk back away from the endpoint.
+    {
+        rr::TrackRing terminal(course, 0);
+        terminal.setup(0x3200, random, {});
+        for (int i = 130; i < 300; ++i) terminal.advance(0x100, random, {});
+        check(!terminal.unsupported() && terminal.diagnostic_state().front.position == 299 * 256,
+              "terminal section result preserves the last valid iterator");
+        terminal.advance(-0x100, random, {});
+        check(!terminal.unsupported() && terminal.diagnostic_state().front.position == 298 * 256,
+              "terminal section can reverse without rebuilding its iterators");
+    }
     if (failures) return 1;
     std::cout << "track ring ok\n";
     return 0;

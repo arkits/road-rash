@@ -2623,3 +2623,36 @@ stops below rather than guessing the actor-node writer.
   is a scene capture (slices/pixels, no rider/RNG keys), not a replay
   golden; a moving-camera replay still needs a fresh `RR_ORACLE_INPUT`
   capture with prefix coordination.
+
+
+## Split/merge runtime ring and physical-road identity (November 4, 2026)
+
+Reference disc SHA256 `73d7f9744b5b1a9482b3909950cdf3fe34119fe13d023b031e9c6739a60f18a2`.
+Project exports plus independent `npx rea-agents@6.4.0` on the unmodified disc:
+
+- `00452e10` section-step results0/1/2/3 mean same road/new road/window/terminal.
+  A terminal/null link leaves iterators intact. `00453030` retains two section
+  iterators (500-byte stride), steps selected half first, and enters both halves
+  before fractional stepping. `00454c80` likewise builds selected then opposite.
+- `00453b60` retains the 81-step window iterator snapshot. Later split/merge
+  reentry clones the opposite iterator and its offset relative to the live half;
+  reinitializing terrain would draw from RNG incorrectly. Separation threshold
+  is first index with gap>=256+inner shoulders, else80. `00451910` assembly
+  explicitly zeroes EAX on all returns, so its two return values add no terrain
+  width to this test. `004540e0` sets global choice and both dual walkers;
+  `00452fd0` collapses only after branch commitment.
+- `make_route_indexed` incorrectly retained the chosen graph edge as its own
+  opposite. Original split uses next forhalf0 and previous forhalf1. Napa A at
+  sample729 is section1, but opposite must be section3, whose CESR type3 endpoint
+  creates the original quiet intersection. Its lane count/offset/terrain must
+  also come from section3 during intersection and signal construction.
+- `00439b10` case4 reads current sub-slice+0xc, its right-forward link, for
+  next-slice terrain interpolation. At the common road before a split this is
+  physical half1 even when the rider's current selected route is half0. Using
+  native route[+1] directly produced body ground7 vs original11 at tick7868.
+  Selecting the actual half1 link restores that prefix and the finish fixture.
+
+Measured scope: steal-farm first7872 ticks match with one RNG anchor; the next
+body vertical velocity gap7873 remains open. Component/snapshot tests do not
+establish complete road-neighbor topology or arbitrary per-split route parity.
+See [handoff](agent-handoffs/split-ring-latest-20261104.md) for logs and remaining work.

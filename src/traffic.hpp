@@ -115,6 +115,7 @@ struct IntersectionController {
     int32_t durations[3] = {600, 180,
                             780};     // +0xfc..+0x104; {75, 0, 240} on a dual type-4 slice with flag byte 0
     int32_t start_q8 = 0, end_q8 = 0; // +0x108 / +0x10c: event start / end on the route
+    uint8_t half = 0;                 // physical roadway of the intersection sub-slice
     int variant = 1;                  // +0x110: event type 1..3
     int lanes = 0;                    // +0x111: record byte +9, the cross road's lane span
     int32_t position_q8 = 0;          // +0x1c: zone-end slice, clamped into the ring window
@@ -277,9 +278,10 @@ class TrafficSystem {
                      uint32_t tick);
     // 0x0041eca0 placement from a type-1..3 zone end at route sample s.
     void place_intersection(const std::vector<RouteSample>& route, int32_t s, const PathSample& path,
-                            int32_t back_q8, int32_t front_q8, uint32_t tick);
+                            int32_t back_q8, int32_t front_q8, uint32_t tick, uint8_t half);
     int place_signal(const std::vector<RouteSample>& route, int controller, int index, int side,
-                     int32_t fraction, int32_t slice, int lane); // 0x0041ef60; -1 when the pool is out
+                     int32_t fraction, int32_t slice, int lane,
+                     uint8_t half); // 0x0041ef60; -1 when the pool is out
     // 0x0041f040 every 0x1e ticks, then the scheduler's ring-window teardown.
     void think_intersections(int32_t back_q8, int32_t front_q8, uint32_t tick,
                              const std::vector<RouteSample>& route, const std::function<uint32_t()>& random);

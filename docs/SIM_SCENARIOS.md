@@ -433,3 +433,15 @@ RR_ORACLE_COURSE=4 RR_ORACLE_LEVEL=3 RR_ORACLE_SEED=1 RR_ORACLE_SIM=1 \
 RR_ORACLE_HUMAN=1 RR_ORACLE_ORDER=1 RR_ORACLE_FRAMES=4731 \
 oracle/run.sh napa-cops-parked-20261026
 ```
+
+
+### November 4, 2026: split-ring continuation checkpoint
+
+Dual-half runtime walkers, cached window reentry, commitment and lane offsets
+are implemented with synthetic forward/back/snapshot coverage. Static route
+opposite identity, intersection roadway selection and the ground right-forward
+link are corrected. Single-anchor `sim-napa-steal-farm` now matches through7872;
+first gap7873 is body_f4 original1302/native1032. Strict human1431/1431 remains
+exact. No all-split or full-race acceptance claim: arbitrary route choices,
+complete neighbor topology and other-course/human cases remain open.
+[Evidence and next action](agent-handoffs/split-ring-latest-20261104.md).

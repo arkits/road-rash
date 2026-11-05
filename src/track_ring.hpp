@@ -19,8 +19,8 @@ namespace rr {
 //   DZHR     0x00452060/0x00452230, actor spawns 0x004520d0 -> 0x004409e0.
 // 0x00453e60 jitters and sorts every section's DZHR records (0x00451ee0,
 // 0x00451fc0) in course-graph order before the walkers start.
-// Only single-road sections are walked; a split or merge node stops the
-// walker (unsupported() reports it) until dual walkers are ported.
+// Split/merge traversal retains two section iterators and builds the
+// active half before its opposite.
 // One DZHR actor record fired by a slice build: ring_sample is the slice's
 // route sample (ring position >> 8), position_q8 the record's position.
 struct RingActor {
@@ -47,10 +47,14 @@ struct TrackWalkerState {
     uint32_t node = 0;
     int32_t borr_position = 0, borr_record = 0, borr_start = 0, borr_end = 0;
     int32_t dzhr_position = 0, dzhr_index = 0;
+    int32_t offset = 0; // section +0x0c, world units
     std::optional<TerrainIteratorState> terrain;
 };
 struct TrackRingState {
     TrackWalkerState front, back;
+    TrackWalkerState front_other, back_other;
+    bool front_dual = false, back_dual = false;
+    uint8_t front_active = 0, back_active = 0;
 };
 class TrackRing {
   public:
@@ -86,6 +90,7 @@ class TrackRing {
     int32_t front_q8() const { return front_; }
     int32_t back_q8() const { return back_; }
     bool unsupported() const { return unsupported_; }
+    void commit_branch(uint8_t half); // 0x004540e0, shared front/back choice
     TrackRingState diagnostic_state() const;
     // Terrain slice exported by a walker at its current sample.
     TerrainSlice front_terrain(int32_t left_edge, int32_t right_edge) const;
@@ -109,31 +114,46 @@ class TrackRing {
         int32_t position = 0; // [1] Q8
         int32_t index = 0;    // [2]
     };
-    struct Walker {
+    struct SectionWalker {
         uint32_t node = 0;
         int32_t position = 0; // Q8 within the node's section
+        int32_t offset = 0;   // section +0x0c, road lateral centre
         std::optional<TerrainIterator> terrain;
         Borr borr;
         Dzhr dzhr;
+    };
+    struct Walker {
+        std::array<SectionWalker, 2> halves;
+        int32_t position = 0; // traversal +0: route Q8, independent of section position
+        uint8_t active = 0;   // traversal +4: half stepped and built first
+        uint32_t window = 0;
+        uint8_t event = 0;
+        bool front = false;
+        int32_t countdown = 0, dx_sep = 0, x_sep = 0;
+        bool committed = false, collapse_pending = false;
+        bool dual = false;
         bool stopped = false;
+    };
+    // 0x00453b60 retains the fully advanced traversal at window+0x1c;
+    // late entry into a split/merge clones its section iterator state.
+    struct Window {
+        std::array<SectionWalker, 2> halves;
+        uint8_t active = 0;
+        int32_t dx_sep = 0, x_sep = 0, threshold = 80;
     };
     struct Events {
         uint32_t section = 0;
         std::vector<std::array<uint32_t, 2>> records;
     };
-    // Terrain part of one section walker inside a 0x00453b60 window probe.
-    struct ProbeHalf {
-        uint32_t node = 0;
-        int32_t position = 0; // Q8 within the node's section
-        std::optional<TerrainIterator> terrain;
-    };
-    void probe_enter(ProbeHalf&, uint32_t node, bool start); // 0x00452cb0 terrain init
-    int probe_step(ProbeHalf&, int32_t delta);               // 0x00452e10 (0/1/2/3)
-    void probe_window(uint32_t node, int32_t direction);     // 0x00453b60 draws
+    void probe_window(uint32_t node, int32_t direction);                              // 0x00453b60 draws
     void jitter_events(uint32_t node, std::vector<uint32_t>& visited, const Random&); // 0x00453e60
-    void enter(Walker&, uint32_t node, bool start = true);                            // 0x00452cb0
-    void step(Walker&, int32_t delta);                            // 0x00453030 -> 0x00452e10
-    void build_slice(Walker&, int32_t ring_q8, const ActorSink&); // 0x00454c80 -> 0x00454240
+    void enter(SectionWalker&, uint32_t node, bool start = true);                     // 0x00452cb0
+    const PathSample& path_of(const SectionWalker&) const;
+    int step_section(SectionWalker&, int32_t delta);                    // 0x00452e10 section result (0/1/2/3)
+    void collapse(Walker&);                                             // 0x00452fd0
+    void step(Walker&, int32_t delta);                                  // 0x00453030 -> 0x00452e10
+    void build_half(SectionWalker&, int32_t ring_q8, const ActorSink&); // 0x00454240
+    void build_slice(Walker&, int32_t ring_q8, const ActorSink&);       // 0x00454c80 -> 0x00454240
     const Course* course_;
     int level_;
     std::vector<std::shared_ptr<Events>> events_;          // one per node, DFS order (copy-on-write)
@@ -142,7 +162,11 @@ class TrackRing {
     const Random* random_ = nullptr;                       // stream for the current call
     Random forward_;                                       // TerrainIterator's source
     Walker front_walker_, back_walker_;
+    std::map<uint32_t, Window> windows_;
     int32_t front_ = 0, back_ = 0;
+    bool branch_committed_ = false;
+    uint8_t chosen_half_ = 0;
+    std::array<uint8_t, 128> slice_events_{};
     bool unsupported_ = false;
     SliceSink slice_sink_;
     StaticSink static_sink_;

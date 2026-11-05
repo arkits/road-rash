@@ -16,10 +16,45 @@ int main() {
             std::cerr << message << '\n';
         }
     };
+    // Original 0x00453030 enters node.next as half0 and node.previous
+    // as half1. Whichever route is selected, its other slice must refer
+    // to the opposite section and carry that section's events.
+    {
+        rr::Course c;
+        c.root = 20;
+        rr::CourseSection trunk, left, right;
+        trunk.samples.resize(300, rr::PathSample{0, 0, 500, 500, 512, 512});
+        left.samples.resize(300, rr::PathSample{1, 0, 250, 500, 256, 512});
+        right.samples.resize(325, rr::PathSample{3, 0, 500, 250, 512, 256});
+        right.samples[29].event_type = 3;
+        right.samples[29].zone_end = true;
+        right.samples[29].event_start = 10;
+        right.samples[29].event_end = 29;
+        c.sections = {trunk, left, right, trunk};
+        c.nodes.emplace(20, rr::CourseNode{20, 0, 40, 160, 0, 300});
+        c.nodes.emplace(40, rr::CourseNode{40, 1, 60, 80, 20});
+        c.nodes.emplace(60, rr::CourseNode{60, 0, 100, 40, 1, 300});
+        c.nodes.emplace(80, rr::CourseNode{80, 0, 100, 40, 2, 325});
+        c.nodes.emplace(100, rr::CourseNode{100, 2, 60, 80, 120});
+        c.nodes.emplace(120, rr::CourseNode{120, 0, 140, 100, 3, 300});
+        c.nodes.emplace(140, rr::CourseNode{140, 4});
+        c.nodes.emplace(160, rr::CourseNode{160, 3});
+        for (bool second : {false, true}) {
+            const auto route = rr::make_route(c, second);
+            const auto& entry = route[300];
+            check(entry.dual && entry.other_node == (second ? 60u : 80u) &&
+                      entry.other_section == (second ? 1u : 2u) && entry.other.bend == (second ? 1 : 3),
+                  "Split annotation retains the opposite branch for both route choices");
+            const auto& event = route[329];
+            check(second ? (event.path.zone_end && !event.other.zone_end)
+                         : (!event.path.zone_end && event.other.zone_end && event.other.event_type == 3),
+                  "Opposite-half intersection endpoint survives the route annotation");
+        }
+    }
     rr::Assets assets(RR_SOURCE_DIR "/../cdrom/ROADRASH");
     if (!assets.exists("DATA/COURSES/NAPA.CRS")) {
         std::cout << "No imported course corpus\n";
-        return 0;
+        return failures ? 1 : 0;
     }
     size_t route_count = 0, dual_count = 0, event_count = 0;
     // Plan 17 prerequisites (docs/research/post-11a-2026-10-12/simulation-and-courses.md):

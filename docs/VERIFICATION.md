@@ -4174,3 +4174,46 @@ messages or rate limits; UDP 40001; startup checks neither disabled nor skipped.
   test change.
 - Not run: Linux Docker image build (the Linux `MSG_NOSIGNAL` branch has not
   been compiled here), production deploy.
+
+
+## Dual-half ring and physical-road selection — November 4, 2026
+
+Owned build `build-agent-traffic-ring-20261103`, Debug, exported compile DB.
+
+- Full build passed: `cmake --build build-agent-traffic-ring-20261103 --parallel 6`
+  (`/tmp/rr-split-current-full-build.log`, exit0).
+- Completed full CTest gate: 135/135 passed, zero failures (428.01s),
+  `/tmp/rr-split-current-full-ctest.log`. The November 5 resume confirmed
+  the owner process had exited and the final log was complete.
+- Resume build passed November 5: `cmake --build
+  build-agent-traffic-ring-20261103 --parallel 6`, exit0,
+  `/tmp/rr-resume-20261105-build.log`. Fresh full CTest passed 135/135, zero skips/failures (434.36s):
+  `ctest --test-dir build-agent-traffic-ring-20261103 --parallel 6
+  --output-on-failure`, `/tmp/rr-resume-20261105-ctest-parallel.log`.
+  Earlier serial resume was stopped to run this complete parallel gate.
+- Resume formatting and `git diff --check` passed. REA6.4.0 spot-check of
+  0x0043a190 succeeded; reference hash matches inventory. clangd preflight
+  healthy (426 entries), source check timed out after60s; no client LSP.
+  Debugger investigation of the next gap is in the
+  [resume handoff](agent-handoffs/split-ring-resume-20261105.md).
+- Focused course/traffic/race_state: 3/3 passed (12.78s),
+  `/tmp/rr-split-ground-tests.log`. New course opposite-half regression failed
+  both branch directions before its fix; gameplay commitment regression failed
+  before wiring; width/cache/reversal/terminal/snapshot tests pass. No golden
+  or acceptance assertion was weakened.
+- Strict `tools/verify_sim.py --mode acceptance` passed1431/1431 identical,
+  report `/tmp/rr-split-ground-acceptance.json`, with the current replay binary.
+- `oracle-sim-test analysis/oracle/sim-napa-steal-farm.tsv --driver=human`:
+  first gap advanced6719(RNG) ->7435(missing nodes) ->7868(body ground)
+  ->7873(body_f4 original1302/native1032). Last run exit1 is a diagnostic
+  mismatch, not full capture acceptance; first7872 ticks match. No reanchor.
+- Earlier integration on the pre-ground-link source was134/135 (474.80s),
+  failing only the finish-run assertion in race_state. LLDB showed the player
+  busted and bike condition0. The original +0xc ground-link correction made
+  that unchanged test pass. That earlier gate does not certify current source.
+- Independent REA6.4.0 exports for00453030,00451910,004540e0,00439b10 support
+  address/field mapping; logs and exact reference SHA are in the handoff.
+  No new Wine capture or device validation. Client C++ LSP unavailable;
+  clangd fallback attempted with the owned426-entry CDB, Apple refactor-tweak
+  check failures/time bound recorded locally; no claim of green client LSP.
+- Remaining acceptance is explicit in the [handoff](agent-handoffs/split-ring-latest-20261104.md).
