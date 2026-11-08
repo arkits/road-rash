@@ -1,5 +1,23 @@
 # Verification log (all sessions September 28, 2026)
 
+## Crashed cop uses the cop animation bank (November 8, 2026)
+
+Sentry ROAD-RASH-E (web build `40829db`): `vector::at` thrown from
+`select_actor_view` via `ActorNodes::rider`. Owned Debug build
+`build-agent-sentry-e` at baseline `40829db`.
+
+- Probe against the disc library: rider-bank playback drawn with cop views
+  fails 157/159 frames; cop-bank playback with cop views fails 0/35.
+- New `police-test` block (Napa level 3, cop spawned at 4096, cop bike forced
+  into crash state 1 at speed 6000): every crash rider/bike frame must come
+  from the cop bank and select within the cop views. It fails on the old
+  behaviour (`Cop crash animation code lies in the cop bank`) and passes with
+  the fix (1493 crashed ticks).
+- Full build exit 0; `ctest --test-dir build-agent-sentry-e -j8`: 135/135
+  passed. `python3 tools/cpp_quality.py format-check`: clean.
+- Not covered: no original capture of a crashing cop exists, so cop crash
+  numeric fields are not compared tick by tick.
+
 ## Remount rejoins the half on the remount tick (November 4, 2026)
 
 Owned Debug build `build-agent-remount-20261104` at baseline `d063704` plus

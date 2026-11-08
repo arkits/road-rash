@@ -53,6 +53,18 @@ Detailed evidence is in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) and tes
 
 ## Timeline
 
+### November 8, 2026: crashed cop draws from the cop animation bank (Sentry ROAD-RASH-E)
+
+- Production web build `40829db` threw `vector::at` in `select_actor_view`
+  ~46 s into a race. Every crash animation path (`begin_crash`, crash
+  rider/bike advance, recovery, remount, half-static contact) used the rider
+  bank, while the renderer draws the cop with the cop bank: rider-bank crash
+  frames index past the cop's 30 view groups (157 of 159 frames fail).
+  `0x00405990` gives the cop bike and half the cop table via `0x00446060`
+  (param_5 2), so `Race::crash_bank` now selects bank 1 for the cop.
+- Remaining: cop crash numeric fields are not yet compared with an original
+  capture of a crashed cop.
+
 ### November 4, 2026: dual-half ring traversal and physical-road selection (plans 10/17)
 
 - Recovered forward/back split and merge walker entry, cached 81-sample

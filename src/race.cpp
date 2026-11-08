@@ -1332,17 +1332,17 @@ void Race::contact_half_static(Rider& detached, Rider& owner, Rider& other) {
             s.i32(0xf4) = speed < 501 ? 0 : std::abs(s.i32(0xf4) / 2) + speed / 16;
             s.i32(0xec) -= s.i32(0xec) / 4;
             if (animation.animation != 33 && animation.animation != 29) {
-                set_animation_with_fallback(animation, library.playback[0], 28, uint32_t(ticks_),
+                set_animation_with_fallback(animation, crash_bank(owner), 28, uint32_t(ticks_),
                                             library.fallback);
-                queue_animation_with_fallback(animation, library.playback[0], 28, library.fallback);
+                queue_animation_with_fallback(animation, crash_bank(owner), 28, library.fallback);
             }
             if (s.i32(0xf4) > 0x150) s.i32(0xf4) = 0x150;
             if (owner.bike.i32(0x2f4) == 2 && o.i32(0xec) > 1700) {
                 s.i32(0xec) += o.i32(0xec) / 4;
                 owner.bike.i32(0x2f4) = 1;
-                set_animation_with_fallback(animation, library.playback[0], 34, uint32_t(ticks_),
+                set_animation_with_fallback(animation, crash_bank(owner), 34, uint32_t(ticks_),
                                             library.fallback);
-                queue_animation_with_fallback(animation, library.playback[0], 38, library.fallback);
+                queue_animation_with_fallback(animation, crash_bank(owner), 38, library.fallback);
             }
             if (human(owner) && s.i32(0xec) >= 2001)
                 sound(SoundEvent((random() & 1) + (s.i32(0xec) >= 6001 ? 4 : 3)), s);
@@ -1776,8 +1776,8 @@ void Race::crash_entry(Rider& r, int32_t reason, std::optional<std::array<int32_
         // the motion set (split-left 2056: body +0x16c/+0x140 spec words
         // were stale zeros, skewing the body vertical vs the original).
         r.crash_actor.motion = r.half_object;
-        begin_crash(r.bike, r.crash_actor, crash_config_, crash_library_->playback[0],
-                    crash_library_->fallback, uint32_t(ticks_), reason, rider_impulse, bike_impulse);
+        begin_crash(r.bike, r.crash_actor, crash_config_, crash_bank(r), crash_library_->fallback,
+                    uint32_t(ticks_), reason, rider_impulse, bike_impulse);
         // 0x00403d60 copies the bike words into the half (iVar2 =
         // *(bike+0x2fc): 0x1c..0x2c, 0x30..0x40, 0x58/0x5c/0x60, velocities
         // and 0x104..0x110, the zeroed 0x114..0x128/0x198/0x1a0 block,
@@ -2335,8 +2335,8 @@ void Race::crash(Rider& r) {
         r.bike.i32(0x2f4) = 0;
         // Crash body runs on the half object: pre-fill behavior words (see crash_entry).
         r.crash_actor.motion = r.half_object;
-        begin_crash(r.bike, r.crash_actor, crash_config_, crash_library_->playback[0],
-                    crash_library_->fallback, uint32_t(ticks_), 0);
+        begin_crash(r.bike, r.crash_actor, crash_config_, crash_bank(r), crash_library_->fallback,
+                    uint32_t(ticks_), 0);
         // 0x00403d60 half copies (see crash_entry).
         sync_crash_half(r);
         r.half_object.u8(0xc0) |= 3;
@@ -2370,7 +2370,7 @@ void Race::crash_phases(Rider& r) {
     input.crash = bike.i32(0x2f4);
     input.speed = body.i32(0xec);
     input.height_q8 = body.i32(0x20);
-    advance_crash_rider_animation(r.crash_actor.animation, library.playback[0], library.fallback, input,
+    advance_crash_rider_animation(r.crash_actor.animation, crash_bank(r), library.fallback, input,
                                   uint32_t(ticks_), [&] { return random(); });
     r.ride_animation = r.crash_actor.animation; // the crash rider animation runs on the rider half block
     if (bike.i32(0x2f4) != input.crash) r.crash_timer = 0;
@@ -2409,8 +2409,8 @@ void Race::crash_bike_animation(Rider& r) {
         }
         return;
     }
-    advance_crash_bike_animation(r.crash_bike_animation, library.playback[0], library.fallback,
-                                 bike.i32(0xec), uint32_t(ticks_), [&] { return random(); });
+    advance_crash_bike_animation(r.crash_bike_animation, crash_bank(r), library.fallback, bike.i32(0xec),
+                                 uint32_t(ticks_), [&] { return random(); });
 }
 void Race::crash_bike_motion(Rider& r, bool player) {
     Bike& bike = r.bike;
@@ -2507,11 +2507,11 @@ void Race::crash_recovery(Rider& r, bool player, uint32_t controls) {
         }
     }
     const auto action = bounds_wreck ? CrashRecoveryAction::wrecked
-                                     : recover_crash_actor(bike, body, library.playback[0], library.fallback,
+                                     : recover_crash_actor(bike, body, crash_bank(r), library.fallback,
                                                            uint32_t(ticks_), recovery);
     if (!bounds_wreck) r.crash_timer = recovery.state_elapsed;
     if (action == CrashRecoveryAction::remount) {
-        remount_crash_actor(bike, r.crash_bike_animation, body, crash_config_, library.playback[0],
+        remount_crash_actor(bike, r.crash_bike_animation, body, crash_config_, crash_bank(r),
                             library.fallback, uint32_t(ticks_));
         r.ride_animation = body.animation; // one half block: the remount code continues into the ride advance
         // The half rejoins the bike: clear the crash-entry bits it gained

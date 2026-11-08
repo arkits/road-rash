@@ -837,6 +837,11 @@ class Race {
     std::function<uint32_t()> ring_random_;
     std::function<void(const RingActor&, uint32_t)> ring_sink_;
     const ActorAnimationLibrary* crash_library_ = nullptr;
+    // 0x00405990 calls 0x00446060(+0x70, param_5) on both the bike and its
+    // half, so the cop (param_5 = 2) crashes on the cop table, not the rider's.
+    const ActorAnimationBank& crash_bank(const Rider& r) const {
+        return crash_library_->playback[r.cop ? 1 : 0];
+    }
     const ActorAnimationLibrary* ride_library_ = nullptr;
     std::optional<std::array<int8_t, 8>> steal_codes_; // 0x00464538
     const std::array<std::array<std::array<int8_t, 4>, 2>, 2>* attack_codes_ = nullptr;

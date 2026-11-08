@@ -250,6 +250,47 @@ int main() {
             require(pursued, "Cop pursues the stopped player (state 4, target the player)");
             require(sirens > 0, "Cop posts siren events with its position");
         }
+        {
+            // Sentry ROAD-RASH-E: a crashed cop drew rider-bank crash frames
+            // against the 30 cop view groups and threw vector::at. 0x00405990
+            // gives the cop bike and half the cop table (0x00446060, param_5
+            // 2), so every crash frame must select within the cop bank.
+            const auto exe = assets.read("ROADRASH.EXE");
+            rr::RaceConfig config;
+            config.course = "NAPA";
+            config.level = 3;
+            config.character = 1;
+            config.bike_from_table = true;
+            config.career = false;
+            rr::RaceSetup setup = rr::make_race_setup(assets, exe, config);
+            auto& race = *setup.instance.race;
+            const rr::ActorAnimationLibrary library(exe, assets.read("DATA/GLOBAL.RSC"));
+            while (race.cop_index() < 0 && race.ticks() < 4200) race.step(0);
+            require(race.cop_index() > 0, "Cop spawns for the crash check");
+            const size_t index = size_t(race.cop_index());
+            auto& cop_bike = const_cast<rr::Bike&>(race.riders()[index].bike);
+            cop_bike.i32(0xec) = 6000;
+            cop_bike.i32(0x2f4) = 1;
+            const auto check = [&](const rr::ActorAnimationState& state) {
+                if (!state.selected) return;
+                const auto& s = *state.selected;
+                const auto& sequence = library.playback[1].at(size_t(s[0]));
+                require(bool(sequence), "Cop crash animation code lies in the cop bank");
+                for (int32_t yaw : {-0x7f0000, -0x200000, 0, 0x200000, 0x7f0000})
+                    (void)rr::select_actor_view(sequence->at(size_t(s[1])), library.views[1], yaw, 0);
+            };
+            int crashed_ticks = 0;
+            for (int t = 0; t < 1500 && race.cop_index() == int(index); ++t) {
+                race.step(0);
+                const auto& cop = race.riders()[index];
+                if (!cop.crash_active) continue;
+                ++crashed_ticks;
+                check(cop.crash_actor.animation);
+                check(cop.crash_bike_animation);
+            }
+            require(crashed_ticks > 0, "Forced cop crash runs the crash animations");
+            std::cout << "cop crash animations stay in the cop bank for " << crashed_ticks << " ticks\n";
+        }
         struct CopCapture {
             const char* course;
             const char* name;
